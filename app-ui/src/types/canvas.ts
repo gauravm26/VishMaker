@@ -1,13 +1,23 @@
 // app-ui/src/types/canvas.ts
 import { Node, Edge } from 'reactflow';
 
-// You can extend the Node/Edge types if you need custom data associated with them
-export type CustomNode = Node; // Add custom data properties later if needed
-export type CustomEdge = Edge; // Add custom data properties later if needed
+export type CustomNode = Node;
+export type CustomEdge = Edge;
 
-// Define data structure expected by our custom nodes
+// Define the structure for data within each row of our tables
+export interface TableRowData {
+    id: string; // Unique ID for the row (e.g., 'flow-1', 'hlr-10', 'llr-101')
+    sno: number;
+    name: string;
+    desc?: string | null; // Description is optional
+    // We might store the original object ID for reference if needed
+    originalId?: number;
+}
+
+// Define data structure expected by our custom TableNode component
 export interface TableNodeData {
     title: string;
-    rows: Array<{ id: string; text: string; [key: string]: any }>; // Each row must have id and text
-    // Add other properties needed for styling or behavior
+    rows: TableRowData[];
+    // Define columns explicitly for clarity, though TableNode might hardcode them
+    columns?: Array<{ key: keyof TableRowData | string; label: string }>;
 }

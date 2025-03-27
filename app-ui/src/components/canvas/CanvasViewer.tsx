@@ -74,6 +74,35 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
                 });
 
                 console.log(`CanvasViewer: Received data for project ${projectId}`, data);
+                
+                // Add deep inspection of the data structure to debug the issue
+                console.log("DEBUG - Full data structure:");
+                console.log("project_id:", data.project_id);
+                console.log("flows:", data.flows);
+                
+                if (data.flows && data.flows.length > 0) {
+                    const sampleFlow = data.flows[0];
+                    console.log("Sample flow:", sampleFlow);
+                    console.log("Sample flow steps:", sampleFlow.steps);
+                    
+                    if (sampleFlow.steps && sampleFlow.steps.length > 0) {
+                        const sampleStep = sampleFlow.steps[0];
+                        console.log("Sample step:", sampleStep);
+                        console.log("Sample step HLRs:", sampleStep.high_level_requirements);
+                        
+                        if (sampleStep.high_level_requirements && sampleStep.high_level_requirements.length > 0) {
+                            const sampleHLR = sampleStep.high_level_requirements[0];
+                            console.log("Sample HLR:", sampleHLR);
+                            console.log("Sample HLR LLRs:", sampleHLR.low_level_requirements);
+                            
+                            if (sampleHLR.low_level_requirements && sampleHLR.low_level_requirements.length > 0) {
+                                const sampleLLR = sampleHLR.low_level_requirements[0];
+                                console.log("Sample LLR:", sampleLLR);
+                                console.log("Sample LLR test_cases:", sampleLLR.test_cases);
+                            }
+                        }
+                    }
+                }
 
                 if (!data || !data.flows || data.flows.length === 0) {
                      console.log("CanvasViewer: No flows data received, clearing nodes/edges.");

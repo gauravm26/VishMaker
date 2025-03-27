@@ -1,7 +1,7 @@
 # features/requirement_generation/core/repositories.py
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any, Optional
-from shared.core.models.requirement import UserFlow, FlowStep, HighLevelRequirement, LowLevelRequirement
+from shared.core.models.requirement import UserFlow, FlowStep, HighLevelRequirement, LowLevelRequirement, TestCase
 from shared.core.models.project import Project # Need project for linking
 
 class RequirementRepository:
@@ -31,6 +31,7 @@ class RequirementRepository:
         flow_map: Dict[str, UserFlow] = {}
         step_map: Dict[str, FlowStep] = {} # Key: "Flow Name::Step Name"
         hlr_map: Dict[str, HighLevelRequirement] = {} # Key: "Step Name::HLR Text"
+        llr_map: Dict[str, LowLevelRequirement] = {} # Key: Some unique LLR identifier (e.g., text), Value: DB object
 
         # 1. Save Flows and Steps
         for flow_data in generated_data.get("flows", []):
@@ -98,7 +99,35 @@ class RequirementRepository:
                 high_level_requirement_id=parent_hlr.id
             )
             db.add(db_llr)
+            db.flush() # Get LLR ID
+            # Use a combination that's likely unique for the simulation to map LLR
+            llr_key = f"{parent_hlr.id}::{db_llr.requirement_text}"
+            llr_map[llr_key] = db_llr
 
+        for tc_data in generated_data.get("test_cases", []):
+            # Need a way to link Test Case back to LLR
+            # Assuming LLM provides the parent LLR text or similar identifier
+            parent_llr_text = tc_data.get("parent_llr_text")
+
+            # Find parent LLR using the brittle text match approach for simulation
+            parent_llr = None
+            for key, llr in llr_map.items():
+                 # This simple text match is not robust
+                 if key.endswith(f"::{parent_llr_text}"):
+                      parent_llr = llr
+                      break
+
+            if not parent_llr:
+                print(f"WARNING: Could not find parent LLR for TestCase: {tc_data['desc']}")
+                continue
+
+            db_tc = TestCase(
+                description=tc_data["desc"],
+                expected_result=tc_data.get("expected"),
+                low_level_requirement_id=parent_llr.id
+            )
+            db.add(db_tc)
+        
         db.commit() # Commit all changes
 
     def get_requirements_for_project(self, db: Session, project_id: int) -> List[UserFlow]:
@@ -112,6 +141,7 @@ class RequirementRepository:
                 joinedload(UserFlow.steps) # Load steps
                 .joinedload(FlowStep.high_level_requirements) # Load HLRs for each step
                 .joinedload(HighLevelRequirement.low_level_requirements) # Load LLRs for each HLR
+                .joinedload(LowLevelRequirement.test_cases) # Load test cases for each LLR
             )
             .filter(UserFlow.project_id == project_id)
             .order_by(UserFlow.created_at) # Optional ordering

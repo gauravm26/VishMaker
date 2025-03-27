@@ -13,11 +13,19 @@ class GenerationTriggerResponse(BaseModel):
 # These mirror the SQLAlchemy models but are used for API output validation
 # Use ConfigDict(from_attributes=True) to allow creation from ORM objects
 
+class TestCase(BaseModel):
+    id: int
+    description: str
+    expected_result: Optional[str] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+    
 class LowLevelRequirement(BaseModel):
     id: int
     requirement_text: str
     tech_stack_details: Optional[str] = None
     created_at: datetime
+    test_cases: List[TestCase] = []  # Include test cases for each LLR
     model_config = ConfigDict(from_attributes=True)
 
 class HighLevelRequirement(BaseModel):

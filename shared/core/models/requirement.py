@@ -64,3 +64,18 @@ class LowLevelRequirement(Base):
     high_level_requirement = relationship("HighLevelRequirement", back_populates="low_level_requirements")
     # Add relationship to TestCases later if needed
     # test_cases = relationship("TestCase", back_populates="low_level_requirement")
+    test_cases = relationship("TestCase", back_populates="low_level_requirement", cascade="all, delete-orphan")
+
+class TestCase(Base):
+    __tablename__ = "test_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(Text, nullable=False) # e.g., "Verify login with valid credentials"
+    expected_result = Column(Text, nullable=True)
+    low_level_requirement_id = Column(Integer, ForeignKey("low_level_requirements.id"), nullable=False, index=True)
+    # project_id could be added for easier querying
+    # project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    low_level_requirement = relationship("LowLevelRequirement", back_populates="test_cases")

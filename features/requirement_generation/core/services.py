@@ -61,6 +61,13 @@ class RequirementGenerationService:
                 {"hl_req_text": "Validate credentials against database.", "req": "Create FastAPI endpoint /auth/token.", "tech": "FastAPI, Python"},
                 {"hl_req_text": "Fetch and display product grid.", "req": "Implement GET /products endpoint with pagination.", "tech": "FastAPI, Python"},
                 {"hl_req_text": "Fetch and display product grid.", "req": "Create React <ProductGrid> component.", "tech": "React, TSX"},
+            ],
+            "test_cases": [
+                {"parent_llr_text": "Create React <LoginForm> component with two inputs.", "desc": "TC1: Verify Login form renders correctly.", "expected": "Username, password inputs, and submit button visible."},
+                {"parent_llr_text": "Create React <LoginForm> component with two inputs.", "desc": "TC2: Verify empty submission shows validation.", "expected": "Error messages appear below fields."},
+                {"parent_llr_text": "Create FastAPI endpoint /auth/token.", "desc": "TC3: Verify valid credentials return token.", "expected": "200 OK with JWT token."},
+                {"parent_llr_text": "Create FastAPI endpoint /auth/token.", "desc": "TC4: Verify invalid credentials return 401.", "expected": "401 Unauthorized."},
+                {"parent_llr_text": "Implement GET /products endpoint with pagination.", "desc": "TC5: Verify endpoint returns product list.", "expected": "200 OK with list of products."},
             ]
         }
         # --- End Simulation ---
