@@ -1,0 +1,36 @@
+// app-ui/tsconfig.json
+{
+  "compilerOptions": {
+    /* Base Options */
+    "target": "ES2020",
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
+    
+    /* Module Options */
+    "module": "ESNext", // Add module setting for bundler moduleResolution
+    "moduleResolution": "bundler", // Or "node" depending on your setup
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx", // Ensure this is set
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Path Aliases */
+    "baseUrl": ".", // Tells TS paths are relative to tsconfig.json (app-ui/)
+    "paths": {
+      "@/*": ["./src/*"],                       // @/ points to app-ui/src/
+      "@features/*": ["../features/*"],         // @features/ points to VishGoogle/features/
+      "@shared/*": ["../shared/*"],             // @shared/ points to VishGoogle/shared/
+      "@infrastructure/*": ["../infrastructure/*"] // Add if needed
+    }
+    /* End Path Aliases */
+
+  },
+  // Make sure these includes cover all necessary files for aliases to work
+  "include": ["src", "../features/**/*.ts", "../features/**/*.tsx", "../shared/**/*.ts", "../shared/**/*.tsx"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

@@ -1,0 +1,36 @@
+// app-ui/src/pages/ProjectDashboard.tsx
+import React, { useState } from 'react';
+import CreateProjectForm from '../../../features/project_management/ui/components/CreateProjectForm'; // Adjust path
+import ProjectList from '../../../features/project_management/ui/components/ProjectList'; // Adjust path
+
+const ProjectDashboard: React.FC = () => {
+    // Simple state to trigger a refresh of the ProjectList after creation
+    const [refreshKey, setRefreshKey] = useState<number>(0);
+
+    const handleProjectCreated = () => {
+        console.log("Project created, triggering list refresh...");
+        setRefreshKey(prevKey => prevKey + 1); // Increment key to trigger useEffect in ProjectList
+    };
+
+    const handleProjectSelected = (projectId: number) => {
+        // For now, just log selection. Later, navigate to a project detail page.
+        console.log(`Project selected: ${projectId}`);
+        // Example: navigate(`/projects/${projectId}`);
+    };
+
+    return (
+        <div className="container mx-auto p-4 max-w-3xl">
+            <h1 className="text-3xl font-bold mb-6 text-center">Project Dashboard</h1>
+
+            <CreateProjectForm onProjectCreated={handleProjectCreated} />
+
+            <ProjectList
+                onProjectSelect={handleProjectSelected}
+                refreshTrigger={refreshKey}
+             />
+
+        </div>
+    );
+};
+
+export default ProjectDashboard;

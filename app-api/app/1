@@ -1,0 +1,37 @@
+# app-api/app/main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+# TODO: Import feature routers later
+# from features.project_management.api import routes as project_routes
+
+app = FastAPI(title="Vishmaker API")
+
+# Configure CORS (Cross-Origin Resource Sharing)
+# Adjust origins as needed for your frontend URL in development/production
+origins = [
+    "http://localhost:5173", # Default Vite dev server port
+    "http://localhost:3000", # Common React dev port
+    # Add your production frontend URL here later
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Allow all methods
+    allow_headers=["*"], # Allow all headers
+)
+
+@app.get("/ping", tags=["Health"])
+async def ping():
+    """Basic health check endpoint."""
+    return {"message": "pong"}
+
+# TODO: Include feature routers
+# app.include_router(project_routes.router, prefix="/projects", tags=["Project Management"])
+
+if __name__ == "__main__":
+    # This is for debugging locally if you run main.py directly
+    # Production runs use 'uvicorn app.main:app --reload' from the app-api directory
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
