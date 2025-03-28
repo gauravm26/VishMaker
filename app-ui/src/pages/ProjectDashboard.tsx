@@ -84,8 +84,8 @@ const ProjectDashboard: React.FC = () => {
     return (
         <div className="flex flex-row h-screen w-screen overflow-hidden">
             {/* Left Pane */}
-            <div className="w-1/4 p-4 border-r border-gray-200 flex flex-col gap-4 overflow-y-auto">
-                <h1 className="text-2xl font-bold text-center mb-2">Vishmaker</h1>
+            <div className="w-1/4 p-4 border-r border-gray-200 dark:border-gray-700 flex flex-col gap-4 overflow-y-auto bg-gray-50 dark:bg-gray-800"> {/* Adjusted bg */}
+            <h1 className="text-2xl font-bold text-center mb-2 dark:text-gray-100">Vishmaker</h1>
                 <div>
                     <CreateProjectForm onProjectCreated={handleProjectCreated} />
                 </div>
@@ -101,11 +101,11 @@ const ProjectDashboard: React.FC = () => {
                 </div>
             </div>
             {/* Right Pane */}
-            <div className="w-3/4 p-4 flex flex-col overflow-hidden">
-                <h2 className="text-xl font-semibold mb-3 shrink-0">
+            <div className="w-3/4 p-4 flex flex-col overflow-hidden bg-white dark:bg-gray-900"> {/* Adjusted bg */}
+            <h2 className="text-xl font-semibold mb-3 shrink-0 dark:text-gray-100">
                     Requirements Canvas {selectedProjectId !== null ? `(Project ${selectedProjectId})` : '(No project selected)'}
                 </h2>
-                <div className="flex-grow border rounded shadow-sm bg-gray-100 relative overflow-hidden">
+                <div className="flex-grow border rounded shadow-sm bg-gray-100 dark:bg-gray-800 relative overflow-hidden"> 
                     <CanvasViewer
                         projectId={selectedProjectId}
                         refreshTrigger={canvasRefreshNonce}

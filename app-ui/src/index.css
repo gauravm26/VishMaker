@@ -75,6 +75,8 @@ button:focus-visible {
 /* Add any global base styles below */
 body {
   @apply m-0 p-0 box-border; 
+  @apply bg-white dark:bg-gray-900; /* Default light bg, dark bg */
+  @apply text-gray-900 dark:text-gray-200; /* Default light text, dark text */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;

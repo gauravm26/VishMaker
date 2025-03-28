@@ -84,8 +84,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
     }
 
     return (
-        <div className="p-1 border rounded shadow-sm bg-white"> {/* Reduced padding slightly */}
-            <h2 className="text-xl font-semibold mb-3 px-2">Projects</h2> {/* Added padding to header */}
+        <div className="p-1 border rounded shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">  {/* Reduced padding slightly */}
+        <h2 className="text-xl font-semibold mb-3 px-2 dark:text-gray-100">Projects</h2> {/* Added padding to header */}
             {projects.length === 0 ? (
                 <p className="px-2">No projects found.</p>
             ) : (
@@ -97,12 +97,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
                         return (
                             <li
                                 key={project.id}
-                                className={`p-2 border-b last:border-b-0 hover:bg-gray-100 cursor-pointer flex justify-between items-center ${selectedProjectId === project.id ? 'bg-blue-50' : ''}`} // Highlight selected
+                                className={`p-2 border-b last:border-b-0 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex justify-between items-center border-gray-200 dark:border-gray-700 ${selectedProjectId === project.id ? 'bg-blue-100 dark:bg-blue-900 dark:bg-opacity-40' : 'bg-white dark:bg-gray-800'}`} // Highlight selected
                                 onClick={() => onProjectSelect(project.id)}
                             >
                                 <div className="flex-1 mr-2">
-                                    <span className="block font-medium text-sm">{project.name}</span> {/* Smaller text */}
-                                    <span className="text-xs text-gray-500"> {/* Smaller text */}
+                                <span className="block font-medium text-sm dark:text-gray-100">{project.name}</span> {/* Smaller text */}
+                                <span className="text-xs text-gray-500 dark:text-gray-400">  {/* Smaller text */}
                                         Created: {new Date(project.created_at).toLocaleDateString()}
                                     </span>
                                     {/* Display generation error? (Need error prop from parent if desired) */}

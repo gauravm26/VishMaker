@@ -46,11 +46,11 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
     };
 
     return (
-        <div className="p-4 border rounded shadow-sm bg-white mb-4">
-            <h2 className="text-xl font-semibold mb-3">Create New Project</h2>
+        <div className="p-4 border rounded shadow-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 mb-4">
+            <h2 className="text-xl font-semibold mb-3 dark:text-gray-100">Create New Project</h2>
             <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
-                    <label htmlFor="projectName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Project Name <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -59,12 +59,12 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
                         disabled={isSubmitting}
                     />
                 </div>
                 <div>
-                    <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Initial Prompt (Optional)
                     </label>
                     <textarea
@@ -72,7 +72,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         rows={3}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
                         disabled={isSubmitting}
                     />
                 </div>
