@@ -12,12 +12,21 @@ export interface TableRowData {
     desc?: string | null; // Description is optional
     // We might store the original object ID for reference if needed
     originalId?: number;
+    [key: string]: any; // Allow any arbitrary column values
+}
+
+// Define column definition interface for table headers
+export interface ColumnDef {
+    key: string;      // Unique identifier for the column
+    label: string;    // Display label for the column header
+    width: string;    // CSS width class (e.g., 'w-20', 'w-1/2', etc.)
+    editable?: boolean; // Whether the column header can be edited
+    order: number;    // Display order of the column
 }
 
 // Define data structure expected by our custom TableNode component
 export interface TableNodeData {
     title: string;
     rows: TableRowData[];
-    // Define columns explicitly for clarity, though TableNode might hardcode them
-    columns?: Array<{ key: keyof TableRowData | string; label: string }>;
+    columns?: ColumnDef[];
 }

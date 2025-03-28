@@ -1,7 +1,7 @@
 // app-ui/src/lib/transformRequirementsToFlow.ts
 // ADD TestCase to import
 import { UserFlow, FlowStep, HighLevelRequirement, LowLevelRequirement, TestCase } from '@/types/project';
-import { CustomNode, CustomEdge, TableNodeData, TableRowData } from '@/types/canvas';
+import { CustomNode, CustomEdge, TableNodeData, TableRowData,  ColumnDef } from '@/types/canvas';
 import { Position } from 'reactflow';
 
 // Layout Constants
@@ -15,11 +15,21 @@ const Y_GROUP_SPACING = 80;
 const BASE_ROW_HEIGHT = 38;
 const NODE_HEADER_HEIGHT = 40;
 
+
+
+const DEFAULT_COLUMNS: ColumnDef[] = [
+    { key: 'sno', label: 'SNO', order: 0, editable: false, width: 'w-[70px]' },
+    { key: 'name', label: 'Name', order: 1, editable: true, width: 'w-[180px]' },
+    { key: 'desc', label: 'Desc', order: 2, editable: true, width: 'w-[135px]' },
+];
+
 // Define FlowElements interface properly to include nodes and edges properties
 interface FlowElements {
     nodes: CustomNode[];
     edges: CustomEdge[];
 }
+
+
 
 function estimateNodeHeight(rows: number): number {
     return NODE_HEADER_HEIGHT + (rows * BASE_ROW_HEIGHT);
@@ -29,6 +39,7 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
     const nodes: CustomNode[] = [];
     const edges: CustomEdge[] = [];
     let currentFlowTableY = Y_START;
+    let maxY = Y_START;
 
     const hlrRowHandleMap: { [hlrId: number]: string } = {};
     const hlrTableMap: { [hlrId: number]: string } = {};
@@ -45,8 +56,9 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
     // 1. Create Flow Table Node
     const flowNodeId = `flow-table-${projectRequirements.project_id}`;
     const flowRows: TableRowData[] = projectRequirements.flows.map((flow, index) => {
+        const flowId = `flow-${flow.id}`;
         return {
-            id: `flow-${flow.id}`,
+            id: flowId,
             sno: index + 1,
             name: flow.name || `Flow ${index + 1}`,
             desc: flow.description || '',
@@ -59,6 +71,7 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
         type: 'tableNode',
         data: {
             title: 'User Flows',
+            columns: DEFAULT_COLUMNS,
             rows: flowRows
         } as TableNodeData,
         position: { x: X_FLOW, y: currentFlowTableY },
@@ -66,8 +79,7 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
         targetPosition: Position.Left,
     };
     nodes.push(flowNode);
-    const flowNodeHeight = estimateNodeHeight(flowRows.length);
-    let maxY = currentFlowTableY + flowNodeHeight;
+    maxY = Math.max(maxY, currentFlowTableY + estimateNodeHeight(flowRows.length));
 
     // --- Process HLRs, LLRs, and Test Cases per Flow ---
     let currentHlrColumnY = Y_START;
@@ -95,11 +107,20 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
             const rowHandleId = `row-handle-${rowId}`;
             hlrRowHandleMap[hlr.id] = rowHandleId;
             hlrTableMap[hlr.id] = hlrTableNodeId;
+            
+            // Find the step this HLR belongs to for additional context
+            const parentStep = flow.steps.find(step => 
+                step.high_level_requirements?.some(requirement => requirement.id === hlr.id)
+            );
+            
+            // Use step name as description context if available
+            const descriptionContext = parentStep ? `Step: ${parentStep.name}` : '';
+            
             return { 
                 id: rowId, 
                 sno: index + 1, 
                 name: hlr.requirement_text || `HLR ${index + 1}`, 
-                desc: '', 
+                desc: descriptionContext, 
                 originalId: hlr.id 
             };
         });
@@ -109,7 +130,8 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
             type: 'tableNode',
             data: {
                 title: `HLRs for Flow: ${flow.id}`,
-                rows: hlrRows
+                rows: hlrRows,
+                columns: DEFAULT_COLUMNS
             } as TableNodeData,
             position: { x: X_HLR, y: currentHlrColumnY },
             sourcePosition: Position.Right,
@@ -117,9 +139,11 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
         };
         nodes.push(hlrNode);
         const hlrNodeHeight = estimateNodeHeight(hlrRows.length);
-        
+
         // Create Edge: Flow row -> HLR table
-        const sourceFlowRowHandleId = `row-handle-flow-${flow.id}`;
+        const sourceFlowRowId = `flow-${flow.id}`;
+        // Update source handle ID to match TableNode component format
+        const sourceFlowRowHandleId = `row-handle-${sourceFlowRowId}`;
         edges.push({
             id: `e-flow${flow.id}-to-hlrTable${flow.id}`,
             source: flowNodeId,
@@ -159,7 +183,8 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
                 type: 'tableNode',
                 data: {
                     title: `LLRs for HLR: ${hlr.id}`,
-                    rows: llrRows
+                    rows: llrRows,
+                    columns: DEFAULT_COLUMNS
                 } as TableNodeData,
                 position: { x: X_LLR, y: currentLlrColumnY },
                 sourcePosition: Position.Right,
@@ -169,9 +194,11 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
             const llrNodeHeight = estimateNodeHeight(llrRows.length);
 
             // Create Edge: HLR row -> LLR table
+            const sourceHlrRowId = `hlr-${hlr.id}`;
+            // Update source handle ID to match TableNode component format
+            const sourceHlrRowHandleId = `row-handle-${sourceHlrRowId}`;
             const sourceHlrTableNodeId = hlrTableMap[hlr.id];
-            const sourceHlrRowHandleId = hlrRowHandleMap[hlr.id];
-            if (sourceHlrTableNodeId && sourceHlrRowHandleId) {
+            if (sourceHlrTableNodeId) {
                 edges.push({
                     id: `e-hlr${hlr.id}-to-llrTable${hlr.id}`,
                     source: sourceHlrTableNodeId,
@@ -216,7 +243,8 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
                     type: 'tableNode',
                     data: {
                         title: `Tests for LLR: ${llr.id}`,
-                        rows: testRows
+                        rows: testRows,
+                        columns: DEFAULT_COLUMNS
                     } as TableNodeData,
                     position: { x: X_TESTING, y: currentTestColumnY },
                     sourcePosition: Position.Right,
@@ -226,10 +254,11 @@ export function transformRequirementsToFlow(projectRequirements: { project_id: n
                 const testNodeHeight = estimateNodeHeight(testRows.length);
 
                 // Create Edge: LLR row -> Test Case table
+                const sourceLlrRowId = `llr-${llr.id}`;
+                // Update source handle ID to match TableNode component format
+                const sourceLlrRowHandleId = `row-handle-${sourceLlrRowId}`;
                 const sourceLlrTableNodeId = llrTableMap[llr.id];
-                const sourceLlrRowHandleId = llrRowHandleMap[llr.id];
-
-                if (sourceLlrTableNodeId && sourceLlrRowHandleId) {
+                if (sourceLlrTableNodeId) {
                     edges.push({
                         id: `e-llr${llr.id}-to-testTable${llr.id}`,
                         source: sourceLlrTableNodeId,

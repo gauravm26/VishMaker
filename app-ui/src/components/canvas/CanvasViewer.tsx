@@ -21,7 +21,7 @@ import { Menu, Item, Separator, useContextMenu } from "react-contexify";
 
 import apiClient from '@/lib/apiClient'; // Using path alias if configured, else use relative path
 import { ProjectRequirementsResponse } from '@/types/project'; // API response type
-import { CustomNode, CustomEdge, TableNodeData, TableRowData } from '@/types/canvas'; // react-flow types
+import { CustomNode, CustomEdge, TableNodeData, TableRowData , ColumnDef } from '@/types/canvas'; // react-flow types
 import { transformRequirementsToFlow } from '@/lib/transformRequirementsToFlow'; // Transformation function
 import TableNode from './TableNode'; // Import the custom node component
 
@@ -43,12 +43,23 @@ const nodeTypes: NodeTypes = {
     tableNode: TableNode,
 };
 
-const createNewRow = (idPrefix: string, nextSno: number): TableRowData => ({
-    id: `${idPrefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`, // Reasonably unique ID
-    sno: nextSno,
-    name: 'New Item',
-    desc: '',
-});
+const createNewRow = (idPrefix: string, nextSno: number, columns: ColumnDef[]): TableRowData => {
+    const newRow: TableRowData = {
+        id: `${idPrefix}-row-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        sno: nextSno,
+        name: 'New Item', // Add required name property
+        desc: '',         // Add desc property
+    };
+    
+    // Initialize with empty strings for all editable columns
+    columns.forEach(col => {
+        if (col.key !== 'sno' && col.editable !== false) {
+            newRow[col.key] = '';
+        }
+    });
+    
+    return newRow;
+};
 
 const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }) => {
     // Use React Flow hooks for state management
@@ -57,8 +68,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleCellChange = useCallback((nodeId: string, rowIndex: number, columnKey: keyof TableRowData | string, value: string) => {
-        console.log(`Cell Change: Node=${nodeId}, Row=${rowIndex}, Col=${columnKey}, Value=${value}`);
+    const handleCellChange = useCallback((nodeId: string, rowIndex: number, columnId: string, value: string) => {
+        console.log(`Cell Change: Node=${nodeId}, Row=${rowIndex}, Col=${columnId}, Value=${value}`);
         setNodes((nds) =>
             nds.map((node) => {
                 if (node.id === nodeId) {
@@ -66,7 +77,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
                     // Ensure rows exist and index is valid
                     if (nodeData.rows && nodeData.rows[rowIndex]) {
                         const newRows = [...nodeData.rows]; // Create shallow copy of rows array
-                        const updatedRow = { ...newRows[rowIndex], [columnKey]: value }; // Create copy of row and update specific column
+                        const updatedRow = { ...newRows[rowIndex], [columnId]: value }; // Create copy of row and update specific column
                         newRows[rowIndex] = updatedRow; // Replace old row with updated one
                         // Return shallow copy of node with updated data, including actions
                         return { 
@@ -95,12 +106,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
                 if (node.id === nodeId) {
                     const nodeData = node.data as TableNodeData;
                     const currentRows = nodeData.rows || [];
+                    const currentColumns = nodeData.columns || []; // Get columns
                     const newRowIndex = afterRowIndex === -1 ? currentRows.length : afterRowIndex + 1;
  
                     const nextSno = currentRows.length > 0 ? Math.max(...currentRows.map(r => r.sno)) + 1 : 1;
                     // Determine prefix based on node type (heuristic - improve if possible)
                     const prefix = node.id.split('-')[0] || 'new'; // e.g., 'flow', 'hlr', 'llr', 'test'
-                    const newRow = createNewRow(prefix, nextSno);
+                    const newRow = createNewRow(prefix, nextSno, currentColumns);
 
                     const newRows = [
                         ...currentRows.slice(0, newRowIndex),
@@ -164,12 +176,99 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
         // Example: apiClient(`/api/v1/requirement/{originalId_from_deletedRow}`, { method: 'DELETE' });
     }, [setNodes]);
 
+    const handleColumnHeaderChange = useCallback((nodeId: string, columnKey: string, newValue: string) => {
+        console.log(`Change column header: Node=${nodeId}, ColumnKey=${columnKey}, Value=${newValue}`);
+        
+        setNodes((nds) =>
+            nds.map((node) => {
+                if (node.id === nodeId) {
+                    const nodeData = node.data as TableNodeData;
+                    if (!nodeData.columns) return node; // No columns to update
+                    
+                    const updatedColumns = nodeData.columns.map(col => 
+                        col.key === columnKey ? { ...col, label: newValue } : col
+                    );
+                    
+                    return {
+                        ...node,
+                        data: {
+                            ...nodeData,
+                            columns: updatedColumns,
+                            actions: node.data.actions // Preserve the actions
+                        }
+                    };
+                }
+                return node;
+            })
+        );
+    }, [setNodes]);
+
+    const handleAddColumn = useCallback((nodeId: string, columnDef: ColumnDef) => {
+        console.log(`Add column: Node=${nodeId}, Column=${columnDef.label}`);
+        
+        setNodes((nds) =>
+            nds.map((node) => {
+                if (node.id === nodeId) {
+                    const nodeData = node.data as TableNodeData;
+                    const existingColumns = nodeData.columns || [];
+                    
+                    // Add the new column
+                    const updatedColumns = [...existingColumns, columnDef];
+                    
+                    return {
+                        ...node,
+                        data: {
+                            ...nodeData,
+                            columns: updatedColumns,
+                            actions: node.data.actions // Preserve the actions
+                        }
+                    };
+                }
+                return node;
+            })
+        );
+    }, [setNodes]);
+
+    const handleDeleteColumn = useCallback((nodeId: string, columnKey: string) => {
+        console.log(`Delete column: Node=${nodeId}, ColumnKey=${columnKey}`);
+        
+        setNodes((nds) =>
+            nds.map((node) => {
+                if (node.id === nodeId) {
+                    const nodeData = node.data as TableNodeData;
+                    if (!nodeData.columns) return node; // No columns to delete
+                    
+                    // Don't delete required columns like 'sno'
+                    if (columnKey === 'sno') {
+                        console.warn('Cannot delete required column: sno');
+                        return node;
+                    }
+                    
+                    // Filter out the column to delete
+                    const updatedColumns = nodeData.columns.filter(col => col.key !== columnKey);
+                    
+                    return {
+                        ...node,
+                        data: {
+                            ...nodeData,
+                            columns: updatedColumns,
+                            actions: node.data.actions // Preserve the actions
+                        }
+                    };
+                }
+                return node;
+            })
+        );
+    }, [setNodes]);
+
     const nodeActions = useMemo(() => ({
         onCellChange: handleCellChange,
         onAddRow: handleAddRow,
         onDeleteRow: handleDeleteRow,
-    }), [handleCellChange, handleAddRow, handleDeleteRow]);
-
+        onColumnHeaderChange: handleColumnHeaderChange,
+        onAddColumn: handleAddColumn,
+        onDeleteColumn: handleDeleteColumn
+    }), [handleCellChange, handleAddRow, handleDeleteRow, handleColumnHeaderChange, handleAddColumn, handleDeleteColumn]);
 
     // Handler for connecting nodes manually (optional, maybe disable for read-only view)
     const onConnect = useCallback(
@@ -365,7 +464,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
                         >
                             <Controls />
                             <MiniMap nodeStrokeWidth={3} zoomable pannable />
-                            <Background variant="dots" gap={12} size={1} className="dark:opacity-20" /> 
+                            <Background variant={BackgroundVariant.Dots} gap={12} size={1} className="dark:opacity-20" /> 
                         </ReactFlow>
                      )}
                     {/* End Conditional Rendering */}
@@ -377,6 +476,23 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, refreshTrigger }
                      {/* ... Menu Items ... */}
                      <Item onClick={handleAddRowClick}> Add Row Below </Item>
                      <Item onClick={handleDeleteRowClick} disabled={({ props }) => props?.rowIndex === undefined}> Delete Row </Item>
+                     <Separator />
+                     {/* Column Actions */}
+                     <Item onClick={({ props }) => {
+                        if (props?.nodeId) {
+                          // Create a new column definition
+                          const lastOrder = nodes.find(node => node.id === props.nodeId)?.data.columns?.length || 0;
+                          const newColumn: ColumnDef = {
+                            key: `col-${Date.now()}`,
+                            label: 'New Column',
+                            width: 'w-[120px]',
+                            editable: true,
+                            order: lastOrder
+                          };
+                          handleAddColumn(props.nodeId, newColumn);
+                        }
+                     }} disabled={({ props }) => props?.type !== 'header'}> Add Column </Item>
+                     <Item onClick={({ props }) => handleDeleteColumn(props?.nodeId, props?.colKey)} disabled={({ props }) => props?.type !== 'header' || !props?.colKey || props?.colKey === 'sno'}> Delete Column </Item>
                      <Separator />
                      <Item disabled>Rewrite using LLM</Item>
                      <Item disabled>Update Downstream</Item>
@@ -400,7 +516,7 @@ function estimateNodeHeight(rows: number): number {
     return NODE_HEADER_HEIGHT + headerRowHeight + (rows * BASE_ROW_HEIGHT) + 10;
 }
 
-const handleContextMenu = (e) => {
+const handleContextMenu = (e: React.MouseEvent) => {
   e.preventDefault();
   e.stopPropagation();
   // Your menu showing logic
