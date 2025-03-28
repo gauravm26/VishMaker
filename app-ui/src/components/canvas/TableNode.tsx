@@ -17,9 +17,9 @@ const NODE_CONTEXT_MENU_ID = "tableNodeMenu";
 
 // Define columns explicitly here for rendering (same as before)
 const COLUMNS = [
-    { key: 'sno', label: 'SNO', width: 'w-12', editable: false }, // SNO likely not editable
-    { key: 'name', label: 'Name', width: 'flex-grow', editable: true },
-    { key: 'desc', label: 'Desc', width: 'w-1/3', editable: true },
+    { key: 'sno', label: 'SNO', width: 'w-[70px]', editable: false }, // Fixed width in pixels
+    { key: 'name', label: 'Name', width: 'w-[180px]', editable: true }, // Fixed width in pixels
+    { key: 'desc', label: 'Desc', width: 'w-[135px]', editable: true }, // Fixed width in pixels
 ];
 
 
@@ -104,54 +104,79 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 <Handle type="target" position={Position.Left} id={`${nodeId}-target`} className="!bg-red-500 !w-3 !h-3" style={{ top: '50%', left: '-6px' }} />
             </div>
 
-            {/* Node Body - Header Row */}
-            <div className="flex font-semibold bg-gray-100 dark:bg-gray-750 border-b border-gray-300 dark:border-gray-600 px-2 py-1 text-gray-800 dark:text-gray-200"> {/* Header row bg, border, text */}
-                {COLUMNS.map(col => ( <div key={col.key} className={`pr-2 ${col.width}`}>{col.label}</div> ))}
-                <div className="w-4"></div> {/* Space for handles */}
+            {/* Node Body - Table Container with no padding to align borders */}
+            <div className="text-gray-900 dark:text-gray-200">
+                {/* Table with fixed layout for exact column alignment */}
+                <table className="w-full border-collapse table-fixed">
+                    <thead>
+                        <tr className="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100">
+                            {COLUMNS.map(col => (
+                                <th key={col.key} className={`${col.width} py-1 px-2 font-semibold text-left`}>
+                                    {col.label}
+                                </th>
+                            ))}
+                            {/* No empty header cell for handle space */}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, rowIndex) => (
+                            <tr
+                                key={row.id}
+                                className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 relative"
+                                onContextMenu={(e) => displayContextMenu(e, rowIndex)}
+                            >
+                                {COLUMNS.map((col, colIndex) => {
+                                    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colKey === col.key;
+                                    const cellValue = row[col.key as keyof TableRowData] ?? '';
+                                    const isLastCol = colIndex === COLUMNS.length - 1;
+
+                                    return (
+                                        <td
+                                            key={`${row.id}-${col.key}`}
+                                            className={`${col.width} py-1 px-2 border-r dark:border-gray-600 ${isLastCol ? 'border-r-0 relative' : ''} ${col.editable ? 'cursor-text' : ''} ${isEditing ? 'p-0' : ''}`}
+                                            onDoubleClick={() => col.editable ? handleDoubleClick(rowIndex, col.key, cellValue) : undefined}
+                                        >
+                                            {isEditing ? (
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={handleInputChange}
+                                                    onBlur={handleInputBlur}
+                                                    onKeyDown={handleInputKeyDown}
+                                                    autoFocus // Focus the input when it appears
+                                                    className="w-full h-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" // Style input to fill cell
+                                                />
+                                            ) : (
+                                                // Render data - handle potential null/undefined desc, convert numbers
+                                                String(cellValue)
+                                            )}
+                                            
+                                            {/* Place handle in the last cell instead of separate cell */}
+                                            {isLastCol && (
+                                                <Handle 
+                                                    type="source" 
+                                                    position={Position.Right} 
+                                                    id={`row-handle-${row.id}`} 
+                                                    className="!bg-teal-500 !w-3 !h-3 dark:bg-teal-400" 
+                                                    style={{ top: '50%', right: '-6px' }} 
+                                                />
+                                            )}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={COLUMNS.length} className="p-2 text-center text-gray-400 dark:text-gray-500 italic">
+                                    No items
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
-
-            {/* Node Body - Data Rows */}
-            <div className="px-1 text-gray-900 dark:text-gray-200">
-                {rows.map((row, rowIndex) => (
-                    <div
-                        key={row.id}
-                        className="relative flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[35px] items-stretch group"// Added group for potential hover effects
-                        onContextMenu={(e) => displayContextMenu(e, rowIndex)} // Context menu on row
-                    >
-                        {COLUMNS.map(col => {
-                            const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colKey === col.key;
-                            const cellValue = row[col.key as keyof TableRowData] ?? '';
-
-                            return (
-                                <div
-                                    key={`${row.id}-${col.key}`}
-                                    className={`px-1 py-1 break-words ${col.width} border-r dark:border-gray-600 last:border-r-0 ${col.editable ? 'cursor-text' : ''} ${isEditing ? 'p-0' : ''}`}// Remove padding when editing
-                                    onDoubleClick={() => col.editable ? handleDoubleClick(rowIndex, col.key, cellValue) : undefined}
-                                >
-                                    {isEditing ? (
-                                        <input
-                                            type="text"
-                                            value={editValue}
-                                            onChange={handleInputChange}
-                                            onBlur={handleInputBlur}
-                                            onKeyDown={handleInputKeyDown}
-                                            autoFocus // Focus the input when it appears
-                                            className="w-full h-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" // Style input to fill cell
-                                        />
-                                    ) : (
-                                        // Render data - handle potential null/undefined desc, convert numbers
-                                        String(cellValue)
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {/* Source Handle per row */}
-                        <Handle type="source" position={Position.Right} id={`row-handle-${row.id}`} className="!bg-teal-500 !w-3 !h-3 dark:bg-teal-400" style={{ top: '50%', right: '-10px' }} />
-                    </div>
-                ))}
-            </div>
-            {rows.length === 0 && ( <div className="p-2 text-center text-gray-400 dark:text-gray-500 italic">No items</div> )}
-
+            
              {/* --- Context Menu Component --- */}
 
              {/* --- End Context Menu --- */}
