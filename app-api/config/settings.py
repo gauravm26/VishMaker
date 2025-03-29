@@ -6,7 +6,7 @@ from pydantic import AnyHttpUrl, validator # Import validator
 
 # Load .env file from the project root, relative to this file's location
 from dotenv import load_dotenv
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env') # Navigate up two levels for root .env
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', 'global', '.env') # Navigate up two levels, then into global
 load_dotenv(dotenv_path=dotenv_path)
 
 class Settings(BaseSettings):

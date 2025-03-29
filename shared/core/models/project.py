@@ -1,7 +1,7 @@
 # shared/core/models/project.py
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
-from infrastructure.db.base import Base # Import Base from the infrastructure setup
+from infrastructure.db.db_core import Base # Import Base from the db_core setup
 
 class Project(Base):
     __tablename__ = "projects"

@@ -16,7 +16,7 @@ sys.path.insert(0, project_root)
 print(f"DEBUG: Alembic env.py - sys.path modified. Project root added: {project_root}")
 
 
-dotenv_path = os.path.join(project_root, '.env')
+dotenv_path = os.path.join(project_root, 'global', '.env')
 if os.path.exists(dotenv_path):
     print(f"DEBUG: Alembic env.py - Loading environment variables from: {dotenv_path}")
     load_dotenv(dotenv_path=dotenv_path, verbose=True) # verbose=True helps debug loading
@@ -27,7 +27,7 @@ else:
 
 
 try:
-    from infrastructure.db.base import Base
+    from infrastructure.db.db_core import Base
     from shared.core import models
     print("DEBUG: Alembic env.py - Successfully imported Base and models.")
 except ImportError as e:

@@ -72,16 +72,21 @@ def load_config():
         with open(config_path, 'r') as f:
             config = json.load(f)
         
-        # Extract model IDs from config - without verbose output
-        if 'llm' in config and 'modelIds' in config['llm']:
-            return config
+        # Support both old structure (modelIds) and new structure (models)
+        if 'llm' in config:
+            if 'models' in config['llm']:
+                return config
+            elif 'modelIds' in config['llm']:
+                return config
+            else:
+                return {}
         else:
             return {}
     except Exception as e:
         print(f"Error loading config.json: {e}")
         return {}
 
-def generate_inference_profiles(model_ids):
+def generate_inference_profiles(model_keys):
     """Generate inference profiles for each model ID using the base ARN from .env"""
     inference_profiles = {}
     
@@ -91,8 +96,13 @@ def generate_inference_profiles(model_ids):
     if not base_arn:
         return {}
     
-    # For each model ID, create a corresponding inference profile ARN
-    for model_id in model_ids:
+    # For each model key, create a corresponding inference profile ARN
+    for model_key in model_keys:
+        # Get the actual model ID from config
+        model_id = get_model_id_from_key(model_key)
+        if not model_id:
+            continue
+            
         # Convert model ID format to match what's expected in the ARN
         # Example: "anthropic.claude-3-7-sonnet-20250219-v1:0" -> "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
         formatted_model_id = model_id.replace('.', '-', 1).replace('-', '.', 1)
@@ -103,14 +113,34 @@ def generate_inference_profiles(model_ids):
         inference_arn = f"{base_arn}/{formatted_model_id}"
         
         # Add to inference profiles dictionary
-        inference_profiles[model_id] = inference_arn
+        inference_profiles[model_key] = inference_arn
     
     return inference_profiles
 
-def get_model_config(config, model_id):
+def get_model_id_from_key(model_key):
+    """Get the actual model ID from a model key in the config"""
+    config = load_config()
+    
+    # Check in new structure (models)
+    if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
+        return config['llm']['models'][model_key]['model']
+    
+    # Check in old structure (modelIds)
+    if 'llm' in config and 'modelIds' in config['llm'] and model_key in config['llm']['modelIds']:
+        return model_key
+        
+    return None
+
+def get_model_config(config, model_key):
     """Get the model configuration from the config object"""
-    if 'llm' in config and 'modelIds' in config['llm'] and model_id in config['llm']['modelIds']:
-        return config['llm']['modelIds'][model_id]
+    # Try new structure first
+    if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
+        return config['llm']['models'][model_key]
+    
+    # Fall back to old structure
+    if 'llm' in config and 'modelIds' in config['llm'] and model_key in config['llm']['modelIds']:
+        return config['llm']['modelIds'][model_key]
+        
     return None
 
 def test_model_with_inference_profile(bedrock_runtime, model_id, profile_arn, config):
@@ -251,43 +281,65 @@ def test_aws_connection():
 
         # First, test basic AWS connectivity using STS
         print("\nTesting AWS connectivity...")
-        access_key = os.getenv('AWS_ACCESS_KEY_ID', '')
-        print(f"Using Access Key ID: {access_key[:5]}..." if access_key else "AWS_ACCESS_KEY_ID not found")
-        print(f"Region: {os.getenv('AWS_REGION', 'Not configured')}")
+        access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID', '')
+        print(f"Using Access Key ID: {access_key[:5]}..." if access_key else "AWS_BEDROCK_ACCESS_KEY_ID not found")
+        print(f"Region: {os.getenv('AWS_BEDROCK_REGION', 'Not configured')}")
         
         session = boto3.Session(
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=os.getenv('AWS_REGION')
+            aws_access_key_id=os.getenv('AWS_BEDROCK_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
         )
 
-        sts = session.client('sts', config=config)
-        identity = sts.get_caller_identity()
-        print("Successfully connected to AWS!")
-        print(f"Account ID: {identity['Account']}")
-        print(f"User ARN: {identity['Arn']}")
+        try:
+            sts = session.client('sts', config=config)
+            identity = sts.get_caller_identity()
+            print("Successfully connected to AWS!")
+            print(f"Account ID: {identity['Account']}")
+            print(f"User ARN: {identity['Arn']}")
+        except Exception as e:
+            print(f"AWS connectivity test failed: {str(e)}")
+            return
         
         # Test Bedrock runtime connection
         print("\nTesting Bedrock runtime connection...")
-        bedrock_runtime = session.client('bedrock-runtime', config=config)
-        print("Successfully connected to Bedrock runtime!")
+        try:
+            bedrock_runtime = session.client('bedrock-runtime', config=config)
+            print("Successfully connected to Bedrock runtime!")
+        except Exception as e:
+            print(f"Bedrock runtime connection failed: {str(e)}")
+            return
         
         # Load configuration from config.json
         config_data = load_config()
         
-        if not config_data or 'llm' not in config_data or 'modelIds' not in config_data['llm']:
-            print("No model IDs found in config.json. Exiting.")
+        # Check for models in the new structure
+        if 'llm' in config_data and 'models' in config_data['llm']:
+            model_keys = list(config_data['llm']['models'].keys())
+            model_structure = "new"
+            print("\nUsing new config structure with 'models'")
+        # Check for models in the old structure
+        elif 'llm' in config_data and 'modelIds' in config_data['llm']:
+            model_keys = list(config_data['llm']['modelIds'].keys())
+            model_structure = "old"
+            print("\nUsing old config structure with 'modelIds'")
+        else:
+            print("No model definitions found in config.json. Exiting.")
             return
             
-        model_ids = list(config_data['llm']['modelIds'].keys())
-        
-        if not model_ids:
-            print("No model IDs found in config.json. Exiting.")
+        if not model_keys:
+            print("No models found in config.json. Exiting.")
             return
+            
+        # Display models found
+        print(f"\nFound {len(model_keys)} models in config.json:")
+        for model_key in model_keys:
+            model_id = get_model_id_from_key(model_key)
+            print(f"- {model_key}: {model_id}")
             
         # Generate inference profiles for each model
         print("\nGenerating inference profiles for models...")
-        inference_profiles = generate_inference_profiles(model_ids)
+        inference_profiles = generate_inference_profiles(model_keys)
         
         if not inference_profiles:
             print("No inference profiles could be generated. Please set AWS_BEDROCK_INFERENCE_ARN in your .env file.")
@@ -295,45 +347,16 @@ def test_aws_connection():
             
         print(f"Generated {len(inference_profiles)} inference profiles")
         
-        # Filter inference profiles to only include models from config.json
-        config_profiles = {model_id: profile_arn for model_id, profile_arn in inference_profiles.items() if model_id in model_ids}
+        # Test each model with its inference profile
+        print(f"\nTesting model connectivity...")
         
-        if not config_profiles:
-            print("None of the models in config.json have corresponding inference profiles.")
-            print("Models in config.json:", model_ids)
-            return
-        
-        print(f"\nTesting {len(config_profiles)} models from config.json...")
-        
-        # Group models by provider for testing
-        claude_models = [model_id for model_id in config_profiles.keys() if "anthropic.claude" in model_id]
-        meta_models = [model_id for model_id in config_profiles.keys() if "meta.llama" in model_id]
-        mistral_models = [model_id for model_id in config_profiles.keys() if "mistral" in model_id]
-        other_models = [model_id for model_id in config_profiles.keys() 
-                       if "anthropic.claude" not in model_id 
-                       and "meta.llama" not in model_id 
-                       and "mistral" not in model_id]
-        
-        # Test models by provider group
-        if claude_models:
-            print("\n===== TESTING CLAUDE MODELS =====")
-            for model_id in claude_models:
-                test_model_with_inference_profile(bedrock_runtime, model_id, config_profiles[model_id], config_data)
-            
-        if meta_models:
-            print("\n===== TESTING META MODELS =====")
-            for model_id in meta_models:
-                test_model_with_inference_profile(bedrock_runtime, model_id, config_profiles[model_id], config_data)
-            
-        if mistral_models:
-            print("\n===== TESTING MISTRAL MODELS =====")
-            for model_id in mistral_models:
-                test_model_with_inference_profile(bedrock_runtime, model_id, config_profiles[model_id], config_data)
-                
-        if other_models:
-            print("\n===== TESTING OTHER MODELS =====")
-            for model_id in other_models:
-                test_model_with_inference_profile(bedrock_runtime, model_id, config_profiles[model_id], config_data)
+        for model_key, profile_arn in inference_profiles.items():
+            model_id = get_model_id_from_key(model_key)
+            try:
+                test_model_with_inference_profile(bedrock_runtime, model_key, profile_arn, config_data)
+                print(f"- {model_key}: {model_id} : Connected Successfully")
+            except Exception as e:
+                print(f"- {model_key}: {model_id} : Connection Failed ({str(e)[:100]}...)")
                 
     except Exception as e:
         print(f"Error during AWS connection test: {str(e)}")

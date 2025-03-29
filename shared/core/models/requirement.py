@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from infrastructure.db.base import Base
+from infrastructure.db.db_core import Base
 
 # --- User Flow ---
 class UserFlow(Base):

@@ -1,0 +1,137 @@
+{
+  "llm": {
+    "models": {
+      "model1": {
+        "model": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "APIRequest": {
+          "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+          "contentType": "application/json",
+          "accept": "application/json",
+          "body": {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 200,
+            "top_k": 250,
+            "stop_sequences": [],
+            "temperature": 1,
+            "top_p": 0.999,
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "hello world"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "model2": {
+        "model": "meta.llama3-3-70b-instruct-v1:0",
+        "APIRequest": {
+          "modelId": "meta.llama3-3-70b-instruct-v1:0",
+          "contentType": "application/json",
+          "accept": "application/json",
+          "body": "{\"prompt\":\"this is where you place your input text\",\"max_gen_len\":512,\"temperature\":0.5,\"top_p\":0.9}"
+        }
+      }
+    },
+    "instructions": {
+      "instruction1": {
+        "Role": "You are a product specification expert who transforms high-level product ideas into comprehensive product blueprints with detailed components and systems.",
+        "Objective": "Convert the user's input into a professional product specification that outlines the complete solution architecture. Your output should describe the product vision and enumerate all critical technical and functional components needed for real-world implementation.",
+        "Constraints & Guidelines": {
+          "Maintain Meaning": "Preserve the user's core product concept while expanding it into a complete solution.",
+          "Industry Standards": "Apply current industry best practices and standard system components relevant to the product domain.",
+          "Technical Depth": "Include both user-facing features and necessary backend systems that would be required in production.",
+          "Comprehensive Scope": "Cover all aspects of a professional product: frontend, backend, integrations, security, and scalability considerations.",
+          "Output Format": "Begin with a concise product vision statement (2-3 sentences), followed by a comprehensive list of components organized by category (e.g., User Interface, Data Management, Third-party Integrations)."
+        },
+        "Examples": [
+          {
+            "Input": "Hi i want to build an ecommerce website that sells home decor items, but i also want it to have a blog and a section where i can post DIY tutorials for customers.",
+            "Output": "**Luxe Home Décor Platform**\n\nA comprehensive e-commerce ecosystem for premium home décor products with integrated content marketing capabilities. The platform will combine robust shopping functionality with engaging content elements to drive customer acquisition, improve retention, and position the brand as an authority in home styling and DIY projects.\n\n**Core System Components:**\n\n**Customer-Facing Systems:**\n- **Product Catalog & Search Engine** - Advanced filtering, category management, and AI-powered product recommendations\n- **Account Management System** - User profiles, saved preferences, purchase history, and wishlists\n- **Shopping Cart & Checkout** - Multi-step checkout with address validation and abandoned cart recovery\n- **Payment Processing** - Integration with multiple payment gateways (Stripe, PayPal, Apple Pay)\n- **Order Management** - Order tracking, history, and status notifications\n- **Content Hub** - Blog platform with categorization, tagging, and related product suggestions\n- **DIY Project Center** - Step-by-step tutorials with required materials linking to product pages\n- **Customer Reviews & Ratings** - Product rating system with photo/video upload capabilities\n\n**Administrative Systems:**\n- **Inventory Management** - Stock tracking, low inventory alerts, and supplier integration\n- **Content Management System** - WYSIWYG editor for blog and tutorial creation with scheduling\n- **Analytics Dashboard** - Sales reporting, customer behavior tracking, and content performance metrics\n- **Marketing Tools** - Email campaign management, discount code generation, and loyalty program administration\n- **Order Fulfillment** - Shipping label generation, packing slips, and delivery tracking\n\n**Technical Infrastructure:**\n- **User Authentication & Security** - Multi-factor authentication and PCI compliance measures\n- **Database Architecture** - Relational database for transactional data and NoSQL for content\n- **Search Optimization** - Elasticsearch implementation for product and content discovery\n- **CDN Integration** - Fast global content delivery for images and media files\n- **Mobile Responsiveness** - Progressive web app capabilities for cross-device compatibility\n- **API Layer** - RESTful API for potential mobile app expansion and third-party integrations"
+          }
+        ]
+      },
+      "instruction2": {
+        "Role": "You are a chain-of-thought AI composed of multiple specialized agents (e.g., Business Analyst, UX Expert, Technical Architect). Working together, you transform a clarified project description into a structured high-level user flow.",
+        "Objective": "Identify the key steps, interactions, and user actions needed to achieve the user's goal—illustrated by a retail web page.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Use the refined user description from Step 1.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core user objectives and target audience.",
+            "UX Expert": "Define the intuitive user interactions and navigation steps.",
+            "Technical Architect": "Outline the main technical components that support the flow."
+          },
+          "Output": "Provide a consolidated list or table of high-level user flow steps, each accompanied by a brief rationale.",
+          "Scope": "Keep the flow high-level, focusing on major user actions without detailed implementation.",
+          "NoFeatureCreep": "Avoid adding steps not mentioned or implied by the refined description.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each step MUST be on a new line with the step name and description separated by a pipe character (|). Example: 'Landing Page | User lands on homepage'. DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Home Page | User lands on a polished page that captures attention with a clear call-to-action.",
+          "Browse Items | User browses items organized by categories and groups.",
+          "Item Details | User selects an item to view detailed information.",
+          "Basket Management | User adds or removes items from their basket.",
+          "Checkout | User proceeds to a simple checkout process by entering payment details.",
+          "Confirmation | User receives an email confirming the successful purchase."
+        ]
+      },
+      "instruction3": {
+        "Role": "You are an advanced chain-of-thought AI specialized in refining and expanding high-level user flow outputs. Your task is to build upon the output provided by the first model, adding additional details and enhancements while maintaining clarity and conciseness.",
+        "Objective": "Refine the high-level user flow output generated by the first model. Enhance and add details where necessary to further clarify user interactions and processes for a retail web page.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Use the user flow output generated by the first model as the starting point.",
+          "Refinement": "Review the existing steps and expand on them if needed. Include additional details that improve clarity and user guidance without deviating from the core structure.",
+          "Output": "Provide a consolidated list of user flow steps as two columns separated by a pipe (|). The first column should be the step name, and the second column should be the enhanced description.",
+          "Scope": "Maintain the high-level structure while ensuring that each step is well defined. Avoid introducing completely new steps that do not follow from the first model's output.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. Each step MUST be on a new line with the step name and description separated by a pipe character (|). Example: 'Landing Page | User lands on homepage'. DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Home Page | User lands on a polished page that captures attention with a clear call-to-action, including visually appealing elements and strategic placement of key messaging.",
+          "Browse Items | User browses items organized by categories and groups, with intuitive navigation menus and filtering options to enhance product discovery.",
+          "Item Details | User selects an item to view detailed information, including high-quality images, descriptions, specifications, and customer reviews.",
+          "Basket Management | User adds or removes items from their basket, with a dynamic summary of selected products and options to adjust quantities.",
+          "Checkout | User proceeds to a streamlined checkout process by entering payment details, shipping information, and confirming the order.",
+          "Confirmation | User receives an immediate email confirmation of the successful purchase, along with an order summary and tracking information if applicable."
+        ]
+      }
+    },
+    "componentModelMapping": {
+      "component1": {
+        "componentName": "initialPrompt",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction1"
+          }
+        ]
+      },
+      "component2": {
+        "componentName": "User Flow",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction2"
+          },
+          {
+            "model": "model2",
+            "instruction": "instruction3"
+          }
+        ]
+      },
+      "component3": {
+        "componentName": "Product Specification",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction1"
+          }
+        ]
+      }
+    }
+  }
+}

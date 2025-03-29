@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 dotenv_path = os.path.join(
     os.path.dirname(__file__), # Directory of settings.py (VishGoogle/config)
     '..',                      # Go up one level (to VishGoogle)
+    'global',                  # Go to global directory
     '.env'                     # Target .env file
 )
 print(f"DEBUG: config/settings.py - Attempting to load .env from: {dotenv_path}")

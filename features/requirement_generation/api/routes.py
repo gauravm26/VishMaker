@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from infrastructure.db.base import get_db # DB session dependency
+from infrastructure.db.db_core import get_db # DB session dependency
 from features.requirement_generation.core.services import req_gen_service, RequirementGenerationService
 from features.requirement_generation.api import schemas # API Schemas
 
