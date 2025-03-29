@@ -32,14 +32,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     # If DATABASE_URL might be missing, add a default for testing:
     # DATABASE_URL: str = "postgresql+psycopg2://user:pass@host:port/db"
-
+    
+    # Port settings
+    FRONTEND_PORT: int = 3000  # Default if not in .env
+    
     # CORS Origins
-    BACKEND_CORS_ORIGINS: Union[List[AnyHttpUrl], List[str]] = ["http://localhost:5173"]
-
-    # SECRET_KEY: str = "default_secret_key"
-
+    BACKEND_CORS_ORIGINS: Union[List[AnyHttpUrl], List[str]] = []
+    
     @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+    def assemble_cors_origins(cls, v: Union[str, List[str]], values) -> Union[List[str], str]:
+        if not v:  # If BACKEND_CORS_ORIGINS is empty, use FRONTEND_PORT
+            frontend_port = values.get("FRONTEND_PORT", 3000)
+            return [f"http://localhost:{frontend_port}"]
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):
