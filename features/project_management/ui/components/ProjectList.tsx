@@ -12,7 +12,7 @@ interface ProjectListProps {
     onGenerationComplete: (projectId: number, success: boolean) => void; // <-- Modified prop
     generatingProjectId: number | null; // <-- New prop
     selectedProjectId: number | null;
-    
+    triggerRefresh: () => void; // <-- Add this to trigger refresh after deletion
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({
@@ -21,12 +21,13 @@ const ProjectList: React.FC<ProjectListProps> = ({
     onStartGeneration, // <-- Destructure
     onGenerationComplete, // <-- Destructure
     generatingProjectId, // <-- Destructure
-    selectedProjectId // <-- Destructure
-    
+    selectedProjectId, // <-- Destructure
+    triggerRefresh // <-- Destructure this new prop
 }) => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [listError, setListError] = useState<string | null>(null);
+    const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
 
     // --- Removed local generatingStatus and generationError state ---
     // We now rely on the generatingProjectId prop from the parent
@@ -74,6 +75,39 @@ const ProjectList: React.FC<ProjectListProps> = ({
         }
     };
 
+    const handleDeleteClick = async (projectId: number, event: React.MouseEvent) => {
+        event.stopPropagation(); // Prevent project selection
+
+        // Confirm deletion
+        if (!window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+            return;
+        }
+
+        setDeletingProjectId(projectId);
+        
+        try {
+            // Call the delete API endpoint
+            await apiClient(`/projects/${projectId}`, { method: 'DELETE' });
+            console.log('Project deleted successfully');
+            
+            // Remove from local state
+            setProjects(projects.filter(p => p.id !== projectId));
+            
+            // If the deleted project was selected, clear selection
+            if (selectedProjectId === projectId) {
+                onProjectSelect(-1); // Pass an invalid ID to deselect
+            }
+            
+            // Trigger refresh in parent
+            triggerRefresh();
+        } catch (err: any) {
+            console.error('Project deletion failed:', err);
+            alert('Failed to delete project: ' + (err.message || 'Unknown error'));
+        } finally {
+            setDeletingProjectId(null);
+        }
+    };
+
     if (loading) {
         return <div className="text-center p-4">Loading projects...</div>;
     }
@@ -93,6 +127,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                     {projects.map((project) => {
                         // Determine button state based on the prop
                         const isGenerating = generatingProjectId === project.id;
+                        const isDeleting = deletingProjectId === project.id;
 
                         return (
                             <li
@@ -107,17 +142,34 @@ const ProjectList: React.FC<ProjectListProps> = ({
                                     </span>
                                     {/* Display generation error? (Need error prop from parent if desired) */}
                                 </div>
-                                <button
-                                    onClick={(e) => handleGenerateClick(project.id, e)}
-                                    disabled={isGenerating} // Use the prop for disabled state
-                                    className={`py-1 px-2 border border-transparent text-xs font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                        isGenerating
-                                            ? 'bg-gray-400 text-white cursor-wait'
-                                            : 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-blue-400'
-                                    }`}
-                                >
-                                    {isGenerating ? 'Generating...' : 'Generate Reqs'}
-                                </button>
+                                <div className="flex space-x-2">
+                                    {/* Delete Button */}
+                                    <button
+                                        onClick={(e) => handleDeleteClick(project.id, e)}
+                                        disabled={isDeleting || isGenerating}
+                                        className={`p-1 border border-gray-200 text-xs rounded-full w-7 h-7 flex items-center justify-center transition-all focus:outline-none ${
+                                            isDeleting
+                                                ? 'bg-gray-200 text-gray-500 cursor-wait'
+                                                : 'bg-white text-gray-500 hover:bg-gray-100 hover:text-red-500 hover:border-red-200'
+                                        }`}
+                                        title="Delete Project"
+                                    >
+                                        {isDeleting ? '...' : '🗑️'}
+                                    </button>
+                                    
+                                    {/* Generate Button */}
+                                    <button
+                                        onClick={(e) => handleGenerateClick(project.id, e)}
+                                        disabled={isGenerating || isDeleting}
+                                        className={`py-1 px-3 border text-xs font-medium rounded-md transition-all focus:outline-none ${
+                                            isGenerating
+                                                ? 'bg-gray-200 text-gray-500 cursor-wait border-gray-300'
+                                                : 'bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-300 border-gray-200'
+                                        }`}
+                                    >
+                                        {isGenerating ? 'Generating...' : 'Generate Reqs'}
+                                    </button>
+                                </div>
                             </li>
                         );
                      })}

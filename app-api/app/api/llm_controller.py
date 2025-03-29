@@ -1,0 +1,216 @@
+import json
+import os
+import sys
+import logging
+from datetime import datetime
+from pathlib import Path
+from fastapi import APIRouter, Body, HTTPException
+from pydantic import BaseModel
+
+# Add infrastructure to path for BedrockService import
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(project_root))
+
+from infrastructure.llms.llm_models import BedrockService, load_config, get_model_id_from_key
+
+# Ensure logs directory exists
+logs_dir = project_root / 'logs'
+if not logs_dir.exists():
+    print(f"Creating logs directory: {logs_dir}")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+# Configure logging for LLM interactions - payload and response only
+log_path = logs_dir / 'llm_interactions.log'
+print(f"Logging LLM interactions to: {log_path}")
+
+llm_logger = logging.getLogger('llm_interactions')
+llm_logger.setLevel(logging.INFO)
+
+# Clear existing handlers
+for handler in llm_logger.handlers[:]:
+    llm_logger.removeHandler(handler)
+
+# Add file handler with simple formatter and immediate flush
+file_handler = logging.FileHandler(log_path, mode='a')
+file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+file_handler.setLevel(logging.INFO)
+llm_logger.addHandler(file_handler)
+
+# Also log to console for debugging
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+console_handler.setLevel(logging.INFO)
+llm_logger.addHandler(console_handler)
+
+# Test log entry to verify logging is working
+try:
+    llm_logger.info("LLM logging initialized")
+    with open(log_path, "a") as f:
+        f.write("Direct file write test: LLM logging initialized\n")
+    print(f"Test logging to {log_path} completed")
+except Exception as e:
+    print(f"ERROR: Could not write to log file: {str(e)}")
+
+# Force logger to not use parent handlers and to propagate properly
+llm_logger.propagate = False
+
+router = APIRouter()
+
+class LlmProcessRequest(BaseModel):
+    componentId: str
+    text: str
+
+class LlmProcessResponse(BaseModel):
+    result: str
+    modelId: str
+    instructionId: str
+
+@router.post("/process", response_model=LlmProcessResponse)
+async def process_with_llm(request: LlmProcessRequest = Body(...)):
+    """Process text using an LLM based on the component configuration"""
+    request_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    try:
+        # Log request information
+        llm_logger.info(f"[{request_id}] REQUEST RECEIVED for component: {request.componentId}")
+        llm_logger.info(f"[{request_id}] USER TEXT: {request.text[:100]}...")
+        
+        # Load config
+        config = load_config()
+        
+        if not config or 'llm' not in config:
+            llm_logger.error(f"[{request_id}] LLM configuration not found")
+            raise HTTPException(status_code=500, detail="LLM configuration not found")
+        
+        # Find component mapping
+        component_mapping = None
+        for component_key, component_data in config['llm'].get('componentModelMapping', {}).items():
+            if component_data.get('componentId') == request.componentId:
+                component_mapping = component_data
+                break
+        
+        if not component_mapping:
+            llm_logger.error(f"[{request_id}] Component '{request.componentId}' not found in configuration")
+            raise HTTPException(status_code=404, detail=f"Component '{request.componentId}' not found in configuration")
+        
+        # Get the first model-instruction mapping
+        if not component_mapping.get('modelInstructions') or len(component_mapping['modelInstructions']) == 0:
+            llm_logger.error(f"[{request_id}] No model instructions found for component '{request.componentId}'")
+            raise HTTPException(status_code=500, detail=f"No model instructions found for component '{request.componentId}'")
+        
+        model_instruction = component_mapping['modelInstructions'][0]
+        model_key = model_instruction.get('model')
+        instruction_key = model_instruction.get('instruction')
+        
+        llm_logger.info(f"[{request_id}] Using model: {model_key} with instruction: {instruction_key}")
+        
+        # Get instruction
+        instruction = None
+        for instr_key, instr_data in config['llm'].get('instructions', {}).items():
+            if instr_key == instruction_key:
+                instruction = instr_data
+                break
+        
+        if not instruction:
+            llm_logger.error(f"[{request_id}] Instruction '{instruction_key}' not found in configuration")
+            raise HTTPException(status_code=500, detail=f"Instruction '{instruction_key}' not found in configuration")
+        
+        # Initialize Bedrock service
+        llm_logger.info(f"[{request_id}] Initializing Bedrock service")
+        bedrock_service = BedrockService()
+        if not bedrock_service.client:
+            llm_logger.error(f"[{request_id}] Failed to initialize Bedrock service - check AWS credentials")
+            raise HTTPException(status_code=500, detail="Failed to initialize Bedrock service - check AWS credentials in environment variables")
+        
+        # Verify AWS credentials
+        aws_access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID')
+        aws_secret_key = os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY')
+        aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
+        
+        if not aws_access_key or not aws_secret_key:
+            llm_logger.error(f"[{request_id}] AWS Bedrock credentials not found in environment variables")
+            raise HTTPException(status_code=500, detail="AWS Bedrock credentials not properly configured - check AWS_BEDROCK_ACCESS_KEY_ID and AWS_BEDROCK_SECRET_ACCESS_KEY")
+            
+        # Check for AWS Bedrock inference ARN 
+        inference_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '')
+        if not inference_arn:
+            llm_logger.error(f"[{request_id}] AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
+            raise HTTPException(status_code=500, detail="AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
+        
+        try:
+            # Prepare the request payload
+            llm_logger.info(f"[{request_id}] Preparing request payload for model {model_key}")
+            config_body, model_id = bedrock_service.prepare_request_payload(model_key, instruction, request.text)
+            
+            # Log the payload - guaranteed to happen
+            payload_str = json.dumps(config_body, indent=2)
+            llm_logger.info(f"[{request_id}] REQUEST PAYLOAD:\n{payload_str}")
+            
+            # Get the inference profile ARN
+            llm_logger.info(f"[{request_id}] Getting profile ARN for model {model_id}")
+            profile_arn = bedrock_service.get_model_profile_arn(model_id)
+            
+            # Serialize the body
+            body = json.dumps(config_body)
+            
+            # Call the Bedrock API
+            llm_logger.info(f"[{request_id}] Invoking AWS Bedrock model {model_id} with profile {profile_arn}")
+            
+            try:
+                response = bedrock_service.client.invoke_model(
+                    modelId=profile_arn,
+                    body=body
+                )
+                
+                # Check if response is valid
+                if not response or not hasattr(response, 'get') or not response.get('body'):
+                    llm_logger.error(f"[{request_id}] Empty response received from AWS Bedrock")
+                    raise ValueError("Empty response received from AWS Bedrock")
+                    
+                # Read the response body
+                response_body_raw = response.get('body').read()
+                
+                # Check if the response body is empty
+                if not response_body_raw:
+                    llm_logger.error(f"[{request_id}] Empty response body received from AWS Bedrock")
+                    raise ValueError("Empty response body received from AWS Bedrock")
+                
+                # Parse and log the response
+                response_body = None
+                try:
+                    response_body = json.loads(response_body_raw)
+                    response_str = json.dumps(response_body, indent=2)
+                    llm_logger.info(f"[{request_id}] RESPONSE PAYLOAD:\n{response_str}")
+                except json.JSONDecodeError as e:
+                    llm_logger.error(f"[{request_id}] Failed to parse response as JSON: {str(e)}")
+                    llm_logger.error(f"[{request_id}] Raw response: {response_body_raw[:1000]}")
+                    raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
+                
+                # Process the response content - pass the already parsed response_body
+                content, _ = bedrock_service.process_model_response(model_id, None, response_body)
+                
+                llm_logger.info(f"[{request_id}] Successfully processed response. Content length: {len(content)}")
+                
+                # Return the response
+                return LlmProcessResponse(
+                    result=content,
+                    modelId=model_id,
+                    instructionId=instruction_key
+                )
+                
+            except Exception as aws_e:
+                llm_logger.error(f"[{request_id}] AWS API error: {str(aws_e)}")
+                raise ValueError(f"AWS Bedrock API error: {str(aws_e)}")
+                
+        except ValueError as ve:
+            llm_logger.error(f"[{request_id}] Error invoking model: {str(ve)}")
+            raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
+        
+    except HTTPException as http_ex:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Log the exception
+        llm_logger.error(f"[{request_id}] Unhandled exception: {str(e)}", exc_info=True)
+        # Return a generic error message
+        raise HTTPException(status_code=500, detail=f"Error processing LLM request: {str(e)}") 

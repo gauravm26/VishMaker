@@ -111,10 +111,18 @@ def delete_project_endpoint(
     """
     Delete a project by its ID.
     """
-    deleted_project = service.delete_single_project(db, project_id=project_id)
-    if deleted_project is None:
-        # We still return 204 even if not found, as DELETE is idempotent.
-        # Alternatively, could return 404 if required.
-        pass # Project didn't exist, but the desired state (non-existence) is achieved.
-    # No body content is returned for 204 status code
-    return None # FastAPI handles the 204 response correctly when returning None
+    try:
+        deleted_project = service.delete_single_project(db, project_id=project_id)
+        if deleted_project is None:
+            # Project wasn't found, but for DELETE we return 204 as the end state is achieved
+            pass
+        # No body content is returned for 204 status code
+        return None # FastAPI handles the 204 response correctly when returning None
+    except Exception as e:
+        # Log the error
+        print(f"Error in delete endpoint for project {project_id}: {str(e)}")
+        # Return a proper error response
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete project: {str(e)}"
+        )

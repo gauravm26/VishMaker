@@ -87,3 +87,6 @@ body {
 #root { /* Ensure the root element takes full height too */
   @apply h-full;
 }
+
+/* Import feature-specific styles */
+@import "../../features/project_management/ui/styles/animations.css";

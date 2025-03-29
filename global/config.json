@@ -9,7 +9,7 @@
           "accept": "application/json",
           "body": {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 200,
+            "max_tokens": 2000,
             "top_k": 250,
             "stop_sequences": [],
             "temperature": 1,
@@ -102,7 +102,7 @@
     },
     "componentModelMapping": {
       "component1": {
-        "componentName": "initialPrompt",
+        "componentId": "initialPromptButton",
         "modelInstructions": [
           {
             "model": "model1",
@@ -111,7 +111,7 @@
         ]
       },
       "component2": {
-        "componentName": "User Flow",
+        "componentId": "createProjectButton",
         "modelInstructions": [
           {
             "model": "model1",
@@ -120,15 +120,6 @@
           {
             "model": "model2",
             "instruction": "instruction3"
-          }
-        ]
-      },
-      "component3": {
-        "componentName": "Product Specification",
-        "modelInstructions": [
-          {
-            "model": "model1",
-            "instruction": "instruction1"
           }
         ]
       }

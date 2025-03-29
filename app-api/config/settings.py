@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # CORS Origins
     # Accepts a comma-separated string from .env and converts it to a list
-    BACKEND_CORS_ORIGINS: Union[List[AnyHttpUrl], List[str]] = []
+    BACKEND_CORS_ORIGINS: Union[List[AnyHttpUrl], List[str]] = ["*"]  # Using wildcard for development
 
     # Optional: Secret Key for things like JWT later
     # SECRET_KEY: str = "default_secret_key" # Replace with a securely generated key

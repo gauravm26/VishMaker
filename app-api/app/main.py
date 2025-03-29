@@ -7,9 +7,9 @@ from fastapi.responses import RedirectResponse
 from features.project_management.api import routes as project_routes
 from features.requirement_generation.api import routes as req_gen_routes
 from config.settings import settings
-# TODO: Import feature routers later
-# from features.project_management.api import routes as project_routes
 
+# Import the LLM router from the LLM controller directly
+from app.api.llm_controller import router as llm_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -19,23 +19,15 @@ app = FastAPI(
 # Configure CORS (Cross-Origin Resource Sharing)
 # Adjust origins as needed for your frontend URL in development/production
 
-origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
-if "*" in origins: # Allow all origins if "*" is present
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-     app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Always use these settings for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly list all methods
+    allow_headers=["*"],
+    expose_headers=["Content-Type", "X-Content-Type-Options"],
+)
 
 @app.get("/ping", tags=["Health"])
 async def ping():
@@ -47,9 +39,16 @@ async def api_root_redirect():
     """Redirect from /api/v1 to /docs for API documentation."""
     return RedirectResponse(url="/docs")
 
-# TODO: Include feature routers
+# Include feature routers
 app.include_router(project_routes.router, prefix=settings.API_V1_STR)
 app.include_router(req_gen_routes.router, prefix=settings.API_V1_STR)
+
+# Include LLM router with prefix
+app.include_router(
+    llm_router, 
+    prefix=f"{settings.API_V1_STR}/llm",
+    tags=["LLM Services"]
+)
 
 if __name__ == "__main__":
     # This is for debugging locally if you run main.py directly

@@ -19,24 +19,247 @@ class BedrockService:
         """Initialize the BedrockService"""
         self.session = None
         self.client = None
+        self.config = load_config()
         self.setup_client()
     
     def setup_client(self):
         """Set up the AWS Bedrock client"""
         try:
+            # Get credentials from environment variables
+            aws_access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID')
+            aws_secret_key = os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY')
+            aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
+            
+            # Validate credentials
+            if not aws_access_key or not aws_secret_key:
+                print("WARNING: AWS Bedrock credentials not found in environment variables")
+                print("Please set AWS_BEDROCK_ACCESS_KEY_ID and AWS_BEDROCK_SECRET_ACCESS_KEY")
+                return False
+            
             # Create a new boto3 session
             self.session = boto3.Session(
-                aws_access_key_id=os.getenv('AWS_BEDROCK_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY'),
-                region_name=os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                region_name=aws_region
             )
             
             # Create the bedrock-runtime client
             self.client = self.session.client('bedrock-runtime')
-            return True
+            
+            # Test if the client is properly initialized
+            try:
+                # Try to list foundation models to verify access
+                sts = self.session.client('sts')
+                sts.get_caller_identity()
+                print(f"AWS Bedrock client initialized successfully in region {aws_region}")
+                return True
+            except Exception as e:
+                print(f"AWS access test failed: {str(e)}")
+                return False
+                
         except Exception as e:
             print(f"Error setting up Bedrock client: {str(e)}")
             return False
+    
+    def prepare_request_payload(self, model_key, instruction, user_text):
+        """
+        Prepare the request payload for the LLM based on configuration
+        
+        Args:
+            model_key (str): The model key in the config
+            instruction (dict): The instruction to use for the request
+            user_text (str): The user's input text
+            
+        Returns:
+            dict: The prepared request payload
+            str: The actual model ID
+        """
+        try:
+            # Get model configuration
+            if not self.config or 'llm' not in self.config or 'models' not in self.config['llm']:
+                raise ValueError("Invalid configuration structure")
+                
+            # Get model configuration
+            if model_key not in self.config['llm']['models']:
+                raise ValueError(f"Model key '{model_key}' not found in configuration")
+                
+            model_config = self.config['llm']['models'][model_key]
+            model_id = model_config.get('model', model_key)
+            
+            # Get API request template
+            if 'APIRequest' not in model_config or 'body' not in model_config['APIRequest']:
+                raise ValueError(f"Invalid API request configuration for model '{model_key}'")
+                
+            # Get a deep copy of the template
+            template_body = model_config['APIRequest']['body']
+            if isinstance(template_body, str):
+                config_body = json.loads(template_body)
+            else:
+                config_body = json.loads(json.dumps(template_body))
+            
+            # Format the instruction
+            formatted_instruction = self._format_instruction(instruction)
+            
+            # Apply model-specific payload configuration
+            # Claude models require the 'system' parameter at the top level
+            if 'anthropic' in model_id.lower():
+                # Claude models - add system parameter at top level
+                config_body['system'] = formatted_instruction
+                
+                # Update messages array with user content
+                if 'messages' in config_body:
+                    config_body['messages'] = [
+                        {"role": "user", "content": [{"type": "text", "text": user_text}]}
+                    ]
+            elif 'messages' in config_body:
+                # Other models with messages array
+                # First try to update an existing system message
+                system_message_index = next((i for i, msg in enumerate(config_body.get('messages', [])) 
+                                          if msg.get('role') == 'system'), None)
+                
+                # Update or add system message with instructions
+                if system_message_index is not None:
+                    # Update existing system message
+                    if isinstance(config_body['messages'][system_message_index].get('content'), list):
+                        config_body['messages'][system_message_index]['content'] = [{"type": "text", "text": formatted_instruction}]
+                    else:
+                        config_body['messages'][system_message_index]['content'] = formatted_instruction
+                else:
+                    # Add new system message
+                    config_body['messages'].insert(0, {"role": "system", "content": formatted_instruction})
+                
+                # Now update or add the user message
+                user_message_index = next((i for i, msg in enumerate(config_body.get('messages', [])) 
+                                         if msg.get('role') == 'user'), None)
+                
+                if user_message_index is not None:
+                    # Update existing user message
+                    if isinstance(config_body['messages'][user_message_index].get('content'), list):
+                        config_body['messages'][user_message_index]['content'] = [{"type": "text", "text": user_text}]
+                    else:
+                        config_body['messages'][user_message_index]['content'] = user_text
+                else:
+                    # Add new user message
+                    config_body['messages'].append({"role": "user", "content": user_text})
+            
+            elif 'prompt' in config_body:
+                # For models that use a prompt field (like Llama)
+                config_body['prompt'] = f"{formatted_instruction}\n\nUser request: {user_text}"
+            else:
+                # Generic fallback for unknown model types
+                # If there's no messages or prompt field, create one
+                config_body['prompt'] = f"{formatted_instruction}\n\nUser request: {user_text}"
+            
+            return config_body, model_id
+            
+        except Exception as e:
+            raise ValueError(f"Error preparing request payload: {str(e)}")
+    
+    def _format_instruction(self, instruction):
+        """Format instruction data into a readable string"""
+        if not instruction:
+            return ""
+            
+        if isinstance(instruction, dict):
+            formatted = ""
+            # Format instruction fields
+            if "Role" in instruction:
+                formatted += f"{instruction['Role']}\n\n"
+            if "Objective" in instruction:
+                formatted += f"Objective: {instruction['Objective']}\n\n"
+            
+            # Handle different naming conventions for constraints
+            constraints_key = next((k for k in ["Constraints & Guidelines", "ConstraintsAndGuidelines"] 
+                                   if k in instruction), None)
+            
+            if constraints_key and isinstance(instruction[constraints_key], dict):
+                formatted += "Constraints & Guidelines:\n"
+                for key, value in instruction[constraints_key].items():
+                    # Handle nested dictionaries
+                    if isinstance(value, dict):
+                        formatted += f"- {key}:\n"
+                        for subkey, subvalue in value.items():
+                            formatted += f"  - {subkey}: {subvalue}\n"
+                    else:
+                        formatted += f"- {key}: {value}\n"
+            
+            # Include examples if present but don't overwhelm with details
+            if "Examples" in instruction and instruction["Examples"]:
+                formatted += f"\nExamples are available in the configuration."
+                
+            return formatted
+        else:
+            # If instruction is not a dict, return as string
+            return str(instruction)
+    
+    def process_model_response(self, model_id, response, response_body=None):
+        """
+        Process the response from the model based on model configuration
+        
+        Args:
+            model_id (str): The model ID
+            response: The response from the Bedrock API
+            response_body: Optional pre-parsed response body (if already parsed)
+            
+        Returns:
+            str: The extracted content from the response
+            dict: The full response body
+        """
+        try:
+            # If we have a pre-parsed response body, use it
+            if response_body:
+                # Use the pre-parsed body
+                pass
+            # Otherwise read from response
+            elif response and hasattr(response, 'get') and response.get('body'):
+                # Read the response body
+                response_body_raw = response.get('body').read()
+                
+                # Check if the response body is empty
+                if not response_body_raw:
+                    raise ValueError("Empty response body received from AWS Bedrock")
+                    
+                # Try to parse the response body as JSON
+                try:
+                    response_body = json.loads(response_body_raw)
+                except json.JSONDecodeError as e:
+                    # Log the raw response for debugging
+                    print(f"Failed to parse response as JSON: {str(e)}")
+                    print(f"Raw response: {response_body_raw[:1000]}")  # Print first 1000 chars
+                    raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
+            else:
+                raise ValueError("Empty response received from AWS Bedrock")
+            
+            # Extract provider from model ID
+            provider_name = model_id.split('.')[0] if '.' in model_id else ""
+            
+            # Extract content based on response structure
+            content = ""
+            
+            # Try common response formats based on observed structure
+            if "content" in response_body and isinstance(response_body["content"], list):
+                # Anthropic Claude-3 format
+                content = response_body.get("content", [{"text": ""}])[0].get("text", "")
+            elif "generation" in response_body:
+                # Meta Llama format
+                content = response_body.get("generation", "")
+            elif "outputs" in response_body and isinstance(response_body["outputs"], list):
+                # Mistral format
+                content = response_body.get("outputs", [{"text": ""}])[0].get("text", "")
+            elif "completion" in response_body:
+                # OpenAI/older Claude format
+                content = response_body.get("completion", "")
+            else:
+                # Default to the full response as a string
+                content = str(response_body)
+            
+            # Standardize the output
+            sanitized_content = self.standardize_output(content, provider_name)
+            
+            return sanitized_content, response_body
+        
+        except Exception as e:
+            raise ValueError(f"Error processing model response: {str(e)}")
     
     def standardize_output(self, content, provider_name):
         """Standardize the output from different LLM providers"""
@@ -60,6 +283,71 @@ class BedrockService:
         content = content.strip()
         
         return content
+        
+    def get_model_profile_arn(self, model_id):
+        """
+        Generate the inference profile ARN for a model ID
+        
+        Args:
+            model_id (str): The model ID
+            
+        Returns:
+            str: The inference profile ARN
+        """
+        # Get the inference profile ARN from environment variable
+        inference_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '')
+        if not inference_arn:
+            raise ValueError("AWS_BEDROCK_INFERENCE_ARN not configured")
+            
+        # Format the model ID for the ARN
+        formatted_model_id = model_id.replace('.', '-', 1).replace('-', '.', 1)
+        if not formatted_model_id.startswith('us.'):
+            formatted_model_id = 'us.' + model_id
+            
+        # Return the full inference profile ARN
+        return f"{inference_arn}/{formatted_model_id}"
+        
+    def invoke_model(self, model_key, instruction, user_text):
+        """
+        Invoke the model with the given instruction and user text
+        
+        Args:
+            model_key (str): The model key in the config
+            instruction (dict): The instruction to use for the request
+            user_text (str): The user's input text
+            
+        Returns:
+            str: The model's response content
+            dict: Additional metadata about the request/response
+        """
+        try:
+            # Prepare the request payload
+            config_body, model_id = self.prepare_request_payload(model_key, instruction, user_text)
+            
+            # Get the inference profile ARN
+            profile_arn = self.get_model_profile_arn(model_id)
+            
+            # Serialize to JSON string for the API request
+            body = json.dumps(config_body)
+            
+            # Call the Bedrock API
+            response = self.client.invoke_model(
+                modelId=profile_arn,
+                body=body
+            )
+            
+            # Process the response
+            content, response_body = self.process_model_response(model_id, response)
+            
+            # Return the content and metadata
+            return content, {
+                "model_id": model_id,
+                "model_key": model_key,
+                "response": response_body
+            }
+            
+        except Exception as e:
+            raise ValueError(f"Error invoking model: {str(e)}")
 
 # Load environment variables from .env file in the project root
 env_path = project_root / 'global' / '.env'

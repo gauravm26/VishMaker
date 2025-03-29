@@ -97,6 +97,7 @@ const ProjectDashboard: React.FC = () => {
                         onGenerationComplete={handleGenerationComplete}
                         generatingProjectId={generatingProjectId}
                         selectedProjectId={selectedProjectId} // Still pass state for highlighting
+                        triggerRefresh={triggerListRefresh} // Add new prop for refreshing after deletion
                     />
                 </div>
             </div>
