@@ -72,6 +72,11 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             
             // Show success message with model ID and instruction ID from the response
             setSuccessMessage(`Refined with ${response.modelId} using ${response.instructionId}`);
+            
+            // Clear success message after 4 seconds
+            setTimeout(() => {
+                setSuccessMessage(null);
+            }, 4000);
         } catch (err: any) {
             setError('Failed to process text with AI. Please try again.');
             console.error('LLM processing error:', err);
@@ -117,7 +122,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                             id="initialPromptButton"
                             onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
                             disabled={isSubmitting || isLlmProcessing}
-                            className="absolute top-2 right-2 p-0.5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            className="absolute top-2 right-2 p-0.5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors border border-blue-500"
                             title="Generate with AI"
                         >
                             <span className={`text-xs font-bold ${isLlmProcessing ? 'animate-pulse' : ''} ${prompt ? 'ai-icon-text text-blue-500' : 'text-gray-400'}`}>

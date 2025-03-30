@@ -9,11 +9,12 @@
           "accept": "application/json",
           "body": {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2000,
+            "max_tokens": 2048,
             "top_k": 250,
             "stop_sequences": [],
-            "temperature": 1,
+            "temperature": 0.8,
             "top_p": 0.999,
+            "system": "You are a helpful assistant that can answer questions and help with tasks.",
             "messages": [
               {
                 "role": "user",
@@ -34,7 +35,7 @@
           "modelId": "meta.llama3-3-70b-instruct-v1:0",
           "contentType": "application/json",
           "accept": "application/json",
-          "body": "{\"prompt\":\"this is where you place your input text\",\"max_gen_len\":512,\"temperature\":0.5,\"top_p\":0.9}"
+          "body": "{\"prompt\":\"this is where you place your input text\",\"max_gen_len\":2048,\"temperature\":0.6,\"top_p\":0.9}"
         }
       }
     },
@@ -105,7 +106,7 @@
         "componentId": "initialPromptButton",
         "modelInstructions": [
           {
-            "model": "model1",
+            "model": "model2",
             "instruction": "instruction1"
           }
         ]
