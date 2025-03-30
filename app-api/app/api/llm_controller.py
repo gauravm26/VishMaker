@@ -93,27 +93,11 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
             llm_logger.error(f"[{request_id}] Component '{request.componentId}' not found in configuration")
             raise HTTPException(status_code=404, detail=f"Component '{request.componentId}' not found in configuration")
         
-        # Get the first model-instruction mapping
-        if not component_mapping.get('modelInstructions') or len(component_mapping['modelInstructions']) == 0:
+        # Get the model instructions
+        model_instructions = component_mapping.get('modelInstructions', [])
+        if not model_instructions or len(model_instructions) == 0:
             llm_logger.error(f"[{request_id}] No model instructions found for component '{request.componentId}'")
             raise HTTPException(status_code=500, detail=f"No model instructions found for component '{request.componentId}'")
-        
-        model_instruction = component_mapping['modelInstructions'][0]
-        model_key = model_instruction.get('model')
-        instruction_key = model_instruction.get('instruction')
-        
-        llm_logger.info(f"[{request_id}] Using model: {model_key} with instruction: {instruction_key}")
-        
-        # Get instruction
-        instruction = None
-        for instr_key, instr_data in config['llm'].get('instructions', {}).items():
-            if instr_key == instruction_key:
-                instruction = instr_data
-                break
-        
-        if not instruction:
-            llm_logger.error(f"[{request_id}] Instruction '{instruction_key}' not found in configuration")
-            raise HTTPException(status_code=500, detail=f"Instruction '{instruction_key}' not found in configuration")
         
         # Initialize Bedrock service
         llm_logger.info(f"[{request_id}] Initializing Bedrock service")
@@ -137,74 +121,101 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
             llm_logger.error(f"[{request_id}] AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
             raise HTTPException(status_code=500, detail="AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
         
-        try:
-            # Prepare the request payload
-            llm_logger.info(f"[{request_id}] Preparing request payload for model {model_key}")
-            config_body, model_id = bedrock_service.prepare_request_payload(model_key, instruction, request.text)
+        # Process through all models in sequence
+        current_text = request.text
+        final_model_id = ""
+        final_instruction_id = ""
+        
+        for idx, model_instruction in enumerate(model_instructions):
+            model_key = model_instruction.get('model')
+            instruction_key = model_instruction.get('instruction')
             
-            # Log the payload - guaranteed to happen
-            payload_str = json.dumps(config_body, indent=2)
-            llm_logger.info(f"[{request_id}] REQUEST PAYLOAD:\n{payload_str}")
+            llm_logger.info(f"[{request_id}] Model chain step {idx+1}: Using model: {model_key} with instruction: {instruction_key}")
             
-            # Get the inference profile ARN
-            llm_logger.info(f"[{request_id}] Getting profile ARN for model {model_id}")
-            profile_arn = bedrock_service.get_model_profile_arn(model_id)
+            # Get instruction
+            instruction = None
+            for instr_key, instr_data in config['llm'].get('instructions', {}).items():
+                if instr_key == instruction_key:
+                    instruction = instr_data
+                    break
             
-            # Serialize the body
-            body = json.dumps(config_body)
-            
-            # Call the Bedrock API
-            llm_logger.info(f"[{request_id}] Invoking AWS Bedrock model {model_id} with profile {profile_arn}")
+            if not instruction:
+                llm_logger.error(f"[{request_id}] Instruction '{instruction_key}' not found in configuration")
+                raise HTTPException(status_code=500, detail=f"Instruction '{instruction_key}' not found in configuration")
             
             try:
-                response = bedrock_service.client.invoke_model(
-                    modelId=profile_arn,
-                    body=body
-                )
+                # Prepare the request payload
+                llm_logger.info(f"[{request_id}] Step {idx+1}: Preparing request payload for model {model_key}")
+                config_body, model_id = bedrock_service.prepare_request_payload(model_key, instruction, current_text)
                 
-                # Check if response is valid
-                if not response or not hasattr(response, 'get') or not response.get('body'):
-                    llm_logger.error(f"[{request_id}] Empty response received from AWS Bedrock")
-                    raise ValueError("Empty response received from AWS Bedrock")
-                    
-                # Read the response body
-                response_body_raw = response.get('body').read()
+                # Log the payload
+                payload_str = json.dumps(config_body, indent=2)
+                llm_logger.info(f"[{request_id}] Step {idx+1}: REQUEST PAYLOAD:\n{payload_str}")
                 
-                # Check if the response body is empty
-                if not response_body_raw:
-                    llm_logger.error(f"[{request_id}] Empty response body received from AWS Bedrock")
-                    raise ValueError("Empty response body received from AWS Bedrock")
+                # Get the inference profile ARN
+                llm_logger.info(f"[{request_id}] Step {idx+1}: Getting profile ARN for model {model_id}")
+                profile_arn = bedrock_service.get_model_profile_arn(model_id)
                 
-                # Parse and log the response
-                response_body = None
+                # Serialize the body
+                body = json.dumps(config_body)
+                
+                # Call the Bedrock API
+                llm_logger.info(f"[{request_id}] Step {idx+1}: Invoking AWS Bedrock model {model_id} with profile {profile_arn}")
+                
                 try:
-                    response_body = json.loads(response_body_raw)
-                    response_str = json.dumps(response_body, indent=2)
-                    llm_logger.info(f"[{request_id}] RESPONSE PAYLOAD:\n{response_str}")
-                except json.JSONDecodeError as e:
-                    llm_logger.error(f"[{request_id}] Failed to parse response as JSON: {str(e)}")
-                    llm_logger.error(f"[{request_id}] Raw response: {response_body_raw[:1000]}")
-                    raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
-                
-                # Process the response content - pass the already parsed response_body
-                content, _ = bedrock_service.process_model_response(model_id, None, response_body)
-                
-                llm_logger.info(f"[{request_id}] Successfully processed response. Content length: {len(content)}")
-                
-                # Return the response
-                return LlmProcessResponse(
-                    result=content,
-                    modelId=model_id,
-                    instructionId=instruction_key
-                )
-                
-            except Exception as aws_e:
-                llm_logger.error(f"[{request_id}] AWS API error: {str(aws_e)}")
-                raise ValueError(f"AWS Bedrock API error: {str(aws_e)}")
-                
-        except ValueError as ve:
-            llm_logger.error(f"[{request_id}] Error invoking model: {str(ve)}")
-            raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
+                    response = bedrock_service.client.invoke_model(
+                        modelId=profile_arn,
+                        body=body
+                    )
+                    
+                    # Check if response is valid
+                    if not response or not hasattr(response, 'get') or not response.get('body'):
+                        llm_logger.error(f"[{request_id}] Step {idx+1}: Empty response received from AWS Bedrock")
+                        raise ValueError("Empty response received from AWS Bedrock")
+                        
+                    # Read the response body
+                    response_body_raw = response.get('body').read()
+                    
+                    # Check if the response body is empty
+                    if not response_body_raw:
+                        llm_logger.error(f"[{request_id}] Step {idx+1}: Empty response body received from AWS Bedrock")
+                        raise ValueError("Empty response body received from AWS Bedrock")
+                    
+                    # Parse and log the response
+                    response_body = None
+                    try:
+                        response_body = json.loads(response_body_raw)
+                        response_str = json.dumps(response_body, indent=2)
+                        llm_logger.info(f"[{request_id}] Step {idx+1}: RESPONSE PAYLOAD:\n{response_str}")
+                    except json.JSONDecodeError as e:
+                        llm_logger.error(f"[{request_id}] Step {idx+1}: Failed to parse response as JSON: {str(e)}")
+                        llm_logger.error(f"[{request_id}] Step {idx+1}: Raw response: {response_body_raw[:1000]}")
+                        raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
+                    
+                    # Process the response content
+                    content, _ = bedrock_service.process_model_response(model_id, None, response_body)
+                    
+                    llm_logger.info(f"[{request_id}] Step {idx+1}: Successfully processed response. Content length: {len(content)}")
+                    
+                    # Update text for next model in chain or final result
+                    current_text = content
+                    final_model_id = model_id
+                    final_instruction_id = instruction_key
+                    
+                except Exception as aws_e:
+                    llm_logger.error(f"[{request_id}] Step {idx+1}: AWS API error: {str(aws_e)}")
+                    raise ValueError(f"AWS Bedrock API error: {str(aws_e)}")
+                    
+            except ValueError as ve:
+                llm_logger.error(f"[{request_id}] Step {idx+1}: Error invoking model: {str(ve)}")
+                raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
+        
+        # Return the final response
+        return LlmProcessResponse(
+            result=current_text,
+            modelId=final_model_id,
+            instructionId=final_instruction_id
+        )
         
     except HTTPException as http_ex:
         # Re-raise HTTP exceptions

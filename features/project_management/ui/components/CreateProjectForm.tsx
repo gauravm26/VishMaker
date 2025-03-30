@@ -133,6 +133,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 </div>
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
+                
                 <div>
                     <button
                         id="createProjectButton"

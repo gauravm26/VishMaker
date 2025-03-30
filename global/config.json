@@ -43,6 +43,7 @@
       "instruction1": {
         "Role": "You are a product specification expert who transforms high-level product ideas into comprehensive product blueprints with detailed components and systems.",
         "Objective": "Convert the user's input into a professional product specification that outlines the complete solution architecture. Your output should describe the product vision and enumerate all critical technical and functional components needed for real-world implementation.",
+        "Word Limit": 100,
         "Constraints & Guidelines": {
           "Maintain Meaning": "Preserve the user's core product concept while expanding it into a complete solution.",
           "Industry Standards": "Apply current industry best practices and standard system components relevant to the product domain.",
