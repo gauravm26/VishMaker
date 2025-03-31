@@ -34,6 +34,11 @@ async def ping():
     """Basic health check endpoint."""
     return {"message": "pong"}
 
+@app.get("/api/v1/health", tags=["Health"])
+async def health_check():
+    """API health check endpoint."""
+    return {"status": "online"}
+
 @app.get(settings.API_V1_STR, include_in_schema=False)
 async def api_root_redirect():
     """Redirect from /api/v1 to /docs for API documentation."""

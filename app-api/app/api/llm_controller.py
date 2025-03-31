@@ -11,48 +11,7 @@ from pydantic import BaseModel
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 
-from infrastructure.llms.llm_models import BedrockService, load_config, get_model_id_from_key
-
-# Ensure logs directory exists
-logs_dir = project_root / 'logs'
-if not logs_dir.exists():
-    print(f"Creating logs directory: {logs_dir}")
-    logs_dir.mkdir(parents=True, exist_ok=True)
-
-# Configure logging for LLM interactions - payload and response only
-log_path = logs_dir / 'llm_interactions.log'
-print(f"Logging LLM interactions to: {log_path}")
-
-llm_logger = logging.getLogger('llm_interactions')
-llm_logger.setLevel(logging.INFO)
-
-# Clear existing handlers
-for handler in llm_logger.handlers[:]:
-    llm_logger.removeHandler(handler)
-
-# Add file handler with simple formatter and immediate flush
-file_handler = logging.FileHandler(log_path, mode='a')
-file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-file_handler.setLevel(logging.INFO)
-llm_logger.addHandler(file_handler)
-
-# Also log to console for debugging
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-console_handler.setLevel(logging.INFO)
-llm_logger.addHandler(console_handler)
-
-# Test log entry to verify logging is working
-try:
-    llm_logger.info("LLM logging initialized")
-    with open(log_path, "a") as f:
-        f.write("Direct file write test: LLM logging initialized\n")
-    print(f"Test logging to {log_path} completed")
-except Exception as e:
-    print(f"ERROR: Could not write to log file: {str(e)}")
-
-# Force logger to not use parent handlers and to propagate properly
-llm_logger.propagate = False
+from infrastructure.llms.llm_models import BedrockService, load_config, get_model_id_from_key, llm_logger
 
 router = APIRouter()
 
@@ -109,6 +68,8 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
         # Initialize Bedrock service
         llm_logger.info(f"[{request_id}] Initializing Bedrock service")
         bedrock_service = BedrockService()
+        bedrock_service.current_request_id = request_id
+        
         if not bedrock_service.client:
             llm_logger.error(f"[{request_id}] Failed to initialize Bedrock service - check AWS credentials")
             raise HTTPException(status_code=500, detail="Failed to initialize Bedrock service - check AWS credentials in environment variables")
@@ -204,8 +165,13 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                         raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
                     
                     # Process the response content
-                    content, _ = bedrock_service.process_model_response(model_id, None, component_mapping, response_body)
+                    content, metadata = bedrock_service.process_model_response(model_id, None, component_mapping, response_body)
                     progress_updates.append(f"Processing response content from {model_id}")
+                    
+                    # Check if refinement has already been performed by process_model_response
+                    refinement_already_performed = metadata and isinstance(metadata, dict) and metadata.get('refinement_performed', False)
+                    if refinement_already_performed:
+                        llm_logger.info(f"[{request_id}] Refinement already performed in process_model_response, skipping controller refinement")
                     
                     # Verify that we extracted content successfully
                     if not content or not content.strip():
@@ -246,7 +212,7 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
         
         # Check if we have an output model
-        if component_mapping and 'outputModel' in component_mapping:
+        if component_mapping and 'outputModel' in component_mapping and not refinement_already_performed:
             output_model = component_mapping['outputModel']
             output_model_key = output_model.get('model')
             output_instruction_key = output_model.get('instruction')
@@ -282,9 +248,16 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                             # Process with output model
                             config_body, _ = bedrock_service.prepare_request_payload(output_model_key, output_instruction_with_format, current_text)
                             
+                            # Log the request payload
+                            config_str = json.dumps(config_body, indent=2)
+                            llm_logger.info(f"[{request_id}] Output refinement: REQUEST PAYLOAD:\n{config_str}")
+                            
                             # Serialize and call Bedrock API
                             profile_arn = bedrock_service.get_model_profile_arn(output_model_id)
                             body = json.dumps(config_body)
+                            
+                            # Tell the BedrockService about the request_id for proper logging
+                            bedrock_service.current_request_id = request_id
                             
                             response = bedrock_service.client.invoke_model(
                                 modelId=profile_arn,
@@ -295,6 +268,10 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                                 response_body_raw = response.get('body').read()
                                 if response_body_raw:
                                     output_response_body = json.loads(response_body_raw)
+                                    
+                                    # Log the response payload
+                                    response_str = json.dumps(output_response_body, indent=2)
+                                    llm_logger.info(f"[{request_id}] Output refinement: RESPONSE PAYLOAD:\n{response_str}")
                                     
                                     # Process the output model response
                                     refined_content, _ = bedrock_service.process_model_response(output_model_id, None, None, output_response_body)
@@ -309,6 +286,9 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                     except Exception as e:
                         llm_logger.error(f"[{request_id}] Output refinement error: {str(e)}")
                         # Continue with original result if refinement fails
+        else:
+            if refinement_already_performed:
+                llm_logger.info(f"[{request_id}] Skipping controller output model refinement since it was already performed")
         
         # Return the final response
         return LlmProcessResponse(

@@ -56,19 +56,19 @@ fi
 FRONTEND_URL="http://localhost:$FRONTEND_PORT"
 REACT_APP_BACKEND_URL="http://localhost:$BACKEND_PORT"
 
-# Check for existing processes
+# Kill processes on frontend port if running
 FRONTEND_PROCS=$(lsof -ti :$FRONTEND_PORT 2>/dev/null)
-BACKEND_PROCS=$(lsof -ti :$BACKEND_PORT 2>/dev/null)
-
-# Kill process on frontend port if running
 if [ -n "$FRONTEND_PROCS" ]; then
-    kill -9 $FRONTEND_PROCS > /dev/null 2>&1
+    echo "Killing processes on port $FRONTEND_PORT"
+    lsof -ti :$FRONTEND_PORT | xargs -r kill -9
     EXISTING="Frontend port $FRONTEND_PORT"
 fi
 
-# Kill process on backend port if running
+# Kill processes on backend port if running
+BACKEND_PROCS=$(lsof -ti :$BACKEND_PORT 2>/dev/null)
 if [ -n "$BACKEND_PROCS" ]; then
-    kill -9 $BACKEND_PROCS > /dev/null 2>&1
+    echo "Killing processes on port $BACKEND_PORT"
+    lsof -ti :$BACKEND_PORT | xargs -r kill -9
     if [ -n "$EXISTING" ]; then
         EXISTING="$EXISTING, Backend port $BACKEND_PORT"
     else
@@ -172,7 +172,8 @@ cd /Users/gauravmishra/Documents/Idea/VishGoogle
 echo "Starting backend server on port $BACKEND_PORT..."
 export PYTHONPATH=$PYTHONPATH:/Users/gauravmishra/Documents/Idea/VishGoogle
 cd app-api
-uvicorn app.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
+# Add PYTHONPATH to uvicorn command to ensure all modules can be found
+PYTHONPATH=/Users/gauravmishra/Documents/Idea/VishGoogle uvicorn app.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 cd ..
 
@@ -196,7 +197,11 @@ echo -e "Backend is running at: ${BOLD}$REACT_APP_BACKEND_URL${NC}"
 echo -e "\n${YELLOW}NOTE: Check logs/frontend.log and logs/backend.log for detailed output${NC}"
 
 # Create a trap to catch Ctrl+C and clean up
-trap 'echo "Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; echo "Servers stopped."; exit' INT
+trap 'echo "Stopping servers..."; 
+      # Kill processes on both ports
+      lsof -ti :$BACKEND_PORT | xargs -r kill -9
+      lsof -ti :$FRONTEND_PORT | xargs -r kill -9
+      echo "Servers stopped."; exit' INT
 
 # Wait for processes
 wait 
