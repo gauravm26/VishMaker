@@ -8,29 +8,20 @@ interface GenerationResponse { message: string; project_id: number; }
 interface ProjectListProps {
     onProjectSelect: (projectId: number) => void;
     refreshTrigger: number;
-    onStartGeneration: (projectId: number) => void; // <-- New prop
-    onGenerationComplete: (projectId: number, success: boolean) => void; // <-- Modified prop
-    generatingProjectId: number | null; // <-- New prop
     selectedProjectId: number | null;
-    triggerRefresh: () => void; // <-- Add this to trigger refresh after deletion
+    triggerRefresh: () => void;
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({
     onProjectSelect,
     refreshTrigger,
-    onStartGeneration, // <-- Destructure
-    onGenerationComplete, // <-- Destructure
-    generatingProjectId, // <-- Destructure
-    selectedProjectId, // <-- Destructure
-    triggerRefresh // <-- Destructure this new prop
+    selectedProjectId,
+    triggerRefresh
 }) => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [listError, setListError] = useState<string | null>(null);
     const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
-
-    // --- Removed local generatingStatus and generationError state ---
-    // We now rely on the generatingProjectId prop from the parent
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -48,32 +39,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
         };
         fetchProjects();
     }, [refreshTrigger]);
-
-    const handleGenerateClick = async (projectId: number, event: React.MouseEvent) => {
-        event.stopPropagation();
-        // Prevent multiple clicks if already generating this one
-        if (generatingProjectId === projectId) return;
-
-        // First ensure project is selected before starting generation
-        onProjectSelect(projectId);
-        
-        onStartGeneration(projectId); // Notify parent generation is starting
-
-        let success = false; // Track success
-        try {
-            const result = await apiClient<GenerationResponse>(`/requirements/generate/${projectId}`, { method: 'POST' });
-            console.log('Generation API call successful:', result);
-            success = true; // Mark as success
-            // Optionally show temporary success state locally if needed, but parent handles refresh
-        } catch (err: any) {
-            console.error('Generation failed:', err);
-            // Optionally display error message locally if needed
-            success = false; // Mark as failure
-        } finally {
-            // Always notify parent when done, passing success status
-            onGenerationComplete(projectId, success);
-        }
-    };
 
     const handleDeleteClick = async (projectId: number, event: React.MouseEvent) => {
         event.stopPropagation(); // Prevent project selection
@@ -112,41 +77,36 @@ const ProjectList: React.FC<ProjectListProps> = ({
         return <div className="text-center p-4">Loading projects...</div>;
     }
 
-
     if (listError) {
         return <div className="text-center p-4 text-red-600">Error loading projects: {listError}</div>;
     }
 
     return (
-        <div className="p-1 border rounded shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">  {/* Reduced padding slightly */}
-        <h2 className="text-xl font-semibold mb-3 px-2 dark:text-gray-100">Projects</h2> {/* Added padding to header */}
+        <div className="p-1 border rounded shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold mb-3 px-2 dark:text-gray-100">Projects</h2>
             {projects.length === 0 ? (
                 <p className="px-2">No projects found.</p>
             ) : (
-                <ul className="space-y-1"> {/* Reduced spacing slightly */}
+                <ul className="space-y-1">
                     {projects.map((project) => {
-                        // Determine button state based on the prop
-                        const isGenerating = generatingProjectId === project.id;
                         const isDeleting = deletingProjectId === project.id;
 
                         return (
                             <li
                                 key={project.id}
-                                className={`p-2 border-b last:border-b-0 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex justify-between items-center border-gray-200 dark:border-gray-700 ${selectedProjectId === project.id ? 'bg-blue-100 dark:bg-blue-900 dark:bg-opacity-40' : 'bg-white dark:bg-gray-800'}`} // Highlight selected
+                                className={`p-2 border-b last:border-b-0 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex justify-between items-center border-gray-200 dark:border-gray-700 ${selectedProjectId === project.id ? 'bg-blue-100 dark:bg-blue-900 dark:bg-opacity-40' : 'bg-white dark:bg-gray-800'}`}
                                 onClick={() => onProjectSelect(project.id)}
                             >
                                 <div className="flex-1 mr-2">
-                                <span className="block font-medium text-sm dark:text-gray-100">{project.name}</span> {/* Smaller text */}
-                                <span className="text-xs text-gray-500 dark:text-gray-400">  {/* Smaller text */}
+                                    <span className="block font-medium text-sm dark:text-gray-100">{project.name}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
                                         Created: {new Date(project.created_at).toLocaleDateString()}
                                     </span>
-                                    {/* Display generation error? (Need error prop from parent if desired) */}
                                 </div>
-                                <div className="flex space-x-2">
-                                    {/* Delete Button */}
+                                <div>
                                     <button
                                         onClick={(e) => handleDeleteClick(project.id, e)}
-                                        disabled={isDeleting || isGenerating}
+                                        disabled={isDeleting}
                                         className={`p-1 border border-gray-200 text-xs rounded-full w-7 h-7 flex items-center justify-center transition-all focus:outline-none ${
                                             isDeleting
                                                 ? 'bg-gray-200 text-gray-500 cursor-wait'
@@ -156,23 +116,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
                                     >
                                         {isDeleting ? '...' : '🗑️'}
                                     </button>
-                                    
-                                    {/* Generate Button */}
-                                    <button
-                                        onClick={(e) => handleGenerateClick(project.id, e)}
-                                        disabled={isGenerating || isDeleting}
-                                        className={`py-1 px-3 border text-xs font-medium rounded-md transition-all focus:outline-none ${
-                                            isGenerating
-                                                ? 'bg-gray-200 text-gray-500 cursor-wait border-gray-300'
-                                                : 'bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-300 border-gray-200'
-                                        }`}
-                                    >
-                                        {isGenerating ? 'Generating...' : 'Generate Reqs'}
-                                    </button>
                                 </div>
                             </li>
                         );
-                     })}
+                    })}
                 </ul>
             )}
         </div>

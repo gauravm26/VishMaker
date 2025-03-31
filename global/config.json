@@ -2,40 +2,50 @@
   "llm": {
     "models": {
       "model1": {
-        "model": "anthropic.claude-3-7-sonnet-20250219-v1:0",
-        "APIRequest": {
-          "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
-          "contentType": "application/json",
-          "accept": "application/json",
-          "body": {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2048,
-            "top_k": 250,
-            "stop_sequences": [],
-            "temperature": 0.8,
-            "top_p": 0.999,
-            "system": "You are a helpful assistant that can answer questions and help with tasks.",
-            "messages": [
-              {
-                "role": "user",
-                "content": [
-                  {
-                    "type": "text",
-                    "text": "hello world"
-                  }
-                ]
-              }
-            ]
-          }
+        "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 2048,
+          "top_k": 250,
+          "stop_sequences": [],
+          "temperature": 0.8,
+          "top_p": 0.999,
+          "system": "You are a helpful assistant that can answer questions and help with tasks.",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello world"
+                }
+              ]
+            }
+          ]
         }
       },
       "model2": {
-        "model": "meta.llama3-3-70b-instruct-v1:0",
-        "APIRequest": {
-          "modelId": "meta.llama3-3-70b-instruct-v1:0",
-          "contentType": "application/json",
-          "accept": "application/json",
-          "body": "{\"prompt\":\"this is where you place your input text\",\"max_gen_len\":2048,\"temperature\":0.6,\"top_p\":0.9}"
+        "modelId": "meta.llama3-3-70b-instruct-v1:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "prompt": "this is where you place your input text",
+          "max_gen_len": 2048,
+          "temperature": 0.6,
+          "top_p": 0.9
+        }
+      },
+      "model3": {
+        "modelId": "meta.llama3-1-8b-instruct-v1:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "prompt": "this is where you place your input text",
+          "max_gen_len": 2048,
+          "temperature": 0.6,
+          "top_p": 0.9
         }
       }
     },
@@ -100,6 +110,20 @@
           "Checkout | User proceeds to a streamlined checkout process by entering payment details, shipping information, and confirming the order.",
           "Confirmation | User receives an immediate email confirmation of the successful purchase, along with an order summary and tracking information if applicable."
         ]
+      },
+      "instruction4": {
+        "Role": "You are an advanced content refinement agent. Your task is to process raw output from an LLM, removing any internal chain-of-thought or meta-commentary and refining it into a final, polished output.",
+        "Objective": "Refine the provided raw output by eliminating internal reasoning and formatting the content according to the value of the 'output_format' variable.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Use the raw output provided by the previous LLM, which may contain internal chain-of-thought comments.",
+          "RemoveChainOfThought": "Strip out any internal reasoning, chain-of-thought, or meta-commentary. Only include the final, refined content in your output.",
+          "Output": "If the variable 'output_format' is set to 'plain', produce a clear and polished natural-language text. If 'output_format' is set to 'columns', format the output into two columns, with each line following the format 'Column1 text | Column2 text'.",
+          "Formatting": "Ensure the final result is coherent, error-free, and optimized for readability. Do not use bullet points, numbers, or any extra symbols beyond those required by the specified format."
+        },
+        "Example": [
+          "Plain: 'The system processes the input and returns a refined output that meets all requirements.'",
+          "Columns: 'Processing Input | Returns refined output meeting requirements.'"
+        ]
       }
     },
     "componentModelMapping": {
@@ -107,10 +131,15 @@
         "componentId": "initialPromptButton",
         "modelInstructions": [
           {
-            "model": "model2",
+            "model": "model1",
             "instruction": "instruction1"
           }
-        ]
+        ],
+        "outputModel": {
+          "model": "model3",
+          "instruction": "instruction4",
+          "outputFormat": "plain"
+        }
       },
       "component2": {
         "componentId": "createProjectButton",
@@ -123,7 +152,12 @@
             "model": "model2",
             "instruction": "instruction3"
           }
-        ]
+        ],
+        "outputModel": {
+          "model": "model3",
+          "instruction": "instruction4",
+          "outputFormat": "columns"
+        }
       }
     }
   }

@@ -10,11 +10,12 @@ interface CreateProjectFormProps {
 
 const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated }) => {
     const [name, setName] = useState('');
-    const [prompt, setPrompt] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [prompt, setPrompt] = useState<string>('');
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [isLlmProcessing, setIsLlmProcessing] = useState(false);
+    const [isLlmProcessing, setIsLlmProcessing] = useState<boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [progressUpdate, setProgressUpdate] = useState<string | null>(null);
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -31,20 +32,30 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
         setIsSubmitting(true);
         setError(null);
 
-        const payload: ProjectCreatePayload = {
-            name: name.trim(),
-            initial_prompt: prompt.trim(),
-        };
-
         try {
-            await apiClient<Project>('/projects', {
+            // First create the project
+            const project = await apiClient<Project>('/projects', {
                 method: 'POST',
-                body: payload,
+                body: {
+                    name: name.trim(),
+                    initial_prompt: prompt.trim(),
+                } as ProjectCreatePayload,
             });
-            // Reset form and notify parent
-            setName('');
-            setPrompt('');
-            onProjectCreated();
+
+            // Then generate the user flow using the createProjectButton component
+            try {
+                await LlmService.processWithLlm('createProjectButton', prompt);
+                // Reset form and notify parent
+                setName('');
+                setPrompt('');
+                onProjectCreated();
+            } catch (llmErr: any) {
+                console.error('Error generating user flow:', llmErr);
+                // Still consider the operation successful since project was created
+                setName('');
+                setPrompt('');
+                onProjectCreated();
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to create project.');
             console.error(err);
@@ -55,17 +66,28 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
 
     const handleAiClick = async (componentId: string, text: string) => {
         if (!text.trim()) {
-            setError('Please enter some text in the Initial Prompt field to generate content.');
+            setError('Please enter some text to process.');
             return;
         }
 
         setIsLlmProcessing(true);
         setError(null);
         setSuccessMessage(null);
+        setProgressUpdate("Starting request...");
         
         try {
+            console.log("Sending request to LLM service...");
             // Process the text with the LLM service using the provided component ID
-            const response = await LlmService.processWithLlm(componentId, text);
+            const response = await LlmService.processWithLlm(
+                componentId, 
+                text,
+                (update: string) => {
+                    console.log("Progress update received:", update);
+                    setProgressUpdate(update);
+                }
+            );
+            
+            console.log("Response received:", response);
             
             // Update the prompt with the generated text
             setPrompt(response.result);
@@ -73,13 +95,20 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             // Show success message with model ID and instruction ID from the response
             setSuccessMessage(`Refined with ${response.modelId} using ${response.instructionId}`);
             
+            // Display the final progress update
+            if (response.progressUpdates && response.progressUpdates.length > 0) {
+                setProgressUpdate(response.progressUpdates[response.progressUpdates.length - 1]);
+            }
+            
             // Clear success message after 4 seconds
             setTimeout(() => {
                 setSuccessMessage(null);
+                setProgressUpdate(null);
             }, 4000);
         } catch (err: any) {
             setError('Failed to process text with AI. Please try again.');
             console.error('LLM processing error:', err);
+            setProgressUpdate(null);
         } finally {
             setIsLlmProcessing(false);
         }
@@ -123,7 +152,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                             onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
                             disabled={isSubmitting || isLlmProcessing}
                             className="absolute top-2 right-2 p-0.5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors border border-blue-500"
-                            title="Generate with AI"
+                            title="Refine with AI"
                         >
                             <span className={`text-xs font-bold ${isLlmProcessing ? 'animate-pulse' : ''} ${prompt ? 'ai-icon-text text-blue-500' : 'text-gray-400'}`}>
                                 AI
@@ -133,6 +162,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 </div>
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
+                {progressUpdate && <p className="text-sm text-blue-600">{progressUpdate}</p>}
                 
                 <div>
                     <button
@@ -145,7 +175,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                                 : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
                         }`}
                     >
-                        {isSubmitting ? 'Creating...' : isLlmProcessing ? 'Processing...' : 'Create Project'}
+                        {isSubmitting ? 'Building...' : isLlmProcessing ? 'Processing...' : "Let's build it"}
                     </button>
                 </div>
             </form>

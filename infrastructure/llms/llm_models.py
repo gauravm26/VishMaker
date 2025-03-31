@@ -84,18 +84,17 @@ class BedrockService:
                 raise ValueError(f"Model key '{model_key}' not found in configuration")
                 
             model_config = self.config['llm']['models'][model_key]
-            model_id = model_config.get('model', model_key)
             
-            # Get API request template
-            if 'APIRequest' not in model_config or 'body' not in model_config['APIRequest']:
-                raise ValueError(f"Invalid API request configuration for model '{model_key}'")
+            if 'modelId' not in model_config or 'body' not in model_config:
+                raise ValueError(f"Invalid model configuration for model '{model_key}'. Required fields: modelId, body")
                 
+            model_id = model_config['modelId']
+            
             # Get a deep copy of the template
-            template_body = model_config['APIRequest']['body']
-            if isinstance(template_body, str):
-                config_body = json.loads(template_body)
+            if isinstance(model_config['body'], str):
+                config_body = json.loads(model_config['body'])
             else:
-                config_body = json.loads(json.dumps(template_body))
+                config_body = json.loads(json.dumps(model_config['body']))
             
             # Format the instruction
             formatted_instruction = self._format_instruction(instruction)
@@ -111,6 +110,9 @@ class BedrockService:
                     config_body['messages'] = [
                         {"role": "user", "content": [{"type": "text", "text": user_text}]}
                     ]
+            elif 'meta.llama' in model_id.lower():
+                # Meta Llama models use a specific prompt format
+                config_body['prompt'] = f"<s>[INST] {formatted_instruction}\n\n{user_text} [/INST]"
             elif 'messages' in config_body:
                 # Other models with messages array
                 # First try to update an existing system message
@@ -192,13 +194,14 @@ class BedrockService:
             # If instruction is not a dict, return as string
             return str(instruction)
     
-    def process_model_response(self, model_id, response, response_body=None):
+    def process_model_response(self, model_id, response, component_config=None, response_body=None):
         """
         Process the response from the model based on model configuration
         
         Args:
             model_id (str): The model ID
             response: The response from the Bedrock API
+            component_config: Optional component configuration containing outputModel details
             response_body: Optional pre-parsed response body (if already parsed)
             
         Returns:
@@ -217,50 +220,140 @@ class BedrockService:
                 
                 # Check if the response body is empty
                 if not response_body_raw:
+                    print("DEBUG: Response body is empty")
                     raise ValueError("Empty response body received from AWS Bedrock")
                     
                 # Try to parse the response body as JSON
                 try:
                     response_body = json.loads(response_body_raw)
+                    # Log the response type and keys for debugging
+                    print(f"DEBUG: Response body type: {type(response_body)}, keys: {response_body.keys() if isinstance(response_body, dict) else 'Not a dict'}")
                 except json.JSONDecodeError as e:
                     # Log the raw response for debugging
                     print(f"Failed to parse response as JSON: {str(e)}")
                     print(f"Raw response: {response_body_raw[:1000]}")  # Print first 1000 chars
                     raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
             else:
+                print("DEBUG: Response is None or does not have 'body' attribute")
                 raise ValueError("Empty response received from AWS Bedrock")
             
             # Extract provider from model ID
             provider_name = model_id.split('.')[0] if '.' in model_id else ""
+            print(f"DEBUG: Processing response from provider: {provider_name}")
             
             # Extract content based on response structure
             content = ""
             
+            # Log response structure for debugging
+            print(f"DEBUG: Response structure: {json.dumps(response_body)[:500]} ...")
+            
             # Try common response formats based on observed structure
-            if "content" in response_body and isinstance(response_body["content"], list):
+            if "content" in response_body and isinstance(response_body["content"], list) and len(response_body["content"]) > 0:
                 # Anthropic Claude-3 format
-                content = response_body.get("content", [{"text": ""}])[0].get("text", "")
+                print("DEBUG: Using Claude-3 format extraction")
+                first_content = response_body.get("content", [])[0]
+                if isinstance(first_content, dict) and "text" in first_content:
+                    content = first_content.get("text", "")
+                    print(f"DEBUG: Extracted content length: {len(content)}")
+                else:
+                    print(f"DEBUG: First content item structure: {type(first_content)}")
             elif "generation" in response_body:
                 # Meta Llama format
                 content = response_body.get("generation", "")
+            elif "text" in response_body:
+                # Some Llama models might return this format
+                content = response_body.get("text", "")
             elif "outputs" in response_body and isinstance(response_body["outputs"], list):
                 # Mistral format
                 content = response_body.get("outputs", [{"text": ""}])[0].get("text", "")
             elif "completion" in response_body:
                 # OpenAI/older Claude format
                 content = response_body.get("completion", "")
+            elif isinstance(response_body, str):
+                # Sometimes the response is directly a string
+                content = response_body
             else:
-                # Default to the full response as a string
-                content = str(response_body)
+                # If we can't find a known pattern, try to extract content using common keys
+                possible_keys = ["response", "answer", "result", "output", "message"]
+                for key in possible_keys:
+                    if key in response_body:
+                        if isinstance(response_body[key], str):
+                            content = response_body[key]
+                            break
+                        elif isinstance(response_body[key], dict) and "text" in response_body[key]:
+                            content = response_body[key]["text"]
+                            break
+                        elif isinstance(response_body[key], list) and len(response_body[key]) > 0:
+                            if isinstance(response_body[key][0], dict) and "text" in response_body[key][0]:
+                                content = response_body[key][0]["text"]
+                                break
+                            elif isinstance(response_body[key][0], str):
+                                content = response_body[key][0]
+                                break
+                
+                # If we still don't have content, fallback to string representation
+                if not content:
+                    content = str(response_body)
             
             # Standardize the output
             sanitized_content = self.standardize_output(content, provider_name)
+            print(f"DEBUG: Sanitized content length: {len(sanitized_content)}")
+
+            # If content is empty, try the raw response body as a last resort
+            if not sanitized_content.strip():
+                print("DEBUG: Content is empty after extraction and sanitization, using raw response")
+                sanitized_content = str(response_body)
+
+            # If we have an output model configuration, use it to refine the output
+            if component_config and 'outputModel' in component_config:
+                refined_content = self._refine_with_output_model(sanitized_content, component_config['outputModel'])
+                return refined_content, response_body
             
             return sanitized_content, response_body
         
         except Exception as e:
+            print(f"DEBUG: Error in process_model_response: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise ValueError(f"Error processing model response: {str(e)}")
-    
+
+    def _refine_with_output_model(self, content, output_model_config):
+        """
+        Refine the content using the specified output model
+        
+        Args:
+            content (str): The content to refine
+            output_model_config (dict): The output model configuration containing model, instruction, and outputFormat
+            
+        Returns:
+            str: The refined content
+        """
+        try:
+            # Get the model and instruction from the config
+            model_key = output_model_config['model']
+            instruction = self.config['llm']['instructions'][output_model_config['instruction']]
+            output_format = output_model_config.get('outputFormat', 'plain')
+
+            # Add output format to the instruction context
+            instruction_with_format = {
+                **instruction,
+                'output_format': output_format  # This will be used by instruction4 to format the output
+            }
+
+            # Invoke the output model
+            refined_content, _ = self.invoke_model(
+                model_key,
+                instruction_with_format,
+                content  # Pass the original content as user text
+            )
+
+            return refined_content
+
+        except Exception as e:
+            print(f"Warning: Output refinement failed: {str(e)}")
+            # If refinement fails, return the original content
+            return content
+
     def standardize_output(self, content, provider_name):
         """Standardize the output from different LLM providers"""
         if not content:
@@ -300,9 +393,28 @@ class BedrockService:
             raise ValueError("AWS_BEDROCK_INFERENCE_ARN not configured")
             
         # Format the model ID for the ARN
-        formatted_model_id = model_id.replace('.', '-', 1).replace('-', '.', 1)
-        if not formatted_model_id.startswith('us.'):
-            formatted_model_id = 'us.' + model_id
+        # For AWS Bedrock, model IDs in ARNs should be in the format: us.anthropic.claude-3-sonnet-20240229-v1:0
+        if ':' in model_id:
+            base_id, version = model_id.split(':')
+            if '.' in base_id:
+                provider, model_name = base_id.split('.', 1)
+                if not model_id.startswith('us.'):
+                    formatted_model_id = f"us.{provider}.{model_name}:{version}"
+                else:
+                    formatted_model_id = model_id
+            else:
+                # If no provider in the ID
+                formatted_model_id = f"us.{model_id}"
+        else:
+            # If no version in the ID
+            if '.' in model_id:
+                provider, model_name = model_id.split('.', 1)
+                if not model_id.startswith('us.'):
+                    formatted_model_id = f"us.{provider}.{model_name}"
+                else:
+                    formatted_model_id = model_id
+            else:
+                formatted_model_id = f"us.{model_id}"
             
         # Return the full inference profile ARN
         return f"{inference_arn}/{formatted_model_id}"
@@ -336,8 +448,19 @@ class BedrockService:
                 body=body
             )
             
-            # Process the response
-            content, response_body = self.process_model_response(model_id, response)
+            # Get the component configuration if this is a known component
+            component_config = None
+            for component in self.config['llm'].get('componentModelMapping', {}).values():
+                # Check both modelInstructions and outputModel for the current model_key
+                is_instruction_model = any(mi.get('model') == model_key for mi in component.get('modelInstructions', []))
+                is_output_model = component.get('outputModel', {}).get('model') == model_key
+                
+                if is_instruction_model or is_output_model:
+                    component_config = component
+                    break
+            
+            # Process the response with component configuration
+            content, response_body = self.process_model_response(model_id, response, component_config)
             
             # Return the content and metadata
             return content, {
@@ -405,30 +528,16 @@ def generate_inference_profiles(model_keys):
     
     return inference_profiles
 
-def get_model_id_from_key(model_key):
-    """Get the actual model ID from a model key in the config"""
-    config = load_config()
-    
-    # Check in new structure (models)
+def get_model_id_from_key(config, model_key):
+    """Get the model ID from a model key in the config"""
     if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
-        return config['llm']['models'][model_key]['model']
-    
-    # Check in old structure (modelIds)
-    if 'llm' in config and 'modelIds' in config['llm'] and model_key in config['llm']['modelIds']:
-        return model_key
-        
+        return config['llm']['models'][model_key]['modelId']
     return None
 
 def get_model_config(config, model_key):
-    """Get the model configuration from the config object"""
-    # Try new structure first
+    """Get the full model configuration for a model key"""
     if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
         return config['llm']['models'][model_key]
-    
-    # Fall back to old structure
-    if 'llm' in config and 'modelIds' in config['llm'] and model_key in config['llm']['modelIds']:
-        return config['llm']['modelIds'][model_key]
-        
     return None
 
 def test_model_with_inference_profile(bedrock_runtime, model_id, profile_arn, config):
@@ -622,7 +731,7 @@ def test_aws_connection():
         # Display models found
         print(f"\nFound {len(model_keys)} models in config.json:")
         for model_key in model_keys:
-            model_id = get_model_id_from_key(model_key)
+            model_id = get_model_id_from_key(config_data, model_key)
             print(f"- {model_key}: {model_id}")
             
         # Generate inference profiles for each model
@@ -639,7 +748,7 @@ def test_aws_connection():
         print(f"\nTesting model connectivity...")
         
         for model_key, profile_arn in inference_profiles.items():
-            model_id = get_model_id_from_key(model_key)
+            model_id = get_model_id_from_key(config_data, model_key)
             try:
                 test_model_with_inference_profile(bedrock_runtime, model_key, profile_arn, config_data)
                 print(f"- {model_key}: {model_id} : Connected Successfully")

@@ -64,16 +64,23 @@ class LlmProcessResponse(BaseModel):
     result: str
     modelId: str
     instructionId: str
+    progressUpdates: list[str] = []
 
 @router.post("/process", response_model=LlmProcessResponse)
 async def process_with_llm(request: LlmProcessRequest = Body(...)):
     """Process text using an LLM based on the component configuration"""
     request_id = datetime.now().strftime("%Y%m%d%H%M%S")
     
+    # Keep track of progress updates
+    progress_updates = []
+    
     try:
         # Log request information
         llm_logger.info(f"[{request_id}] REQUEST RECEIVED for component: {request.componentId}")
         llm_logger.info(f"[{request_id}] USER TEXT: {request.text[:100]}...")
+        
+        # Add initial progress update
+        progress_updates.append("Starting LLM processing...")
         
         # Load config
         config = load_config()
@@ -146,8 +153,10 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
             try:
                 # Prepare the request payload
                 llm_logger.info(f"[{request_id}] Step {idx+1}: Preparing request payload for model {model_key}")
+                progress_updates.append(f"1. Drafting Request: Preparing payload for {model_key}")
                 config_body, model_id = bedrock_service.prepare_request_payload(model_key, instruction, current_text)
-                
+                llm_logger.info(f"[{request_id}] Step {idx+1}: Model ID: {model_id}, Config Body: {config_body}")
+
                 # Log the payload
                 payload_str = json.dumps(config_body, indent=2)
                 llm_logger.info(f"[{request_id}] Step {idx+1}: REQUEST PAYLOAD:\n{payload_str}")
@@ -161,6 +170,7 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 
                 # Call the Bedrock API
                 llm_logger.info(f"[{request_id}] Step {idx+1}: Invoking AWS Bedrock model {model_id} with profile {profile_arn}")
+                progress_updates.append(f"2. Request Sent: Sending to {model_id} with instruction {instruction_key}")
                 
                 try:
                     response = bedrock_service.client.invoke_model(
@@ -187,13 +197,38 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                         response_body = json.loads(response_body_raw)
                         response_str = json.dumps(response_body, indent=2)
                         llm_logger.info(f"[{request_id}] Step {idx+1}: RESPONSE PAYLOAD:\n{response_str}")
+                        progress_updates.append(f"3. Response Received: Got response from {model_id}")
                     except json.JSONDecodeError as e:
                         llm_logger.error(f"[{request_id}] Step {idx+1}: Failed to parse response as JSON: {str(e)}")
                         llm_logger.error(f"[{request_id}] Step {idx+1}: Raw response: {response_body_raw[:1000]}")
                         raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
                     
                     # Process the response content
-                    content, _ = bedrock_service.process_model_response(model_id, None, response_body)
+                    content, _ = bedrock_service.process_model_response(model_id, None, component_mapping, response_body)
+                    progress_updates.append(f"Processing response content from {model_id}")
+                    
+                    # Verify that we extracted content successfully
+                    if not content or not content.strip():
+                        llm_logger.error(f"[{request_id}] Step {idx+1}: Failed to extract content from response")
+                        llm_logger.info(f"[{request_id}] Step {idx+1}: Using raw response as fallback")
+                        
+                        # Use the raw response as a fallback
+                        if isinstance(response_body, dict):
+                            # Try common content fields
+                            for field in ["text", "content", "generation", "completion", "answer", "response"]:
+                                if field in response_body:
+                                    if isinstance(response_body[field], str):
+                                        content = response_body[field]
+                                        break
+                                    elif isinstance(response_body[field], list) and len(response_body[field]) > 0:
+                                        content = str(response_body[field][0])
+                                        break
+                            
+                            # If we still don't have content, use the entire response
+                            if not content or not content.strip():
+                                content = str(response_body)
+                        else:
+                            content = str(response_body)
                     
                     llm_logger.info(f"[{request_id}] Step {idx+1}: Successfully processed response. Content length: {len(content)}")
                     
@@ -210,11 +245,77 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 llm_logger.error(f"[{request_id}] Step {idx+1}: Error invoking model: {str(ve)}")
                 raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
         
+        # Check if we have an output model
+        if component_mapping and 'outputModel' in component_mapping:
+            output_model = component_mapping['outputModel']
+            output_model_key = output_model.get('model')
+            output_instruction_key = output_model.get('instruction')
+            
+            if output_model_key and output_instruction_key:
+                # Get the instruction
+                output_instruction = None
+                for instr_key, instr_data in config['llm'].get('instructions', {}).items():
+                    if instr_key == output_instruction_key:
+                        output_instruction = instr_data
+                        break
+                
+                if output_instruction:
+                    try:
+                        # Prepare output model request
+                        llm_logger.info(f"[{request_id}] Output refinement: Preparing request for model {output_model_key}")
+                        progress_updates.append(f"4. Refining Output: Preparing request for {output_model_key}")
+                        
+                        # Get the model ID
+                        output_model_id = None
+                        if output_model_key in config['llm'].get('models', {}):
+                            output_model_id = config['llm']['models'][output_model_key].get('modelId')
+                        
+                        if not output_model_id:
+                            llm_logger.error(f"[{request_id}] Output model ID not found for {output_model_key}")
+                        else:
+                            # Add output format to instruction
+                            output_instruction_with_format = {
+                                **output_instruction,
+                                'output_format': output_model.get('outputFormat', 'plain')
+                            }
+                            
+                            # Process with output model
+                            config_body, _ = bedrock_service.prepare_request_payload(output_model_key, output_instruction_with_format, current_text)
+                            
+                            # Serialize and call Bedrock API
+                            profile_arn = bedrock_service.get_model_profile_arn(output_model_id)
+                            body = json.dumps(config_body)
+                            
+                            response = bedrock_service.client.invoke_model(
+                                modelId=profile_arn,
+                                body=body
+                            )
+                            
+                            if response and hasattr(response, 'get') and response.get('body'):
+                                response_body_raw = response.get('body').read()
+                                if response_body_raw:
+                                    output_response_body = json.loads(response_body_raw)
+                                    
+                                    # Process the output model response
+                                    refined_content, _ = bedrock_service.process_model_response(output_model_id, None, None, output_response_body)
+                                    
+                                    # Update the final result
+                                    current_text = refined_content
+                                    final_model_id = output_model_id
+                                    final_instruction_id = output_instruction_key
+                                    
+                                    progress_updates.append(f"5. Refinement Complete: Received refined output from {output_model_id}")
+                                    llm_logger.info(f"[{request_id}] Output refinement: Successfully processed")
+                    except Exception as e:
+                        llm_logger.error(f"[{request_id}] Output refinement error: {str(e)}")
+                        # Continue with original result if refinement fails
+        
         # Return the final response
         return LlmProcessResponse(
             result=current_text,
             modelId=final_model_id,
-            instructionId=final_instruction_id
+            instructionId=final_instruction_id,
+            progressUpdates=progress_updates
         )
         
     except HTTPException as http_ex:
