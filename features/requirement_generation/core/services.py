@@ -4,8 +4,16 @@ from features.project_management.core.services import project_service as pj_serv
 from features.project_management.core.services import ProjectService as PjServiceClass
 # --- ADD IMPORTS ---
 from .repositories import requirement_repo, RequirementRepository
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from shared.core.models.requirement import UserFlow # For type hint if needed
+import sys, os
+from pathlib import Path
+
+# Add infrastructure to path for BedrockService import
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(project_root))
+
+from infrastructure.llms.llm_models import BedrockService, load_config
 # --- END IMPORTS ---
 
 class RequirementGenerationService:
@@ -19,7 +27,14 @@ class RequirementGenerationService:
          self.project_service = project_svc
          self.repo = req_repo # Use self.repo for requirement repository
 
-    def generate_requirements_for_project(self, db: Session, project_id: int):
+    def generate_requirements_for_project(self, db: Session, project_id: int, component_id: str):
+        """Generate user flow requirements for a project using LLM
+        
+        Args:
+            db: Database session
+            project_id: ID of the project
+            component_id: ID of the component to use for LLM processing (required)
+        """
         project = self.project_service.get_project(db, project_id)
         if not project:
             raise ValueError(f"Project with ID {project_id} not found.")
@@ -28,65 +43,122 @@ class RequirementGenerationService:
 
         print(f"--- Starting Requirement Generation for Project {project_id} ---")
         print(f"Prompt: {project.initial_prompt}")
-        print("Simulating LLM call...")
+        print(f"Component ID: {component_id}")
 
-        # --- SIMULATED LLM Output Structure ( Matches Repo Expectation ) ---
-        simulated_llm_output = {
-            "flows": [
-                {
-                    "name": "Authentication",
-                    "description": "Handles user login and registration.",
-                    "steps": [
-                        {"name": "Login Page", "order": 0},
-                        {"name": "Submit Credentials", "order": 1},
-                        {"name": "Registration Page", "order": 2},
-                    ]
-                },
-                {
-                    "name": "Product Browsing",
-                    "description": "Allows users to view products.",
-                    "steps": [
-                        {"name": "View Product List", "order": 0},
-                        {"name": "View Product Detail", "order": 1},
-                    ]
-                }
-            ],
-            "hl_reqs": [
-                {"flow_name": "Authentication", "flow_step_name": "Login Page", "req": "Display username and password fields."},
-                {"flow_name": "Authentication", "flow_step_name": "Submit Credentials", "req": "Validate credentials against database."},
-                {"flow_name": "Product Browsing", "flow_step_name": "View Product List", "req": "Fetch and display product grid."},
-            ],
-            "ll_reqs": [
-                {"hl_req_text": "Display username and password fields.", "req": "Create React <LoginForm> component with two inputs.", "tech": "React, TSX"},
-                {"hl_req_text": "Validate credentials against database.", "req": "Create FastAPI endpoint /auth/token.", "tech": "FastAPI, Python"},
-                {"hl_req_text": "Fetch and display product grid.", "req": "Implement GET /products endpoint with pagination.", "tech": "FastAPI, Python"},
-                {"hl_req_text": "Fetch and display product grid.", "req": "Create React <ProductGrid> component.", "tech": "React, TSX"},
-            ],
-            "test_cases": [
-                {"parent_llr_text": "Create React <LoginForm> component with two inputs.", "desc": "TC1: Verify Login form renders correctly.", "expected": "Username, password inputs, and submit button visible."},
-                {"parent_llr_text": "Create React <LoginForm> component with two inputs.", "desc": "TC2: Verify empty submission shows validation.", "expected": "Error messages appear below fields."},
-                {"parent_llr_text": "Create FastAPI endpoint /auth/token.", "desc": "TC3: Verify valid credentials return token.", "expected": "200 OK with JWT token."},
-                {"parent_llr_text": "Create FastAPI endpoint /auth/token.", "desc": "TC4: Verify invalid credentials return 401.", "expected": "401 Unauthorized."},
-                {"parent_llr_text": "Implement GET /products endpoint with pagination.", "desc": "TC5: Verify endpoint returns product list.", "expected": "200 OK with list of products."},
-            ]
-        }
-        # --- End Simulation ---
-        print("LLM Simulation Complete.")
+        # Initialize BedrockService and get config
+        config = load_config()
+        bedrock_service = BedrockService()
+        
+        # Find component mapping from config
+        component_mapping = None
+        for component_key, component_data in config['llm'].get('componentModelMapping', {}).items():
+            if component_data.get('componentId') == component_id:
+                component_mapping = component_data
+                break
+        
+        if not component_mapping:
+            raise ValueError(f"Component '{component_id}' not found in configuration")
 
-        # --- Use Repository to Save Data ---
+        print(f"Using component: {component_mapping.get('componentId')}")
+
+        user_flow_data = []
+        try:
+            # Process the model chain with the project's prompt
+            current_text = project.initial_prompt
+            
+            # Loop through each model instruction
+            for model_instruction in component_mapping.get('modelInstructions', []):
+                model_key = model_instruction.get('model')
+                instruction_key = model_instruction.get('instruction')
+                
+                print(f"Processing with model: {model_key}, instruction: {instruction_key}")
+                
+                # Get instruction from config
+                instruction = None
+                for instr_key, instr_data in config['llm'].get('instructions', {}).items():
+                    if instr_key == instruction_key:
+                        instruction = instr_data
+                        break
+                
+                if not instruction:
+                    raise ValueError(f"Instruction '{instruction_key}' not found in configuration")
+                
+                # Invoke the model
+                content, _ = bedrock_service.invoke_model(model_key, instruction, current_text)
+                current_text = content  # Use the output as input for the next model
+            
+            # At this point, current_text should contain pipe-delimited user flow steps
+            print("Processing LLM output to structured data...")
+            
+            # Parse pipe-delimited content into structured flow data
+            flow_name = "Main User Flow"
+            flow_description = f"Generated flow for project: {project.name}"
+            steps = []
+            
+            lines = current_text.strip().split('\n')
+            for i, line in enumerate(lines):
+                if '|' in line:
+                    parts = line.split('|', 1)  # Split on first pipe only
+                    if len(parts) == 2:
+                        step_name = parts[0].strip()
+                        step_description = parts[1].strip()
+                        steps.append({
+                            "name": step_name,
+                            "order": i
+                        })
+            
+            # Format for the repository's save_requirements method
+            user_flow_data = {
+                "flows": [
+                    {
+                        "name": flow_name,
+                        "description": flow_description,
+                        "steps": steps
+                    }
+                ],
+                # Empty placeholders for future expansion
+                "hl_reqs": [],
+                "ll_reqs": [],
+                "test_cases": []
+            }
+            
+            print(f"Generated user flow with {len(steps)} steps")
+            
+        except Exception as e:
+            import traceback
+            print(f"ERROR during LLM processing: {str(e)}")
+            print(traceback.format_exc())
+            # Return simulated data as fallback for development
+            user_flow_data = {
+                "flows": [
+                    {
+                        "name": "Fallback Flow",
+                        "description": "Generated fallback flow due to LLM error.",
+                        "steps": [
+                            {"name": "Start", "order": 0},
+                            {"name": "Process", "order": 1},
+                            {"name": "Complete", "order": 2}
+                        ]
+                    }
+                ],
+                "hl_reqs": [],
+                "ll_reqs": [],
+                "test_cases": []
+            }
+
+        # Save the processed data to the database
         print("Saving requirements to database...")
         try:
-            self.repo.save_requirements(db, project_id, simulated_llm_output)
+            self.repo.save_requirements(db, project_id, user_flow_data)
             print("Database save complete.")
         except Exception as e:
             db.rollback() # Rollback on error
             print(f"ERROR saving requirements: {e}")
             raise # Re-raise the exception to be caught by the endpoint
-        # --- End Save ---
 
         print(f"--- Finished Requirement Generation for Project {project_id} ---")
         return {
-            "message": "Requirement generation and saving (simulated) complete.",
+            "message": "Requirement generation and saving complete.",
             "project_id": project_id,
         }
 

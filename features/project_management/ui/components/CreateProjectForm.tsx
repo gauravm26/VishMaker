@@ -19,52 +19,25 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (!name.trim()) {
-            setError('Project name is required.');
-            return;
-        }
-
-        if (!prompt.trim()) {
-            setError('Initial prompt is required.');
-            return;
-        }
-
-        setIsSubmitting(true);
-        setError(null);
-
-        try {
-            // First create the project
-            const project = await apiClient<Project>('/projects', {
-                method: 'POST',
-                body: {
-                    name: name.trim(),
-                    initial_prompt: prompt.trim(),
-                } as ProjectCreatePayload,
-            });
-
-            // Then generate the user flow using the createProjectButton component
-            try {
-                await LlmService.processWithLlm('createProjectButton', prompt);
-                // Reset form and notify parent
-                setName('');
-                setPrompt('');
-                onProjectCreated();
-            } catch (llmErr: any) {
-                console.error('Error generating user flow:', llmErr);
-                // Still consider the operation successful since project was created
-                setName('');
-                setPrompt('');
-                onProjectCreated();
-            }
-        } catch (err: any) {
-            setError(err.message || 'Failed to create project.');
-            console.error(err);
-        } finally {
-            setIsSubmitting(false);
+        
+        // Get the button ID from the form
+        const buildButton = document.getElementById('createProjectButton');
+        if (buildButton) {
+            // Call the AI processing directly
+            handleBuildClick(buildButton.id, prompt);
+        } else {
+            console.error("Could not find the 'Let's build it' button");
         }
     };
 
+    // Handle AI refinement of prompt
     const handleAiClick = async (componentId: string, text: string) => {
+        if (!componentId) {
+            console.error("Component ID is required");
+            setError('System error: Component ID is missing.');
+            return;
+        }
+
         if (!text.trim()) {
             setError('Please enter some text to process.');
             return;
@@ -76,7 +49,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
         setProgressUpdate("Starting request...");
         
         try {
-            console.log("Sending request to LLM service...");
+            console.log(`Refining prompt with ${componentId}...`);
             // Process the text with the LLM service using the provided component ID
             const response = await LlmService.processWithLlm(
                 componentId, 
@@ -111,6 +84,95 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             setProgressUpdate(null);
         } finally {
             setIsLlmProcessing(false);
+        }
+    };
+
+    // Handle the "Let's build it" button click (both AI processing and project creation)
+    const handleBuildClick = async (componentId: string, text: string) => {
+        if (!componentId) {
+            console.error("Component ID is required");
+            setError('System error: Component ID is missing.');
+            return;
+        }
+
+        if (!name.trim()) {
+            setError('Project name is required.');
+            return;
+        }
+
+        if (!text.trim()) {
+            setError('Initial prompt is required.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError(null);
+        setProgressUpdate("Creating project...");
+        
+        try {
+            // First create the project
+            const project = await apiClient<Project>('/projects', {
+                method: 'POST',
+                body: {
+                    name: name.trim(),
+                    initial_prompt: text.trim(),
+                } as ProjectCreatePayload,
+            });
+
+            setProgressUpdate("Project created. Generating user flow...");
+            
+            // Process with LLM
+            try {
+                console.log(`Processing with ${componentId}...`);
+                const response = await LlmService.processWithLlm(
+                    componentId, 
+                    text,
+                    (update: string) => {
+                        console.log("Progress update received:", update);
+                        setProgressUpdate(update);
+                    }
+                );
+                
+                console.log("LLM Response received:", response);
+                
+                // Process user flow result (should be pipe-delimited)
+                setProgressUpdate("User flow generated. Saving to database...");
+                
+                // Trigger requirement generation API to save the user flow
+                await apiClient(`/requirements/generate/${project.id}`, {
+                    method: 'POST',
+                    body: {
+                        component_id: componentId  // Required field
+                    }
+                });
+                
+                setProgressUpdate("User flow saved successfully!");
+                
+                // Reset form and notify parent
+                setTimeout(() => {
+                    setName('');
+                    setPrompt('');
+                    setProgressUpdate(null);
+                    onProjectCreated();
+                }, 2000);
+                
+            } catch (llmErr: any) {
+                console.error('Error generating user flow:', llmErr);
+                setError('Created project but failed to generate user flow. Please try again from the project page.');
+                // Still consider the operation partially successful since project was created
+                setTimeout(() => {
+                    setName('');
+                    setPrompt('');
+                    setProgressUpdate(null);
+                    onProjectCreated();
+                }, 3000);
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to create project.');
+            console.error(err);
+            setProgressUpdate(null);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -167,7 +229,8 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 <div>
                     <button
                         id="createProjectButton"
-                        type="submit"
+                        type="button"
+                        onClick={(e) => handleBuildClick(e.currentTarget.id, prompt)}
                         disabled={isSubmitting || isLlmProcessing}
                         className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
                             isSubmitting || isLlmProcessing

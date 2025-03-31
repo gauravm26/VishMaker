@@ -1,6 +1,8 @@
 # features/requirement_generation/api/routes.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
+from typing import Optional
+from pydantic import BaseModel, Field
 
 from infrastructure.db.db_core import get_db # DB session dependency
 from features.requirement_generation.core.services import req_gen_service, RequirementGenerationService
@@ -11,6 +13,10 @@ router = APIRouter(
     tags=["Requirement Generation"] # Tag for OpenAPI docs
 )
 
+# Request model for triggering generation
+class GenerationRequest(BaseModel):
+    component_id: str = Field(..., description="The HTML component ID that triggered the generation")
+
 @router.post(
     "/generate/{project_id}", # Trigger generation for a specific project
     response_model=schemas.GenerationTriggerResponse,
@@ -18,15 +24,25 @@ router = APIRouter(
 )
 def trigger_requirement_generation_endpoint(
     project_id: int,
+    request: GenerationRequest = Body(...),
     db: Session = Depends(get_db),
     service: RequirementGenerationService = Depends(lambda: req_gen_service)
 ):
     """
     Triggers the generation of user flows and requirements for a project based on its initial prompt.
-    (Currently simulates the process)
+    
+    Args:
+        project_id: ID of the project
+        request: Request body containing the required component_id
     """
     try:
-        result = service.generate_requirements_for_project(db=db, project_id=project_id)
+        print(f"Using component_id from request: {request.component_id}")
+        result = service.generate_requirements_for_project(
+            db=db, 
+            project_id=project_id, 
+            component_id=request.component_id
+        )
+        
         # In a real async setup, result might just contain a task_id
         return schemas.GenerationTriggerResponse(
             message=result.get("message", "Processing started."),

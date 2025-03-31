@@ -642,11 +642,27 @@ class BedrockService:
                 
                 return answer_text
         
-        # If no marker found, return the original content
+        # If no marker is found, check for pipe-delimited format (common for outputModel columns)
+        pipe_lines = []
+        for line in content.split('\n'):
+            # Keep only lines that have the pipe delimiter for column format
+            if '|' in line and not line.strip().startswith('#') and not line.strip().startswith('//'):
+                pipe_lines.append(line.strip())
+        
+        # If we found pipe-delimited lines, return just those
+        if pipe_lines:
+            if self.current_request_id:
+                llm_logger.info(f"[{self.current_request_id}] Extracted pipe-delimited answer with {len(pipe_lines)} lines")
+            else:
+                llm_logger.info(f"Extracted pipe-delimited answer with {len(pipe_lines)} lines")
+            
+            return '\n'.join(pipe_lines)
+        
+        # If no structured format found, return the original content
         if self.current_request_id:
-            llm_logger.info(f"[{self.current_request_id}] No final answer marker found, returning full content")
+            llm_logger.info(f"[{self.current_request_id}] No structured format found, returning full content")
         else:
-            llm_logger.info(f"No final answer marker found, returning full content")
+            llm_logger.info(f"No structured format found, returning full content")
         
         return content
 
