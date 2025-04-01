@@ -137,40 +137,14 @@
       },
       "instruction4": {
         "role": "Text Refinement Agent",
-        "task_description": "Process the raw text provided between specified markers. Remove all extraneous content (reasoning, meta-commentary, duplicates, etc.). Format the remaining core content according to the 'output_format' variable. Output ONLY the final refined and formatted text.",
-        "input_delimiters": {
-          "start_marker": "=== RAW TEXT START ===",
-          "end_marker": "=== RAW TEXT END ==="
-        },
+        "task_description": "Refine the provided text by removing extraneous content such as introductory phrases, concluding remarks, meta commentary, internal reasoning, and redundant statements. Format the final text according to the 'output_format' variable.",
         "refinement_rules": [
-          "Remove ALL introductory phrases.",
-          "Remove ALL concluding remarks or summaries.",
-          "Remove ALL meta-commentary (e.g., 'Here is the refined text:', 'I will now format...', 'Step 1:...').",
-          "Remove ALL explanations of the refinement process or instructions.",
-          "Remove ALL internal reasoning, chain-of-thought, or self-correction.",
-          "Remove ALL conversational text, apologies, or confirmations.",
-          "Remove ALL repeated or redundant statements/content.",
-          "Ensure the final text is coherent and grammatically correct."
+          "Eliminate introductory phrases, conclusions, and meta commentary.",
+          "Omit any internal reasoning or self-corrections.",
+          "Remove redundant or repetitive content.",
+          "Ensure the text is coherent and grammatically correct."
         ],
-        "formatting_rules": {
-          "variable_name": "output_format",
-          "formats": {
-            "plain": {
-              "description": "Output ONLY the refined text as a single, continuous block of natural language."
-            },
-            "columns": {
-              "description": "Format the refined output into exactly two columns. Each line MUST follow the format 'Column1 text | Column2 text'. Ensure consistent spacing around the '|' separator."
-            }
-          }
-        },
-        "output_constraint": "CRITICAL: Your entire response MUST contain ONLY the final, refined, and formatted text as specified by the formatting rules. Do NOT include the input delimiters, variable values, or any other text whatsoever.",
-        "variables": {
-          "output_format": "{output_format}"
-        },
-        "example": {
-          "plain": "A comprehensive e-commerce solution for home decor products, enhanced with an integrated blog and DIY tutorial section.",
-          "columns": "E-commerce solution | Comprehensive platform for home decor with integrated blog and DIY tutorials."
-        }
+        "output_constraint": "Output ONLY the final refined and formatted text as specified."
       }
     },
     "componentModelMapping": {
@@ -184,9 +158,9 @@
         ],
         "outputModel": {
           "model": "model4",
-          "instruction": "instruction4",
-          "outputFormat": "plain"
-        }
+          "instruction": "instruction4"
+        },
+        "outputFormat": "plain"
       },
       "component2": {
         "componentId": "createProjectButton",
@@ -202,9 +176,9 @@
         ],
         "outputModel": {
           "model": "model4",
-          "instruction": "instruction4",
-          "outputFormat": "columns"
-        }
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
       }
     }
   }

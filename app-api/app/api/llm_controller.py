@@ -65,6 +65,16 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
             llm_logger.error(f"[{request_id}] No model instructions found for component '{request.componentId}'")
             raise HTTPException(status_code=500, detail=f"No model instructions found for component '{request.componentId}'")
 
+        # Get the output format
+        output_format = component_mapping.get('outputFormat', 'plain')
+        if output_format.split('_')[0] == 'columns':
+            noColumns = int(output_format.split('_')[1])
+            outputFormatInstruction = f'''"output_formats": "Format the refined text into exactly {noColumns} columns. Each row should be formatted into columns delimited by the pipe character |."'''
+        else:
+            outputFormatInstruction = f'''"output_formats": "Output the refined text as a single, continuous block of natural language."'''
+
+        model_instructions.append(outputFormatInstruction)
+
         # Initialize Bedrock service
         llm_logger.info(f"[{request_id}] Initializing Bedrock service")
         bedrock_service = BedrockService()
@@ -141,18 +151,13 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 
                 if output_instruction:
                     try:
-                        # Add output format to instruction
-                        output_instruction_with_format = {
-                            **output_instruction,
-                            'output_format': output_model.get('outputFormat', 'plain')
-                        }
-                        
+
                         progress_updates.append(f"Refining output with model {output_model_key}")
                         
                         # Call get_model_response for output refinement
                         refined_content, refinement_metadata = bedrock_service.get_model_response(
                             model_key=output_model_key,
-                            instruction=output_instruction_with_format,
+                            instruction=output_instruction,
                             user_text=current_text,
                             request_id=f"{request_id}_refinement"
                         )
