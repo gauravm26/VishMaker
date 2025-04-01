@@ -11,7 +11,7 @@ from pydantic import BaseModel
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 
-from infrastructure.llms.llm_models import BedrockService, load_config, get_model_id_from_key, llm_logger
+from infrastructure.llms.llm_models import BedrockService, load_config, llm_logger
 
 router = APIRouter()
 
@@ -64,30 +64,15 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
         if not model_instructions or len(model_instructions) == 0:
             llm_logger.error(f"[{request_id}] No model instructions found for component '{request.componentId}'")
             raise HTTPException(status_code=500, detail=f"No model instructions found for component '{request.componentId}'")
-        
+
         # Initialize Bedrock service
         llm_logger.info(f"[{request_id}] Initializing Bedrock service")
         bedrock_service = BedrockService()
-        bedrock_service.current_request_id = request_id
         
+        # Verify AWS credentials are set up properly
         if not bedrock_service.client:
             llm_logger.error(f"[{request_id}] Failed to initialize Bedrock service - check AWS credentials")
             raise HTTPException(status_code=500, detail="Failed to initialize Bedrock service - check AWS credentials in environment variables")
-        
-        # Verify AWS credentials
-        aws_access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID')
-        aws_secret_key = os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY')
-        aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
-        
-        if not aws_access_key or not aws_secret_key:
-            llm_logger.error(f"[{request_id}] AWS Bedrock credentials not found in environment variables")
-            raise HTTPException(status_code=500, detail="AWS Bedrock credentials not properly configured - check AWS_BEDROCK_ACCESS_KEY_ID and AWS_BEDROCK_SECRET_ACCESS_KEY")
-            
-        # Check for AWS Bedrock inference ARN 
-        inference_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '')
-        if not inference_arn:
-            llm_logger.error(f"[{request_id}] AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
-            raise HTTPException(status_code=500, detail="AWS_BEDROCK_INFERENCE_ARN not configured in environment variables")
         
         # Process through all models in sequence
         current_text = request.text
@@ -112,107 +97,36 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 raise HTTPException(status_code=500, detail=f"Instruction '{instruction_key}' not found in configuration")
             
             try:
-                # Prepare the request payload
-                llm_logger.info(f"[{request_id}] Step {idx+1}: Preparing request payload for model {model_key}")
-                progress_updates.append(f"1. Drafting Request: Preparing payload for {model_key}")
-                config_body, model_id = bedrock_service.prepare_request_payload(model_key, instruction, current_text)
-                llm_logger.info(f"[{request_id}] Step {idx+1}: Model ID: {model_id}, Config Body: {config_body}")
-
-                # Log the payload
-                payload_str = json.dumps(config_body, indent=2)
-                llm_logger.info(f"[{request_id}] Step {idx+1}: REQUEST PAYLOAD:\n{payload_str}")
+                # Use the simplified get_model_response method
+                progress_updates.append(f"Processing with model {model_key} using instruction {instruction_key}")
                 
-                # Get the inference profile ARN
-                llm_logger.info(f"[{request_id}] Step {idx+1}: Getting profile ARN for model {model_id}")
-                profile_arn = bedrock_service.get_model_profile_arn(model_id)
+                # Call get_model_response with current text
+                content, metadata = bedrock_service.get_model_response(
+                    model_key=model_key,
+                    instruction=instruction,
+                    user_text=current_text,
+                    request_id=f"{request_id}_step{idx+1}"
+                )
                 
-                # Serialize the body
-                body = json.dumps(config_body)
+                if content is None:
+                    error_msg = metadata.get('error', 'Unknown error')
+                    llm_logger.error(f"[{request_id}] Step {idx+1}: Error getting response: {error_msg}")
+                    raise ValueError(f"Error getting model response: {error_msg}")
                 
-                # Call the Bedrock API
-                llm_logger.info(f"[{request_id}] Step {idx+1}: Invoking AWS Bedrock model {model_id} with profile {profile_arn}")
-                progress_updates.append(f"2. Request Sent: Sending to {model_id} with instruction {instruction_key}")
+                llm_logger.info(f"[{request_id}] Step {idx+1}: Successfully processed response. Content length: {len(content)}")
+                progress_updates.append(f"Received response from {model_key}")
                 
-                try:
-                    response = bedrock_service.client.invoke_model(
-                        modelId=profile_arn,
-                        body=body
-                    )
-                    
-                    # Check if response is valid
-                    if not response or not hasattr(response, 'get') or not response.get('body'):
-                        llm_logger.error(f"[{request_id}] Step {idx+1}: Empty response received from AWS Bedrock")
-                        raise ValueError("Empty response received from AWS Bedrock")
-                        
-                    # Read the response body
-                    response_body_raw = response.get('body').read()
-                    
-                    # Check if the response body is empty
-                    if not response_body_raw:
-                        llm_logger.error(f"[{request_id}] Step {idx+1}: Empty response body received from AWS Bedrock")
-                        raise ValueError("Empty response body received from AWS Bedrock")
-                    
-                    # Parse and log the response
-                    response_body = None
-                    try:
-                        response_body = json.loads(response_body_raw)
-                        response_str = json.dumps(response_body, indent=2)
-                        llm_logger.info(f"[{request_id}] Step {idx+1}: RESPONSE PAYLOAD:\n{response_str}")
-                        progress_updates.append(f"3. Response Received: Got response from {model_id}")
-                    except json.JSONDecodeError as e:
-                        llm_logger.error(f"[{request_id}] Step {idx+1}: Failed to parse response as JSON: {str(e)}")
-                        llm_logger.error(f"[{request_id}] Step {idx+1}: Raw response: {response_body_raw[:1000]}")
-                        raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
-                    
-                    # Process the response content
-                    content, metadata = bedrock_service.process_model_response(model_id, None, component_mapping, response_body)
-                    progress_updates.append(f"Processing response content from {model_id}")
-                    
-                    # Check if refinement has already been performed by process_model_response
-                    refinement_already_performed = metadata and isinstance(metadata, dict) and metadata.get('refinement_performed', False)
-                    if refinement_already_performed:
-                        llm_logger.info(f"[{request_id}] Refinement already performed in process_model_response, skipping controller refinement")
-                    
-                    # Verify that we extracted content successfully
-                    if not content or not content.strip():
-                        llm_logger.error(f"[{request_id}] Step {idx+1}: Failed to extract content from response")
-                        llm_logger.info(f"[{request_id}] Step {idx+1}: Using raw response as fallback")
-                        
-                        # Use the raw response as a fallback
-                        if isinstance(response_body, dict):
-                            # Try common content fields
-                            for field in ["text", "content", "generation", "completion", "answer", "response"]:
-                                if field in response_body:
-                                    if isinstance(response_body[field], str):
-                                        content = response_body[field]
-                                        break
-                                    elif isinstance(response_body[field], list) and len(response_body[field]) > 0:
-                                        content = str(response_body[field][0])
-                                        break
-                            
-                            # If we still don't have content, use the entire response
-                            if not content or not content.strip():
-                                content = str(response_body)
-                        else:
-                            content = str(response_body)
-                    
-                    llm_logger.info(f"[{request_id}] Step {idx+1}: Successfully processed response. Content length: {len(content)}")
-                    
-                    # Update text for next model in chain or final result
-                    current_text = content
-                    final_model_id = model_id
-                    final_instruction_id = instruction_key
-                    
-                except Exception as aws_e:
-                    llm_logger.error(f"[{request_id}] Step {idx+1}: AWS API error: {str(aws_e)}")
-                    raise ValueError(f"AWS Bedrock API error: {str(aws_e)}")
-                    
+                # Update text for next model in chain or final result
+                current_text = content
+                final_model_id = metadata.get('model_id', '')
+                final_instruction_id = instruction_key
+                
             except ValueError as ve:
                 llm_logger.error(f"[{request_id}] Step {idx+1}: Error invoking model: {str(ve)}")
                 raise HTTPException(status_code=500, detail=f"Error invoking model: {str(ve)}")
         
-        # Check if we have an output model
-        if component_mapping and 'outputModel' in component_mapping and not refinement_already_performed:
+        # Check if we have an output model and if refinement wasn't already handled
+        if component_mapping and 'outputModel' in component_mapping:
             output_model = component_mapping['outputModel']
             output_model_key = output_model.get('model')
             output_instruction_key = output_model.get('instruction')
@@ -227,68 +141,35 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 
                 if output_instruction:
                     try:
-                        # Prepare output model request
-                        llm_logger.info(f"[{request_id}] Output refinement: Preparing request for model {output_model_key}")
-                        progress_updates.append(f"4. Refining Output: Preparing request for {output_model_key}")
+                        # Add output format to instruction
+                        output_instruction_with_format = {
+                            **output_instruction,
+                            'output_format': output_model.get('outputFormat', 'plain')
+                        }
                         
-                        # Get the model ID
-                        output_model_id = None
-                        if output_model_key in config['llm'].get('models', {}):
-                            output_model_id = config['llm']['models'][output_model_key].get('modelId')
+                        progress_updates.append(f"Refining output with model {output_model_key}")
                         
-                        if not output_model_id:
-                            llm_logger.error(f"[{request_id}] Output model ID not found for {output_model_key}")
+                        # Call get_model_response for output refinement
+                        refined_content, refinement_metadata = bedrock_service.get_model_response(
+                            model_key=output_model_key,
+                            instruction=output_instruction_with_format,
+                            user_text=current_text,
+                            request_id=f"{request_id}_refinement"
+                        )
+                        
+                        if refined_content is not None:
+                            # Update the final result
+                            current_text = refined_content
+                            final_model_id = refinement_metadata.get('model_id', final_model_id)
+                            final_instruction_id = output_instruction_key
+                            
+                            progress_updates.append(f"Refinement completed with model {output_model_key}")
+                            llm_logger.info(f"[{request_id}] Output refinement: Successfully processed")
                         else:
-                            # Add output format to instruction
-                            output_instruction_with_format = {
-                                **output_instruction,
-                                'output_format': output_model.get('outputFormat', 'plain')
-                            }
-                            
-                            # Process with output model
-                            config_body, _ = bedrock_service.prepare_request_payload(output_model_key, output_instruction_with_format, current_text)
-                            
-                            # Log the request payload
-                            config_str = json.dumps(config_body, indent=2)
-                            llm_logger.info(f"[{request_id}] Output refinement: REQUEST PAYLOAD:\n{config_str}")
-                            
-                            # Serialize and call Bedrock API
-                            profile_arn = bedrock_service.get_model_profile_arn(output_model_id)
-                            body = json.dumps(config_body)
-                            
-                            # Tell the BedrockService about the request_id for proper logging
-                            bedrock_service.current_request_id = request_id
-                            
-                            response = bedrock_service.client.invoke_model(
-                                modelId=profile_arn,
-                                body=body
-                            )
-                            
-                            if response and hasattr(response, 'get') and response.get('body'):
-                                response_body_raw = response.get('body').read()
-                                if response_body_raw:
-                                    output_response_body = json.loads(response_body_raw)
-                                    
-                                    # Log the response payload
-                                    response_str = json.dumps(output_response_body, indent=2)
-                                    llm_logger.info(f"[{request_id}] Output refinement: RESPONSE PAYLOAD:\n{response_str}")
-                                    
-                                    # Process the output model response
-                                    refined_content, _ = bedrock_service.process_model_response(output_model_id, None, None, output_response_body)
-                                    
-                                    # Update the final result
-                                    current_text = refined_content
-                                    final_model_id = output_model_id
-                                    final_instruction_id = output_instruction_key
-                                    
-                                    progress_updates.append(f"5. Refinement Complete: Received refined output from {output_model_id}")
-                                    llm_logger.info(f"[{request_id}] Output refinement: Successfully processed")
+                            llm_logger.error(f"[{request_id}] Output refinement failed: {refinement_metadata.get('error', 'Unknown error')}")
                     except Exception as e:
                         llm_logger.error(f"[{request_id}] Output refinement error: {str(e)}")
                         # Continue with original result if refinement fails
-        else:
-            if refinement_already_performed:
-                llm_logger.info(f"[{request_id}] Skipping controller output model refinement since it was already performed")
         
         # Return the final response
         return LlmProcessResponse(

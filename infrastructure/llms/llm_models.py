@@ -8,1111 +8,716 @@ from pathlib import Path
 from dotenv import load_dotenv
 from botocore.config import Config
 
-# Add the project root to sys.path to enable imports from app-core
-project_root = Path(__file__).resolve().parent.parent.parent
+# --- Project Setup & Logging Configuration ---
+# Add the project root to sys.path
+project_root = Path(__file__).resolve().parent.parent.parent # Adjust if needed
 sys.path.append(str(project_root))
 
 # Ensure logs directory exists
 logs_dir = project_root / 'logs'
-if not logs_dir.exists():
-    print(f"Creating logs directory: {logs_dir}")
-    logs_dir.mkdir(parents=True, exist_ok=True)
+logs_dir.mkdir(parents=True, exist_ok=True)
 
-# Configure logging for LLM interactions - payload and response only
+# Configure logging for LLM interactions
 log_path = logs_dir / 'llm_interactions.log'
 print(f"Logging LLM interactions to: {log_path}")
 
 llm_logger = logging.getLogger('llm_interactions')
 llm_logger.setLevel(logging.INFO)
 
-# Clear existing handlers
+# Clear existing handlers to avoid duplicates if re-run
 for handler in llm_logger.handlers[:]:
     llm_logger.removeHandler(handler)
 
-# Add file handler with simple formatter and immediate flush
+# Add file handler
 file_handler = logging.FileHandler(log_path, mode='a')
 file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
 file_handler.setLevel(logging.INFO)
 llm_logger.addHandler(file_handler)
 
-# Also log to console for debugging
+# Add console handler
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
 console_handler.setLevel(logging.INFO)
 llm_logger.addHandler(console_handler)
 
-# Test log entry to verify logging is working
-try:
-    llm_logger.info("LLM logging initialized")
-    with open(log_path, "a") as f:
-        f.write("Direct file write test: LLM logging initialized\n")
-    print(f"Test logging to {log_path} completed")
-except Exception as e:
-    print(f"ERROR: Could not write to log file: {str(e)}")
-
-# Force logger to not use parent handlers and to propagate properly
+# Force logger to not use parent handlers
 llm_logger.propagate = False
 
-# BedrockService implementation - integrated directly
+llm_logger.info("--- LLM Service Script Start ---")
+llm_logger.info("LLM logging initialized")
+
+# --- Configuration Loading ---
+def load_app_config():
+    """Load the application configuration from global/config.json"""
+    try:
+        config_path = project_root / 'global' / 'config.json'
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        llm_logger.info(f"Successfully loaded configuration from {config_path}")
+
+        # Basic validation
+        if 'llm' not in config or 'models' not in config['llm']:
+            llm_logger.warning("Config structure issue: 'llm' or 'llm.models' section missing.")
+            # Allow proceeding but some features might fail
+            config.setdefault('llm', {}).setdefault('models', {})
+        return config
+    except FileNotFoundError:
+        llm_logger.error(f"Configuration file not found at {config_path}")
+        return {'llm': {'models': {}}} # Return empty structure
+    except json.JSONDecodeError as e:
+        llm_logger.error(f"Error decoding JSON from config file {config_path}: {e}")
+        return {'llm': {'models': {}}} # Return empty structure
+    except Exception as e:
+        llm_logger.error(f"Unexpected error loading config.json: {e}")
+        return {'llm': {'models': {}}} # Return empty structure
+
+# Create an alias for load_app_config as load_config for backward compatibility
+load_config = load_app_config
+
+# Load environment variables from .env file in the project root's 'global' subdir
+env_path = project_root / 'global' / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+    llm_logger.info(f"Loaded environment variables from {env_path}")
+else:
+    llm_logger.warning(f"Environment file (.env) not found at {env_path}. AWS credentials must be set via other means.")
+
+# --- Bedrock LLM Service ---
+
 class BedrockService:
-    """Service class for AWS Bedrock operations"""
-    
-    def __init__(self, config_path=None):
-        """Initialize the BedrockService"""
+    """
+    Service class for interacting with AWS Bedrock LLMs.
+
+    Provides methods to get model responses and test AWS connectivity.
+    """
+
+    def __init__(self, config=None):
+        """Initialize the BedrockLLMService."""
         self.session = None
         self.client = None
-        self.config = None
-        self.current_request_id = None
-        
-        # Load configuration
-        if config_path:
-            with open(config_path, 'r') as f:
-                self.config = json.load(f)
-        else:
-            self.config = load_config()
-        
-        self.setup_client()
-    
-    def setup_client(self):
-        """Set up the AWS Bedrock client"""
+        self.config = config if config else load_app_config() # Load config if not provided
+        self.current_request_id = None # Optional: For tracking specific requests in logs
+
+        if not self._setup_client():
+             llm_logger.error("Bedrock client setup failed. Service may not function correctly.")
+             # You might want to raise an exception here depending on requirements
+             # raise ConnectionError("Failed to set up AWS Bedrock client.")
+
+    def _setup_client(self):
+        """Set up the AWS Bedrock client using environment variables."""
         try:
-            # Get credentials from environment variables
             aws_access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID')
             aws_secret_key = os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY')
-            aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
-            
-            # Validate credentials
+            aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1') # Default region
+
             if not aws_access_key or not aws_secret_key:
-                llm_logger.warning("AWS Bedrock credentials not found in environment variables")
-                llm_logger.warning("Please set AWS_BEDROCK_ACCESS_KEY_ID and AWS_BEDROCK_SECRET_ACCESS_KEY")
+                llm_logger.error("AWS Bedrock credentials (AWS_BEDROCK_ACCESS_KEY_ID, AWS_BEDROCK_SECRET_ACCESS_KEY) not found in environment variables.")
                 return False
-            
-            # Create a new boto3 session
+
             self.session = boto3.Session(
                 aws_access_key_id=aws_access_key,
                 aws_secret_access_key=aws_secret_key,
                 region_name=aws_region
             )
-            
-            # Create the bedrock-runtime client
-            self.client = self.session.client('bedrock-runtime')
-            
-            # Test if the client is properly initialized
-            try:
-                # Try to list foundation models to verify access
-                sts = self.session.client('sts')
-                sts.get_caller_identity()
-                llm_logger.info(f"AWS Bedrock client initialized successfully in region {aws_region}")
-                return True
-            except Exception as e:
-                llm_logger.error(f"AWS access test failed: {str(e)}")
-                return False
-                
+
+            # Use standard AWS SDK config for timeouts/retries
+            sdk_config = Config(
+                region_name=aws_region,
+                retries=dict(max_attempts=3),
+                connect_timeout=10, # Increased timeout
+                read_timeout=120    # Increased timeout for potentially long LLM responses
+            )
+
+            self.client = self.session.client('bedrock-runtime', config=sdk_config)
+
+            # Test basic connectivity via STS
+            sts = self.session.client('sts', config=sdk_config)
+            sts.get_caller_identity() # Raises exception on failure
+            llm_logger.info(f"AWS Bedrock client initialized successfully in region {aws_region}")
+            return True
+
         except Exception as e:
-            llm_logger.error(f"Error setting up Bedrock client: {str(e)}")
+            llm_logger.error(f"Error setting up Bedrock client: {str(e)}", exc_info=True)
+            self.client = None # Ensure client is None if setup fails
             return False
-    
-    def prepare_request_payload(self, model_key, instruction, user_text):
+
+    # --- Public Methods ---
+
+    def get_model_response(self, model_key, instruction=None, user_text=None, request_id=None, test_mode=False):
         """
-        Prepare the request payload for the LLM based on configuration
-        
+        Main method to get a response from a specified Bedrock model.
+
+        Orchestrates the 4 steps: Prepare Request, Invoke Model, Get Response, Standardize Output.
+
         Args:
-            model_key (str): The model key in the config
-            instruction (dict): The instruction to use for the request
-            user_text (str): The user's input text
-            
+            model_key (str): The key identifying the model in the config (e.g., 'claude-sonnet').
+            instruction (dict, optional): The instruction dictionary for the model. Can be None when test_mode=True.
+            user_text (str, optional): The user's input text. Can be None when test_mode=True.
+            request_id (str, optional): An optional ID for tracking this request in logs.
+            test_mode (bool, optional): If True, uses lightweight test request for model connectivity testing.
+
         Returns:
-            dict: The prepared request payload
-            str: The actual model ID
+            tuple: A tuple containing:
+                - str: The processed and standardized response content.
+                - dict: Metadata about the response (e.g., model_id used, refinement status).
+                   Returns None for content and error dict if an error occurs.
         """
+        self.current_request_id = request_id
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+
+        llm_logger.info(f"{log_prefix}Received request for model_key: {model_key}{' (test mode)' if test_mode else ''}")
+
+        if not self.client:
+            llm_logger.error(f"{log_prefix}Bedrock client is not initialized. Cannot invoke model.")
+            return None, {"error": "Client not initialized", "model_key": model_key}
+
+        # Default empty values if None is provided
+        instruction = instruction or {"System: This is a test request. Execute it in demo mode."}
+        user_text = user_text or  "Hello! Please reply with a short, simple greeting like 'Hi there!'."
+
+          
         try:
-            # Get model configuration
-            if not self.config or 'llm' not in self.config or 'models' not in self.config['llm']:
-                llm_logger.error("Invalid configuration structure")
-                raise ValueError("Invalid configuration structure")
-                
-            # Get model configuration
-            if model_key not in self.config['llm']['models']:
-                llm_logger.error(f"Model key '{model_key}' not found in configuration")
-                raise ValueError(f"Model key '{model_key}' not found in configuration")
-                
-            model_config = self.config['llm']['models'][model_key]
+          
+            # 1. Prepare Request
+            model_id = self._get_model_id(model_key)  # Get model_id in both cases
             
-            if 'modelId' not in model_config or 'body' not in model_config:
-                llm_logger.error(f"Invalid model configuration for model '{model_key}'. Required fields: modelId, body")
-                raise ValueError(f"Invalid model configuration for model '{model_key}'. Required fields: modelId, body")
+            # Use full request for normal operation
+            llm_logger.info(f"{log_prefix}Step 1: Preparing request for {model_key}")
+            model_id, request_body = self._prepare_request(model_key, instruction, user_text)
                 
-            model_id = model_config['modelId']
-            llm_logger.debug(f"Preparing request payload for model_key: {model_key}, model_id: {model_id}")
-            
-            # Get a deep copy of the template
-            if isinstance(model_config['body'], str):
-                config_body = json.loads(model_config['body'])
-            else:
-                config_body = json.loads(json.dumps(model_config['body']))
-            
-            # Format the instruction
-            formatted_instruction = self._format_instruction(instruction)
-            
-            # Apply model-specific payload configuration
-            # Claude models require the 'system' parameter at the top level
-            if 'anthropic' in model_id.lower():
-                # Claude models - add system parameter at top level
-                config_body['system'] = formatted_instruction
-                
-                # Update messages array with user content
-                if 'messages' in config_body:
-                    config_body['messages'] = [
-                        {"role": "user", "content": [{"type": "text", "text": user_text}]}
-                    ]
-            elif 'meta.llama' in model_id.lower():
-                # Meta Llama models use a specific prompt format
-                config_body['prompt'] = f"<s>[INST] {formatted_instruction}\n\n{user_text} [/INST]"
-            elif 'messages' in config_body:
-                # Other models with messages array
-                # First try to update an existing system message
-                system_message_index = next((i for i, msg in enumerate(config_body.get('messages', [])) 
-                                          if msg.get('role') == 'system'), None)
-                
-                # Update or add system message with instructions
-                if system_message_index is not None:
-                    # Update existing system message
-                    if isinstance(config_body['messages'][system_message_index].get('content'), list):
-                        config_body['messages'][system_message_index]['content'] = [{"type": "text", "text": formatted_instruction}]
-                    else:
-                        config_body['messages'][system_message_index]['content'] = formatted_instruction
-                else:
-                    # Add new system message
-                    config_body['messages'].insert(0, {"role": "system", "content": formatted_instruction})
-                
-                # Now update or add the user message
-                user_message_index = next((i for i, msg in enumerate(config_body.get('messages', [])) 
-                                         if msg.get('role') == 'user'), None)
-                
-                if user_message_index is not None:
-                    # Update existing user message
-                    if isinstance(config_body['messages'][user_message_index].get('content'), list):
-                        config_body['messages'][user_message_index]['content'] = [{"type": "text", "text": user_text}]
-                    else:
-                        config_body['messages'][user_message_index]['content'] = user_text
-                else:
-                    # Add new user message
-                    config_body['messages'].append({"role": "user", "content": user_text})
-            
-            elif 'prompt' in config_body:
-                # For models that use a prompt field (like Llama)
-                config_body['prompt'] = f"{formatted_instruction}\n\nUser request: {user_text}"
-            else:
-                # Generic fallback for unknown model types
-                # If there's no messages or prompt field, create one
-                config_body['prompt'] = f"{formatted_instruction}\n\nUser request: {user_text}"
-            
-            llm_logger.debug(f"Successfully prepared request payload for model: {model_id}")
-            return config_body, model_id
-            
+            llm_logger.debug(f"{log_prefix}Prepared request body: {json.dumps(request_body)}")
+
+
+            # 2. Invoke Model
+            llm_logger.info(f"{log_prefix}Step 2: Invoking model_id: {model_id}")
+            api_response = self._invoke_model(model_id, request_body)
+
+            # 3. Get Response (Process Raw API Response)
+            llm_logger.info(f"{log_prefix}Step 3: Processing response from {model_id}")
+            raw_content, metadata = self._process_response(model_id, api_response, model_key)
+            llm_logger.debug(f"{log_prefix}Raw extracted content length: {len(raw_content)}")
+
+            # 4. Standardize Output
+            llm_logger.info(f"{log_prefix}Step 4: Standardizing output")
+            provider_name = self._get_provider_name(model_id)
+            standardized_content = self._standardize_output(raw_content, provider_name)
+            llm_logger.debug(f"{log_prefix}Standardized content length: {len(standardized_content)}")
+
+
+            llm_logger.info(f"{log_prefix}Successfully processed request for {model_key}")
+            # Add model_key to metadata if not present
+            if "model_key" not in metadata:
+                metadata["model_key"] = model_key
+
+            return standardized_content, metadata
+
+        except ValueError as ve: # Catch specific config/prep errors
+             llm_logger.error(f"{log_prefix}ValueError during processing for {model_key}: {ve}", exc_info=True)
+             return None, {"error": str(ve), "model_key": model_key}
+        except self.client.exceptions.ValidationException as ve:
+             llm_logger.error(f"{log_prefix}AWS ValidationException for {model_key}: {ve}", exc_info=True)
+             return None, {"error": f"AWS Validation Error: {ve}", "model_key": model_key}
+        except self.client.exceptions.AccessDeniedException as ae:
+             llm_logger.error(f"{log_prefix}AWS AccessDeniedException for {model_key}: {ae}", exc_info=True)
+             return None, {"error": f"AWS Access Denied: {ae}", "model_key": model_key}
+        except self.client.exceptions.ModelErrorException as me:
+             llm_logger.error(f"{log_prefix}AWS ModelErrorException for {model_key}: {me}", exc_info=True)
+             return None, {"error": f"AWS Model Error: {me}", "model_key": model_key}
+        except self.client.exceptions.ThrottlingException as te:
+             llm_logger.error(f"{log_prefix}AWS ThrottlingException for {model_key}: {te}", exc_info=True)
+             return None, {"error": f"AWS Throttling: {te}", "model_key": model_key}
         except Exception as e:
-            llm_logger.error(f"Error preparing request payload: {str(e)}")
-            raise ValueError(f"Error preparing request payload: {str(e)}")
+            llm_logger.error(f"{log_prefix}Unexpected error getting model response for {model_key}: {e}", exc_info=True)
+            return None, {"error": f"Unexpected error: {e}", "model_key": model_key}
+        finally:
+            self.current_request_id = None # Reset request ID
+
     
+    # --- Internal Helper Methods ---
+
+    def _get_model_config(self, model_key):
+        """Get the full configuration dictionary for a given model key."""
+        try:
+            return self.config['llm']['models'][model_key]
+        except KeyError:
+            raise ValueError(f"Model key '{model_key}' not found in configuration.")
+
+    def _get_model_id(self, model_key):
+        """Get the specific Bedrock model ID (e.g., 'anthropic.claude-v2') from the model key."""
+        model_config = self._get_model_config(model_key)
+        if 'modelId' not in model_config:
+             raise ValueError(f"Configuration for model key '{model_key}' is missing the 'modelId' field.")
+        return model_config['modelId']
+
+    def _get_model_profile_arn(self, model_id):
+        base_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '').strip('"\'')
+        
+        if not base_arn:
+            llm_logger.warning("AWS_BEDROCK_INFERENCE_ARN not set in environment. Skipping model invocation tests.")
+            return True # Connectivity is okay, just can't test models
+
+        profile_arn = f"{base_arn}{model_id}"
+        return profile_arn
+
+    def _get_provider_name(self, model_id):
+        """Extract the provider name (e.g., 'anthropic', 'meta') from the model ID."""
+        if not isinstance(model_id, str):
+            return "unknown"
+        return model_id.split('.')[0].lower() if '.' in model_id else "unknown"
+
     def _format_instruction(self, instruction):
-        """Format instruction data into a readable string"""
-        if not instruction:
+        """Formats the instruction dictionary into a string for the system prompt."""
+        # (Keep the existing _format_instruction logic here)
+        if not instruction or not isinstance(instruction, dict):
+            llm_logger.warning(f"Invalid instruction format received: {type(instruction)}. Returning empty string.")
             return ""
-            
-        if isinstance(instruction, dict):
-            formatted = ""
-            
-            # Loop through all keys in instruction dictionary
-            for key, value in instruction.items():
-                # Skip output_format since it's added by the output model logic
-                if key == 'output_format':
-                    continue
-                
-                # Handle "Role" specially - no prefix
-                if key == "Role":
-                    formatted += f"{value}\n\n"
-                    continue
-                
-                # Handle "Examples" specially - just mention they exist
-                if key == "Examples" and value:
-                    formatted += f"{key}: Examples are available in the configuration.\n\n"
-                    continue
-                
-                # Handle nested dictionaries (like ConstraintsAndGuidelines)
-                if isinstance(value, dict):
-                    # Convert camelCase or snake_case to spaces for display
-                    display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', key).replace('_', ' ')
-                    formatted += f"{display_key}:\n"
-                    
-                    for sub_key, sub_value in value.items():
-                        # Handle nested nested dictionaries
-                        if isinstance(sub_value, dict):
-                            formatted += f"- {sub_key}:\n"
-                            for sub_sub_key, sub_sub_value in sub_value.items():
-                                formatted += f"  - {sub_sub_key}: {sub_sub_value}\n"
-                        else:
-                            formatted += f"- {sub_key}: {sub_value}\n"
-                    
-                    formatted += "\n"
-                else:
-                    # Convert camelCase or snake_case to spaces for display
-                    display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', key).replace('_', ' ')
-                    formatted += f"{display_key}: {value}\n\n"
-            
-            # Add specific output instructions based on output_format if present
-            if 'output_format' in instruction:
-                if instruction['output_format'] == 'plain':
-                    formatted += "Output: If the variable 'output_format' is set to 'plain', produce a clear and polished natural-language text.\n\n"
-                elif instruction['output_format'] == 'columns':
-                    formatted += "Output: If the variable 'output_format' is set to 'columns', produce output into two columns, with each line following the format 'Column1 text | Column2 text'.\n\n"
-            
-            return formatted.strip()
+
+        formatted_lines = []
+        for key, value in instruction.items():
+            if key in ['variables', 'example', 'output_format']: continue # Skip structural keys
+
+            display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', key).replace('_', ' ').title()
+
+            if key.lower() == "role":
+                formatted_lines.insert(0, f"{value}\n")
+                continue
+
+            if isinstance(value, dict):
+                formatted_lines.append(f"**{display_key}:**")
+                for sub_key, sub_value in value.items():
+                    sub_display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', sub_key).replace('_', ' ').title()
+                    if isinstance(sub_value, dict):
+                         formatted_lines.append(f"- **{sub_display_key}:**")
+                         for item_key, item_value in sub_value.items():
+                              item_display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', item_key).replace('_', ' ').title()
+                              if isinstance(item_value, dict) and 'description' in item_value:
+                                   formatted_lines.append(f"  - **'{item_key}':** {item_value['description']}")
+                              else:
+                                   formatted_lines.append(f"  - {item_display_key}: {item_value}")
+                    else:
+                        formatted_lines.append(f"- {sub_display_key}: {sub_value}")
+                formatted_lines.append("")
+            elif isinstance(value, list):
+                formatted_lines.append(f"**{display_key}:**")
+                for item in value:
+                     formatted_lines.append(f"- {item}")
+                formatted_lines.append("")
+            else:
+                formatted_lines.append(f"**{display_key}:** {value}")
+                formatted_lines.append("")
+
+        return "\n".join(formatted_lines).strip()
+
+    def _prepare_request(self, model_key, instruction, user_text):
+        """
+        Prepare the provider-specific request body.
+
+        Returns:
+            tuple: (model_id, request_body_dict)
+        """
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+        model_config = self._get_model_config(model_key)
+        model_id = model_config['modelId']
+        provider_name = self._get_provider_name(model_id)
+
+        # Get base body template from config, ensuring it's a mutable dict
+        if 'body' not in model_config:
+             raise ValueError(f"Configuration for model key '{model_key}' is missing the 'body' field.")
+        try:
+            # Deep copy to avoid modifying the original config
+            base_body = json.loads(json.dumps(model_config['body']))
+        except (TypeError, json.JSONDecodeError):
+             # Handle if body is already a dict or invalid JSON string
+             if isinstance(model_config['body'], dict):
+                 base_body = json.loads(json.dumps(model_config['body'])) # Deep copy dict
+             else:
+                 raise ValueError(f"Invalid 'body' format in config for model key '{model_key}'. Expected dict or JSON string.")
+
+
+        formatted_instruction = self._format_instruction(instruction)
+
+        # Delegate to provider-specific handlers
+        if provider_name == "anthropic":
+            request_body = self._prepare_anthropic_request(base_body, formatted_instruction, user_text)
+        elif provider_name == "meta":
+            request_body = self._prepare_meta_request(base_body, formatted_instruction, user_text)
+        # Add other providers like 'mistral', 'cohere' here
+        # elif provider_name == "mistral":
+        #    request_body = self._prepare_mistral_request(base_body, formatted_instruction, user_text)
         else:
-            # If instruction is not a dict, return as string
-            return str(instruction)
-    
-    def process_model_response(self, model_id, response, component_config=None, response_body=None):
-        """
-        Process the response from the model based on model configuration
-        
-        Args:
-            model_id (str): The model ID
-            response: The response from the Bedrock API
-            component_config: Optional component configuration containing outputModel details
-            response_body: Optional pre-parsed response body (if already parsed)
-            
-        Returns:
-            str: The extracted content from the response
-            dict: Metadata dict including whether refinement was performed
-        """
+            # Generic fallback (attempt using 'prompt' or 'messages')
+            llm_logger.warning(f"{log_prefix}Provider '{provider_name}' for model {model_id} has no specific handler. Using generic request preparation.")
+            request_body = self._prepare_generic_request(base_body, formatted_instruction, user_text)
+
+        llm_logger.debug(f"{log_prefix}Final prepared request body for {model_key}: {request_body}")
+        return model_id, request_body
+
+    def _invoke_model(self, model_id, request_body):
+        """Invoke the Bedrock model using the prepared request."""
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+        if not self.client:
+            raise ConnectionError("Bedrock client is not initialized.")
+
+        # Use inference profile ARN instead of direct model ID invocation
+        # AWS now requires using inference profiles for these models
+        profile_arn = self._get_model_profile_arn(model_id)
+        llm_logger.info(f"  Connecting model: {model_id} using Profile: {profile_arn}")
+        target_model_identifier = model_id  # Fallback to model_id if no profile found
+
+        body = json.dumps(request_body)
+
+        # Log payload before sending
+        llm_logger.info(f"{log_prefix}Invoking {target_model_identifier} with payload: {json.dumps(request_body, indent=2)}")
+
         try:
-            # Initialize metadata
-            metadata = {"refinement_performed": False}
-            
-            # If we have a pre-parsed response body, use it
-            if response_body:
-                # Use the pre-parsed body
-                llm_logger.debug(f"Using pre-parsed response body type: {type(response_body)}")
-            # Otherwise read from response
-            elif response and hasattr(response, 'get') and response.get('body'):
-                # Read the response body
-                response_body_raw = response.get('body').read()
-                
-                # Check if the response body is empty
-                if not response_body_raw:
-                    llm_logger.debug("Response body is empty")
-                    raise ValueError("Empty response body received from AWS Bedrock")
-                    
-                # Try to parse the response body as JSON
-                try:
-                    response_body = json.loads(response_body_raw)
-                    llm_logger.debug(f"Parsed response body: {json.dumps(response_body)[:200]}...")
-                except json.JSONDecodeError as e:
-                    # Log the raw response for debugging
-                    llm_logger.error(f"Failed to parse response as JSON: {str(e)}")
-                    llm_logger.error(f"Raw response: {response_body_raw[:1000]}")  # Print first 1000 chars
-                    raise ValueError(f"Invalid JSON response from AWS Bedrock: {str(e)}")
-            else:
-                llm_logger.debug("No response body available")
-                if not response_body:
-                    raise ValueError("Empty response received from AWS Bedrock")
-            
-            # Extract provider from model ID
-            provider_name = model_id.split('.')[0] if '.' in model_id else ""
-            llm_logger.debug(f"Processing response from provider: {provider_name}")
-            
-            # Extract content based on response structure
-            content = ""
-            
-            # For Claude models - special handling
-            if 'anthropic' in model_id.lower():
-                # Extract content from Claude response format
-                if "content" in response_body and isinstance(response_body["content"], list) and len(response_body["content"]) > 0:
-                    # Claude-3 response format
-                    first_content = response_body.get("content", [])[0]
-                    if isinstance(first_content, dict) and "text" in first_content:
-                        content = first_content.get("text", "")
-                        llm_logger.debug(f"Extracted Claude-3 content, length: {len(content)}")
-                elif "completion" in response_body:
-                    # Claude-2 response format
-                    content = response_body.get("completion", "")
-                    llm_logger.debug(f"Extracted Claude-2 completion, length: {len(content)}")
-            # Handle Llama models
-            elif 'meta.llama' in model_id.lower():
-                if "generation" in response_body:
-                    content = response_body.get("generation", "")
-                    llm_logger.debug(f"Extracted Llama generation, length: {len(content)}")
-                elif "text" in response_body:
-                    content = response_body.get("text", "")
-                    llm_logger.debug(f"Extracted Llama text, length: {len(content)}")
-            # Handle other models or fallbacks
-            elif "text" in response_body:
-                content = response_body.get("text", "")
-            elif "outputs" in response_body and isinstance(response_body["outputs"], list) and len(response_body["outputs"]) > 0:
-                first_output = response_body.get("outputs", [])[0]
-                if isinstance(first_output, dict) and "text" in first_output:
-                    content = first_output.get("text", "")
-                else:
-                    content = str(first_output)
-            elif "completion" in response_body:
-                content = response_body.get("completion", "")
-            elif isinstance(response_body, str):
-                content = response_body
-            else:
-                # If we can't find a known pattern, try to extract content using common keys
-                possible_keys = ["response", "answer", "result", "output", "message"]
-                for key in possible_keys:
-                    if key in response_body:
-                        if isinstance(response_body[key], str):
-                            content = response_body[key]
-                            break
-                        elif isinstance(response_body[key], dict) and "text" in response_body[key]:
-                            content = response_body[key]["text"]
-                            break
-                        elif isinstance(response_body[key], list) and len(response_body[key]) > 0:
-                            if isinstance(response_body[key][0], dict) and "text" in response_body[key][0]:
-                                content = response_body[key][0]["text"]
-                                break
-                            elif isinstance(response_body[key][0], str):
-                                content = response_body[key][0]
-                                break
-            
-            # If content is still empty, use the stringified full response as a last resort
-            if not content:
-                llm_logger.debug("Content extraction failed, using full response")
-                content = str(response_body)
-
-            # Standardize the output
-            sanitized_content = self.standardize_output(content, provider_name)
-            llm_logger.debug(f"Final sanitized content length: {len(sanitized_content)}")
-            
-            # If we have an output model configuration, use it to refine the output
-            if component_config and 'outputModel' in component_config:
-                try:
-                    llm_logger.debug(f"Found outputModel configuration: {component_config['outputModel']}")
-                    refined_content = self._refine_with_output_model(sanitized_content, component_config['outputModel'])
-                    llm_logger.debug(f"Refined content length: {len(refined_content)}")
-                    # Set refinement flag in metadata
-                    metadata["refinement_performed"] = True
-                    return refined_content, metadata
-                except Exception as e:
-                    llm_logger.error(f"Error in output model refinement: {str(e)}")
-                    llm_logger.debug("Returning original content due to refinement error")
-                    # Return original content if refinement fails
-                    return sanitized_content, metadata
-            
-            return sanitized_content, metadata
-        
-        except Exception as e:
-            import traceback
-            llm_logger.error(f"Exception in process_model_response: {str(e)}")
-            llm_logger.error(traceback.format_exc())
-            raise ValueError(f"Error processing model response: {str(e)}")
-
-    def _refine_with_output_model(self, content, output_model_config):
-        """
-        Refine the content using the specified output model
-        
-        Args:
-            content (str): The content to refine
-            output_model_config (dict): The output model configuration containing model, instruction, and outputFormat
-            
-        Returns:
-            str: The refined content
-        """
-        try:
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Starting output model refinement with config: {json.dumps(output_model_config)}")
-            else:
-                llm_logger.info(f"Starting output model refinement with config: {json.dumps(output_model_config)}")
-            
-            # Get the model and instruction from the config
-            model_key = output_model_config.get('model')
-            instruction_key = output_model_config.get('instruction')
-            
-            if not model_key or not instruction_key:
-                if self.current_request_id:
-                    llm_logger.error(f"[{self.current_request_id}] Missing model_key or instruction_key in output_model_config")
-                else:
-                    llm_logger.error(f"Missing model_key or instruction_key in output_model_config")
-                return content
-            
-            # Get the instruction from the config
-            instruction = None
-            if 'llm' in self.config and 'instructions' in self.config['llm'] and instruction_key in self.config['llm']['instructions']:
-                instruction = self.config['llm']['instructions'][instruction_key]
-            
-            if not instruction:
-                if self.current_request_id:
-                    llm_logger.error(f"[{self.current_request_id}] Instruction '{instruction_key}' not found in configuration")
-                else:
-                    llm_logger.error(f"Instruction '{instruction_key}' not found in configuration")
-                return content
-            
-            output_format = output_model_config.get('outputFormat', 'plain')
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] OUTPUT MODEL: Using model={model_key}, instruction={instruction_key}, format={output_format}")
-            else:
-                llm_logger.info(f"OUTPUT MODEL: Using model={model_key}, instruction={instruction_key}, format={output_format}")
-
-            # Add output format to the instruction context
-            instruction_with_format = dict(instruction)  # Create a copy to avoid modifying the original
-            instruction_with_format['output_format'] = output_format
-
-            # Log the instruction with format
-            instruction_str = json.dumps(instruction_with_format, indent=2)
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] OUTPUT MODEL INSTRUCTION:\n{instruction_str}")
-            else:
-                llm_logger.info(f"OUTPUT MODEL INSTRUCTION:\n{instruction_str}")
-
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Calling invoke_model with model_key={model_key} for output refinement")
-            else:
-                llm_logger.info(f"Calling invoke_model with model_key={model_key} for output refinement")
-            
-            # Save current component config to prevent recursive refinement
-            original_component_config = None
-            for component in self.config['llm'].get('componentModelMapping', {}).values():
-                if component.get('outputModel', {}).get('model') == model_key:
-                    original_component_config = component
-                    break
-            
-            # Create a temporary config without output model to avoid recursive refinement
-            temp_component_config = None
-            if original_component_config:
-                temp_component_config = dict(original_component_config)
-                if 'outputModel' in temp_component_config:
-                    del temp_component_config['outputModel']
-                
-            # Invoke the output model with the temporary config to prevent recursive refinement
-            config_body, model_id = self.prepare_request_payload(model_key, instruction_with_format, content)
-            profile_arn = self.get_model_profile_arn(model_id)
-            body = json.dumps(config_body)
-            
-            # Make direct API call rather than using invoke_model to prevent recursion
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Direct API call to {model_id} for output refinement (preventing recursion)")
-            else:
-                llm_logger.info(f"Direct API call to {model_id} for output refinement (preventing recursion)")
-            
-            # Log the request payload with prettier formatting
-            config_str = json.dumps(config_body, indent=2)
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] REQUEST PAYLOAD for {model_id}:\n{config_str}")
-            else:
-                llm_logger.info(f"REQUEST PAYLOAD for {model_id}:\n{config_str}")
-            
-            # Call the API directly
             response = self.client.invoke_model(
-                modelId=profile_arn,
-                body=body
+                modelId=profile_arn,  # Can be model ID or profile ARN
+                body=body,
+                contentType='application/json',
+                accept='application/json'  # Standard accept header
             )
-            
-            # Process the response
-            if response and hasattr(response, 'get') and response.get('body'):
-                response_body_raw = response.get('body').read()
-                if response_body_raw:
-                    try:
-                        response_body = json.loads(response_body_raw)
-                        
-                        # Log the response payload with prettier formatting
-                        response_str = json.dumps(response_body, indent=2)
-                        if self.current_request_id:
-                            llm_logger.info(f"[{self.current_request_id}] RESPONSE PAYLOAD from {model_id}:\n{response_str}")
-                        else:
-                            llm_logger.info(f"RESPONSE PAYLOAD from {model_id}:\n{response_str}")
-                        
-                        # Extract content directly to avoid recursive process_model_response call
-                        refined_content = ""
-                        
-                        # Extract provider from model ID
-                        provider_name = model_id.split('.')[0] if '.' in model_id else ""
-                        
-                        # Extract content based on response structure and provider
-                        if 'anthropic' in model_id.lower():
-                            if "content" in response_body and isinstance(response_body["content"], list) and len(response_body["content"]) > 0:
-                                # Claude-3 response format
-                                first_content = response_body.get("content", [])[0]
-                                if isinstance(first_content, dict) and "text" in first_content:
-                                    refined_content = first_content.get("text", "")
-                            elif "completion" in response_body:
-                                # Claude-2 response format
-                                refined_content = response_body.get("completion", "")
-                        elif 'meta.llama' in model_id.lower():
-                            if "generation" in response_body:
-                                refined_content = response_body.get("generation", "")
-                            elif "text" in response_body:
-                                refined_content = response_body.get("text", "")
-                        elif "text" in response_body:
-                            refined_content = response_body.get("text", "")
-                        elif "completion" in response_body:
-                            refined_content = response_body.get("completion", "")
-                        else:
-                            # If we can't find a known pattern, try to extract content using common keys
-                            possible_keys = ["response", "answer", "result", "output", "message", "content"]
-                            for key in possible_keys:
-                                if key in response_body:
-                                    if isinstance(response_body[key], str):
-                                        refined_content = response_body[key]
-                                        break
-                                    elif isinstance(response_body[key], dict) and "text" in response_body[key]:
-                                        refined_content = response_body[key]["text"]
-                                        break
-                                    elif isinstance(response_body[key], list) and len(response_body[key]) > 0:
-                                        if isinstance(response_body[key][0], dict) and "text" in response_body[key][0]:
-                                            refined_content = response_body[key][0]["text"]
-                                            break
-                                        elif isinstance(response_body[key][0], str):
-                                            refined_content = response_body[key][0]
-                                            break
-                        
-                        # If still empty, use stringified response as last resort
-                        if not refined_content:
-                            refined_content = str(response_body)
-                        
-                        # Standardize output
-                        refined_content = self.standardize_output(refined_content, provider_name)
-                        
-                        # Extract the final answer part from the response
-                        final_answer = self.extract_final_answer(refined_content)
-                        
-                        if self.current_request_id:
-                            llm_logger.info(f"[{self.current_request_id}] Output model refinement completed successfully. Content length: {len(final_answer)}")
-                        else:
-                            llm_logger.info(f"Output model refinement completed successfully. Content length: {len(final_answer)}")
-                            
-                        return final_answer
-                    except json.JSONDecodeError as e:
-                        llm_logger.error(f"Error parsing output model response: {str(e)}")
-                        return content
-            
-            # If we couldn't process the response, return the original content
-            return content
-
+            llm_logger.info(f"{log_prefix}Successfully invoked model {model_id}.")
+            return response  # Return the raw boto3 response object
         except Exception as e:
-            if self.current_request_id:
-                llm_logger.error(f"[{self.current_request_id}] ERROR in _refine_with_output_model: {str(e)}")
-            else:
-                llm_logger.error(f"ERROR in _refine_with_output_model: {str(e)}")
-                
-            import traceback
-            llm_logger.error(traceback.format_exc())
-            # If refinement fails, return the original content
-            return content
+             llm_logger.error(f"{log_prefix}Error during model invocation for {model_id}: {e}", exc_info=True)
+             raise  # Re-raise the exception to be caught by the main method
 
-    def extract_final_answer(self, content):
+
+    def _process_response(self, model_id, api_response, model_key):
         """
-        Extract the final answer from a model's response, removing any chain-of-thought reasoning.
-        
-        Args:
-            content (str): The content to extract the final answer from
-            
+        Process the raw API response to extract content and metadata.
+        Handles potential refinement using output model configuration.
+
         Returns:
-            str: The extracted final answer
+            tuple: (raw_content_str, metadata_dict)
         """
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+        metadata = {"model_id": model_id, "model_key": model_key, "refinement_performed": False}
+        raw_content = ""
+
+        try:
+            response_body_stream = api_response.get('body')
+            if not response_body_stream:
+                raise ValueError("API response missing 'body'.")
+
+            response_body_raw = response_body_stream.read()
+            if not response_body_raw:
+                raise ValueError("API response body is empty.")
+
+            response_body = json.loads(response_body_raw)
+            # Log the *parsed* response payload
+            llm_logger.info(f"{log_prefix}Received response payload from {model_id}: {json.dumps(response_body, indent=2)}")
+
+
+            provider_name = self._get_provider_name(model_id)
+
+            # Delegate content extraction to provider-specific handlers
+            if provider_name == "anthropic":
+                raw_content = self._process_anthropic_response_content(response_body)
+            elif provider_name == "meta":
+                raw_content = self._process_meta_response_content(response_body)
+            else:
+                llm_logger.warning(f"{log_prefix}Provider '{provider_name}' for model {model_id} has no specific response processor. Using generic extraction.")
+                raw_content = self._process_generic_response_content(response_body)
+
+
+            return raw_content, metadata
+
+        except json.JSONDecodeError as e:
+            llm_logger.error(f"{log_prefix}Failed to parse JSON response from {model_id}. Raw response: '{response_body_raw[:500]}...' Error: {e}", exc_info=True)
+            raise ValueError(f"Invalid JSON response from {model_id}") from e
+        except Exception as e:
+            llm_logger.error(f"{log_prefix}Error processing response for {model_id}: {e}", exc_info=True)
+            raise ValueError(f"Error processing model response: {e}") from e
+
+
+    def _standardize_output(self, content, provider_name):
+        """
+        Standardize and clean the extracted content.
+        Removes provider-specific artifacts and attempts to extract the core answer.
+        """
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
         if not content:
             return ""
-        
-        # Look for the final answer marker
+
+        # Apply provider-specific cleaning first
+        if provider_name == "anthropic":
+            content = self._clean_anthropic_output(content)
+        elif provider_name == "meta":
+            content = self._clean_meta_output(content)
+        # Add other providers...
+
+        # General standardization (previously in extract_final_answer)
         final_answer_markers = [
-            "The final answer is:", 
-            "The final answer is :", 
-            "Final answer:", 
-            "Final answer :"
+            "The final answer is:", "The final answer is :",
+            "Final answer:", "Final answer :", "Answer:",
+            "```json", "```" # Common code block markers
         ]
-        
-        # Try each marker
+
+        cleaned_content = content # Start with potentially provider-cleaned content
+
         for marker in final_answer_markers:
-            if marker.lower() in content.lower():
-                # Find the marker position (case insensitive)
-                start_pos = content.lower().find(marker.lower())
-                # Get the text after the marker
-                answer_text = content[start_pos + len(marker):].strip()
-                
-                # Remove any trailing [/INST] tag
-                if "[/INST]" in answer_text:
-                    answer_text = answer_text.split("[/INST]")[0].strip()
-                
-                # Log the extraction
-                if self.current_request_id:
-                    llm_logger.info(f"[{self.current_request_id}] Extracted final answer using marker: '{marker}'")
-                else:
-                    llm_logger.info(f"Extracted final answer using marker: '{marker}'")
-                
-                return answer_text
-        
-        # If no marker is found, check for pipe-delimited format (common for outputModel columns)
-        pipe_lines = []
-        for line in content.split('\n'):
-            # Keep only lines that have the pipe delimiter for column format
-            if '|' in line and not line.strip().startswith('#') and not line.strip().startswith('//'):
-                pipe_lines.append(line.strip())
-        
-        # If we found pipe-delimited lines, return just those
-        if pipe_lines:
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Extracted pipe-delimited answer with {len(pipe_lines)} lines")
-            else:
-                llm_logger.info(f"Extracted pipe-delimited answer with {len(pipe_lines)} lines")
-            
-            return '\n'.join(pipe_lines)
-        
-        # If no structured format found, return the original content
-        if self.current_request_id:
-            llm_logger.info(f"[{self.current_request_id}] No structured format found, returning full content")
+            # Case-insensitive search
+            marker_lower = marker.lower()
+            content_lower = cleaned_content.lower()
+            start_pos = content_lower.find(marker_lower)
+
+            if start_pos != -1:
+                # Extract text *after* the marker
+                answer_text = cleaned_content[start_pos + len(marker):].strip()
+
+                # Handle potential closing markers (like ```)
+                if marker == "```json":
+                    end_marker_pos = answer_text.find("```")
+                    if end_marker_pos != -1:
+                        answer_text = answer_text[:end_marker_pos].strip()
+                elif marker == "```":
+                     # If we only found ```, assume it's the start, look for the end
+                     end_marker_pos = answer_text.find("```")
+                     if end_marker_pos != -1:
+                          answer_text = answer_text[:end_marker_pos].strip()
+
+                # Basic cleanup of common conversational fluff
+                lines = answer_text.splitlines()
+                final_lines = []
+                for line in lines:
+                    line_stripped = line.strip()
+                    if not line_stripped: continue
+                    if (line_stripped.lower().startswith(("here is", "here's", "sure," ,"okay," ,"ok,")) or
+                        line_stripped.lower().endswith(("as requested.", "as requested:", "let me know if you need more help.")) or
+                        line_stripped.lower() in ["certainly!", "absolutely!"]):
+                         continue
+                    final_lines.append(line_stripped)
+
+                if final_lines:
+                    cleaned_content = "\n".join(final_lines).strip()
+                    llm_logger.info(f"{log_prefix}Extracted answer using marker: '{marker}'")
+                    return cleaned_content # Return immediately once a marker is processed
+
+        # If no specific marker found, return the (potentially provider-cleaned) content
+        llm_logger.info(f"{log_prefix}No specific answer marker found. Returning cleaned content.")
+        return cleaned_content.strip()
+
+    # --- Provider-Specific Handlers ---
+
+    def _prepare_anthropic_request(self, base_body, formatted_instruction, user_text):
+        """Prepare request payload specifically for Anthropic (Claude) models."""
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+        payload = base_body # Start with the template from config
+
+        # Claude uses 'system' for instructions
+        if formatted_instruction:
+            payload['system'] = formatted_instruction
         else:
-            llm_logger.info(f"No structured format found, returning full content")
-        
-        return content
+            payload.pop('system', None) # Remove if no instruction
 
-    def standardize_output(self, content, provider_name):
-        """Standardize the output from different LLM providers"""
-        if not content:
-            return ""
-            
-        # Remove provider-specific formatting
-        if provider_name.lower() == "anthropic":
-            # Clean up Claude-specific formatting
-            # Remove XML tags, markdown code blocks, etc.
-            content = re.sub(r'<[^>]+>', '', content)
-        elif provider_name.lower() == "meta":
-            # Clean up Llama-specific formatting
-            pass  # Add specific cleanup for Llama if needed
-        elif provider_name.lower() == "mistral":
-            # Clean up Mistral-specific formatting
-            pass  # Add specific cleanup for Mistral if needed
-            
-        # General cleanup for all providers
-        # Trim extra whitespace
-        content = content.strip()
-        
-        return content
-        
-    def get_model_profile_arn(self, model_id):
-        """
-        Generate the inference profile ARN for a model ID
-        
-        Args:
-            model_id (str): The model ID
-            
-        Returns:
-            str: The inference profile ARN
-        """
-        # Get the inference profile ARN from environment variable
-        inference_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '')
-        if not inference_arn:
-            raise ValueError("AWS_BEDROCK_INFERENCE_ARN not configured")
-            
-        # Format the model ID for the ARN
-        # For AWS Bedrock, model IDs in ARNs should be in the format: us.anthropic.claude-3-sonnet-20240229-v1:0
-        if ':' in model_id:
-            base_id, version = model_id.split(':')
-            if '.' in base_id:
-                provider, model_name = base_id.split('.', 1)
-                if not model_id.startswith('us.'):
-                    formatted_model_id = f"us.{provider}.{model_name}:{version}"
-                else:
-                    formatted_model_id = model_id
-            else:
-                # If no provider in the ID
-                formatted_model_id = f"us.{model_id}"
+        # Claude uses 'messages' array for user/assistant turns
+        if user_text:
+            # Ensure messages is a list
+            if 'messages' not in payload or not isinstance(payload['messages'], list):
+                 payload['messages'] = []
+
+            # Replace or add the user message (assuming single-turn for now)
+            # More complex logic needed for multi-turn conversations
+            payload['messages'] = [{"role": "user", "content": user_text}]
         else:
-            # If no version in the ID
-            if '.' in model_id:
-                provider, model_name = model_id.split('.', 1)
-                if not model_id.startswith('us.'):
-                    formatted_model_id = f"us.{provider}.{model_name}"
-                else:
-                    formatted_model_id = model_id
-            else:
-                formatted_model_id = f"us.{model_id}"
-            
-        # Return the full inference profile ARN
-        return f"{inference_arn}/{formatted_model_id}"
-        
-    def invoke_model(self, model_key, instruction, user_text):
-        """
-        Invoke the model with the given instruction and user text
-        
-        Args:
-            model_key (str): The model key in the config
-            instruction (dict): The instruction to use for the request
-            user_text (str): The user's input text
-            
-        Returns:
-            str: The model's response content
-            dict: Additional metadata about the request/response
-        """
-        try:
-            # Prepare the request payload
-            config_body, model_id = self.prepare_request_payload(model_key, instruction, user_text)
-            
-            # Get the inference profile ARN
-            profile_arn = self.get_model_profile_arn(model_id)
-            
-            # Serialize to JSON string for the API request
-            body = json.dumps(config_body)
-            
-            # Log the request payload with prettier formatting
-            config_str = json.dumps(config_body, indent=2)
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] REQUEST PAYLOAD for {model_id}:\n{config_str}")
-            else:
-                llm_logger.info(f"REQUEST PAYLOAD for {model_id}:\n{config_str}")
-            
-            # Call the Bedrock API
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Invoking AWS Bedrock model: {model_id} with profile: {profile_arn}")
-            else:
-                llm_logger.info(f"Invoking AWS Bedrock model: {model_id} with profile: {profile_arn}")
-                
-            response = self.client.invoke_model(
-                modelId=profile_arn,
-                body=body
-            )
-            
-            # Get the component configuration if this is a known component
-            component_config = None
-            for component in self.config['llm'].get('componentModelMapping', {}).values():
-                # Check both modelInstructions and outputModel for the current model_key
-                is_instruction_model = any(mi.get('model') == model_key for mi in component.get('modelInstructions', []))
-                is_output_model = component.get('outputModel', {}).get('model') == model_key
-                
-                if is_instruction_model or is_output_model:
-                    component_config = component
-                    break
-            
-            # Process the response with component configuration
-            if self.current_request_id:
-                llm_logger.info(f"[{self.current_request_id}] Processing response from model: {model_id}")
-            else:
-                llm_logger.info(f"Processing response from model: {model_id}")
-                
-            content, metadata = self.process_model_response(model_id, response, component_config)
-            
-            # Log the response payload with prettier formatting
-            if hasattr(response, 'get') and response.get('body'):
-                try:
-                    response_body_raw = response.get('body').read()
-                    if response_body_raw:
-                        response_body = json.loads(response_body_raw)
-                        response_str = json.dumps(response_body, indent=2)
-                        if self.current_request_id:
-                            llm_logger.info(f"[{self.current_request_id}] RESPONSE PAYLOAD from {model_id}:\n{response_str}")
-                        else:
-                            llm_logger.info(f"RESPONSE PAYLOAD from {model_id}:\n{response_str}")
-                except Exception as e:
-                    llm_logger.error(f"Error logging response payload: {str(e)}")
-            
-            # Also log refinement status if refinement was performed
-            if metadata.get('refinement_performed', False):
-                if self.current_request_id:
-                    llm_logger.info(f"[{self.current_request_id}] OUTPUT MODEL refinement was performed for {model_id}")
-                else:
-                    llm_logger.info(f"OUTPUT MODEL refinement was performed for {model_id}")
-            
-            # Return the content and metadata
-            return content, {
-                "model_id": model_id,
-                "model_key": model_key,
-                "refinement_performed": metadata.get('refinement_performed', False)
-            }
-            
-        except Exception as e:
-            if self.current_request_id:
-                llm_logger.error(f"[{self.current_request_id}] Error invoking model {model_key}: {str(e)}")
-            else:
-                llm_logger.error(f"Error invoking model {model_key}: {str(e)}")
-            raise ValueError(f"Error invoking model: {str(e)}")
+            payload.pop('messages', None) # Remove if no user text
 
-# Load environment variables from .env file in the project root
-env_path = project_root / 'global' / '.env'
-load_dotenv(env_path)
+        # Remove Llama-specific 'prompt' if it exists in the base_body
+        payload.pop('prompt', None)
 
-def load_config():
-    """Load the models configuration from global/config.json"""
-    try:
-        config_path = project_root / 'global' / 'config.json'
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        
-        # Support both old structure (modelIds) and new structure (models)
-        if 'llm' in config:
-            if 'models' in config['llm']:
-                return config
-            elif 'modelIds' in config['llm']:
-                return config
-            else:
-                llm_logger.warning("Config loaded but 'models' or 'modelIds' not found under 'llm'")
-                return {}
+        # Ensure required 'max_tokens' exists (Bedrock uses max_tokens)
+        if 'max_tokens' not in payload:
+            payload['max_tokens'] = 1024 # Add a default if missing
+            llm_logger.warning(f"{log_prefix}Anthropic request 'max_tokens' was missing, defaulted to 1024.")
+        if 'anthropic_version' not in payload:
+             payload['anthropic_version'] = "bedrock-2023-05-31" # Default version if missing
+             llm_logger.warning(f"{log_prefix}Anthropic request 'anthropic_version' was missing, defaulted to bedrock-2023-05-31.")
+
+
+        return payload
+
+    def _prepare_meta_request(self, base_body, formatted_instruction, user_text):
+        """Prepare request payload specifically for Meta (Llama) models."""
+        log_prefix = f"[{self.current_request_id}] " if self.current_request_id else ""
+        payload = base_body
+
+        # Llama uses a single 'prompt' field, often with special tokens
+        # Format: <s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{user_message} [/INST]
+        # Simplified format if no system prompt: <s>[INST] {user_message} [/INST]
+
+        prompt_parts = ["<s>[INST]"]
+        if formatted_instruction:
+            prompt_parts.append(f"<<SYS>>\n{formatted_instruction}\n<</SYS>>\n")
+
+        if user_text:
+             # Add newline separation if instruction also exists
+             if formatted_instruction:
+                  prompt_parts.append("\n")
+             prompt_parts.append(user_text)
         else:
-            llm_logger.warning("Config loaded but 'llm' section not found")
-            return {}
-    except Exception as e:
-        llm_logger.error(f"Error loading config.json: {e}")
-        return {}
+             llm_logger.warning(f"{log_prefix}Preparing Meta request with no user_text. Prompt may be incomplete.")
 
-def generate_inference_profiles(model_keys):
-    """Generate inference profiles for each model ID using the base ARN from .env"""
-    inference_profiles = {}
-    
-    # Get the base ARN from environment variable
-    base_arn = os.getenv('AWS_BEDROCK_INFERENCE_ARN', '').strip('"\'')
-    
-    if not base_arn:
-        return {}
-    
-    # For each model key, create a corresponding inference profile ARN
-    for model_key in model_keys:
-        # Get the actual model ID from config
-        model_id = get_model_id_from_key(model_key)
-        if not model_id:
-            continue
-            
-        # Convert model ID format to match what's expected in the ARN
-        # Example: "anthropic.claude-3-7-sonnet-20250219-v1:0" -> "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-        formatted_model_id = model_id.replace('.', '-', 1).replace('-', '.', 1)
-        if not formatted_model_id.startswith('us.'):
-            formatted_model_id = 'us.' + model_id
-        
-        # Create the full inference profile ARN
-        inference_arn = f"{base_arn}/{formatted_model_id}"
-        
-        # Add to inference profiles dictionary
-        inference_profiles[model_key] = inference_arn
-    
-    return inference_profiles
+        prompt_parts.append(" [/INST]")
+        payload['prompt'] = "".join(prompt_parts)
 
-def get_model_id_from_key(config, model_key):
-    """Get the model ID from a model key in the config"""
-    if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
-        return config['llm']['models'][model_key]['modelId']
-    return None
+        # Remove Anthropic-specific fields if they exist
+        payload.pop('system', None)
+        payload.pop('messages', None)
+        payload.pop('anthropic_version', None)
 
-def get_model_config(config, model_key):
-    """Get the full model configuration for a model key"""
-    if 'llm' in config and 'models' in config['llm'] and model_key in config['llm']['models']:
-        return config['llm']['models'][model_key]
-    return None
+        # Ensure required Llama parameters like 'max_gen_len'
+        if 'max_gen_len' not in payload:
+            payload['max_gen_len'] = 512 # Default if missing
+            llm_logger.warning(f"{log_prefix}Meta request 'max_gen_len' was missing, defaulted to 512.")
 
-def test_model_with_inference_profile(bedrock_runtime, model_id, profile_arn, config):
-    """Test a specific model using its inference profile"""
-    llm_logger.info(f"Testing model: {model_id}")
-    llm_logger.info(f"Using inference profile: {profile_arn}")
-    bedrock_service = BedrockService()
-    
-    try:
-        # Get model configuration from config.json if available
-        model_config = get_model_config(config, model_id)
-        
-        # Check if we have a request body in the config
-        if model_config and 'APIRequest' in model_config and 'body' in model_config['APIRequest']:
-            # Get the request body from config
-            config_body = model_config['APIRequest']['body']
-            
-            # If the body is a string (JSON string), parse it
-            if isinstance(config_body, str):
-                try:
-                    config_body = json.loads(config_body)
-                except json.JSONDecodeError:
-                    llm_logger.warning(f"Could not parse body JSON from config for {model_id}")
-            
-            llm_logger.info(f"Using request body from config.json for {model_id}")
-            
-            # Modify the payload to use a simple test prompt
-            if "anthropic.claude" in model_id:
-                # Modify Claude payload
-                if 'messages' in config_body:
-                    config_body['messages'] = [
-                        {"role": "user", "content": "Hello! How are you today? Please reply with a brief greeting."}
-                    ]
-                # Limit tokens for testing
-                if 'max_tokens' in config_body:
-                    config_body['max_tokens'] = min(config_body['max_tokens'], 50)
-                
-            elif "meta.llama" in model_id or "mistral" in model_id:
-                # Modify Llama/Mistral payload
-                if 'prompt' in config_body:
-                    config_body['prompt'] = "Hello! How are you today? Please reply with a brief greeting."
-                # Limit tokens for testing
-                if 'max_gen_len' in config_body:
-                    config_body['max_gen_len'] = min(config_body['max_gen_len'], 50)
-                if 'max_tokens' in config_body:
-                    config_body['max_tokens'] = min(config_body['max_tokens'], 50)
-            
-            # Serialize to JSON string for the API request
-            body = json.dumps(config_body)
-            
-        else:
-            # If no config available, use fallback defaults based on model type
-            llm_logger.info(f"No config found for {model_id}, using default payload structure")
-            
-            if "anthropic.claude" in model_id:
-                # Claude models use this format
-                body = json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 50,
-                    "temperature": 0.7,
-                    "messages": [
-                        {"role": "user", "content": "Hello! How are you today? Please reply with a brief greeting."}
-                    ]
-                })
-            elif "meta.llama" in model_id:
-                # Meta/Llama models use this format
-                body = json.dumps({
-                    "prompt": "Hello! How are you today? Please reply with a brief greeting.",
-                    "max_gen_len": 50,
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                })
-            elif "mistral" in model_id:
-                # Mistral models use this format
-                body = json.dumps({
-                    "prompt": "Hello! How are you today? Please reply with a brief greeting.",
-                    "max_tokens": 50,
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                })
-            else:
-                # Generic format for other models
-                body = json.dumps({
-                    "prompt": "Hello! How are you today? Please reply with a brief greeting.",
-                    "max_tokens": 50,
-                    "temperature": 0.7,
-                })
-        
-        # Call the Bedrock API with the inference profile ARN
-        response = bedrock_runtime.invoke_model(
-            modelId=profile_arn,  # Use the profile ARN
-            body=body
-        )
-        
-        # Parse the response based on the model type
-        response_body = json.loads(response.get('body').read())
-        
-        # Extract raw content based on model type
-        if "anthropic.claude" in model_id and "claude-3" in model_id:
-            content = response_body.get("content", [{"text": ""}])[0]["text"]
-        elif "meta.llama" in model_id:
-            content = response_body.get("generation", "")
-        elif "mistral" in model_id:
-            content = response_body.get("outputs", [{"text": ""}])[0].get("text", "")
+        return payload
+
+    def _prepare_generic_request(self, base_body, formatted_instruction, user_text):
+        """Generic request preparation for unknown model types."""
+        payload = base_body
+        prompt = f"{formatted_instruction}\n\nUser: {user_text}\nAssistant:"
+        payload['prompt'] = prompt # Assume a 'prompt' field works
+        return payload
+
+    def _process_anthropic_response_content(self, response_body):
+        """Extract content from an Anthropic response body."""
+        if not isinstance(response_body, dict): return ""
+
+        # Claude v3+ format
+        if "content" in response_body and isinstance(response_body["content"], list):
+            text_parts = [
+                item.get("text", "")
+                for item in response_body["content"]
+                if isinstance(item, dict) and item.get("type") == "text"
+            ]
+            return "\n".join(text_parts).strip()
+        # Claude v2 format
         elif "completion" in response_body:
-            content = response_body.get("completion", "")
+            return response_body.get("completion", "").strip()
         else:
-            content = str(response_body)
-        
-        llm_logger.info("Test successful!")
-        llm_logger.info(f"Raw response: {content[:100]}...")
-        
-        # Get provider name from model ID
-        provider_name = model_id.split('.')[0] if '.' in model_id else ""
-        
-        # Sanitize output using the standardize_output function
-        sanitized_content = bedrock_service.standardize_output(content, provider_name)
-        
-        llm_logger.info(f"Sanitized response: {sanitized_content[:100]}...")
-        llm_logger.info(f"Sanitization {'changed the output' if content != sanitized_content else 'did not change the output'}")
-        
-        return True
-        
-    except Exception as e:
-        llm_logger.error(f"Error testing model: {str(e)}")
-        return False
+             llm_logger.warning(f"Could not find 'content' list or 'completion' key in Anthropic response: {response_body}")
+             return "" # Or maybe str(response_body) as fallback?
 
-def test_aws_connection():
-    """Test AWS connection and verify models from config.json"""
-    try:
-        # Configure the AWS SDK
-        config = Config(
-            region_name=os.getenv('AWS_REGION', 'us-east-1'),
-            retries=dict(max_attempts=3),
-            connect_timeout=5,
-            read_timeout=60
-        )
+    def _process_meta_response_content(self, response_body):
+        """Extract content from a Meta response body."""
+        if not isinstance(response_body, dict): return ""
 
-        # First, test basic AWS connectivity using STS
-        llm_logger.info("Testing AWS connectivity...")
-        access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID', '')
-        llm_logger.info(f"Using Access Key ID: {access_key[:5]}..." if access_key else "AWS_BEDROCK_ACCESS_KEY_ID not found")
-        llm_logger.info(f"Region: {os.getenv('AWS_BEDROCK_REGION', 'Not configured')}")
-        
-        session = boto3.Session(
-            aws_access_key_id=os.getenv('AWS_BEDROCK_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY'),
-            region_name=os.getenv('AWS_BEDROCK_REGION', 'us-east-1')
-        )
-
-        try:
-            sts = session.client('sts', config=config)
-            identity = sts.get_caller_identity()
-            llm_logger.info("Successfully connected to AWS!")
-            llm_logger.info(f"Account ID: {identity['Account']}")
-            llm_logger.info(f"User ARN: {identity['Arn']}")
-        except Exception as e:
-            llm_logger.error(f"AWS connectivity test failed: {str(e)}")
-            return
-        
-        # Test Bedrock runtime connection
-        llm_logger.info("Testing Bedrock runtime connection...")
-        try:
-            bedrock_runtime = session.client('bedrock-runtime', config=config)
-            llm_logger.info("Successfully connected to Bedrock runtime!")
-        except Exception as e:
-            llm_logger.error(f"Bedrock runtime connection failed: {str(e)}")
-            return
-        
-        # Load configuration from config.json
-        config_data = load_config()
-        
-        # Check for models in the new structure
-        if 'llm' in config_data and 'models' in config_data['llm']:
-            model_keys = list(config_data['llm']['models'].keys())
-            model_structure = "new"
-            llm_logger.info("Using new config structure with 'models'")
-        # Check for models in the old structure
-        elif 'llm' in config_data and 'modelIds' in config_data['llm']:
-            model_keys = list(config_data['llm']['modelIds'].keys())
-            model_structure = "old"
-            llm_logger.info("Using old config structure with 'modelIds'")
+        # Llama format (e.g., Llama 2/3 via Bedrock)
+        if "generation" in response_body:
+            return response_body.get("generation", "").strip()
+        # Some variations might use 'outputs' or 'text'
+        elif "outputs" in response_body and isinstance(response_body["outputs"], list) and response_body["outputs"]:
+             first_output = response_body["outputs"][0]
+             if isinstance(first_output, dict) and "text" in first_output:
+                  return first_output.get("text", "").strip()
+        elif "text" in response_body:
+             return response_body.get("text", "").strip()
         else:
-            llm_logger.warning("No model definitions found in config.json. Exiting.")
-            return
-            
-        if not model_keys:
-            llm_logger.warning("No models found in config.json. Exiting.")
-            return
-            
-        # Display models found
-        llm_logger.info(f"Found {len(model_keys)} models in config.json:")
-        for model_key in model_keys:
-            model_id = get_model_id_from_key(config_data, model_key)
-            llm_logger.info(f"- {model_key}: {model_id}")
-            
-        # Generate inference profiles for each model
-        llm_logger.info("Generating inference profiles for models...")
-        inference_profiles = generate_inference_profiles(model_keys)
-        
-        if not inference_profiles:
-            llm_logger.warning("No inference profiles could be generated. Please set AWS_BEDROCK_INFERENCE_ARN in your .env file.")
-            return
-            
-        llm_logger.info(f"Generated {len(inference_profiles)} inference profiles")
-        
-        # Test each model with its inference profile
-        llm_logger.info(f"Testing model connectivity...")
-        
-        for model_key, profile_arn in inference_profiles.items():
-            model_id = get_model_id_from_key(config_data, model_key)
-            try:
-                test_model_with_inference_profile(bedrock_runtime, model_key, profile_arn, config_data)
-                llm_logger.info(f"- {model_key}: {model_id} : Connected Successfully")
-            except Exception as e:
-                llm_logger.error(f"- {model_key}: {model_id} : Connection Failed ({str(e)[:100]}...)")
-                
-    except Exception as e:
-        llm_logger.error(f"Error during AWS connection test: {str(e)}")
+             llm_logger.warning(f"Could not find 'generation', 'outputs', or 'text' key in Meta response: {response_body}")
+             return ""
 
+    def _process_generic_response_content(self, response_body):
+        """Generic content extraction for unknown model types."""
+        if isinstance(response_body, str): return response_body
+        if not isinstance(response_body, dict): return str(response_body)
+
+        # Try common keys
+        for key in ["text", "content", "completion", "generation", "output", "answer", "response"]:
+            if key in response_body:
+                value = response_body[key]
+                if isinstance(value, str): return value.strip()
+                if isinstance(value, list) and value: # Handle lists like Claude's content
+                     if isinstance(value[0], dict) and "text" in value[0]: return value[0]["text"].strip()
+                     if isinstance(value[0], str): return value[0].strip()
+        return str(response_body) # Fallback to string representation
+
+
+    def _clean_anthropic_output(self, content):
+        """Clean provider-specific artifacts from Anthropic output."""
+        # Remove XML-like tags sometimes added by Claude
+        content = re.sub(r'<[^>]+>', '', content)
+        # Remove markdown emphasis
+        content = content.replace("**", "").replace("*", "")
+        return content.strip()
+
+    def _clean_meta_output(self, content):
+        """Clean provider-specific artifacts from Meta output."""
+        # Remove Llama instruction tags if they bleed into the output
+        content = content.replace("[INST]", "").replace("[/INST]", "").replace("<s>", "").replace("</s>", "")
+        # Llama sometimes starts with " " after the [/INST] tag
+        return content.strip()
+
+    # --- Test Payload Preparation ---
+    def _prepare_test_request(self, model_key):
+        """Prepares a minimal, safe request payload for testing a given model."""
+        model_config = self._get_model_config(model_key)
+        model_id = model_config['modelId']
+        provider_name = self._get_provider_name(model_id)
+        base_body = json.loads(json.dumps(model_config.get('body', {})))  # Safe copy
+
+        # Test strings for both user prompt and system instructions
+        test_user_prompt = "Hello! Please reply with a short, simple greeting like 'Hi there!'."
+        test_system_instructions = "System: This is a test request. Execute it in demo mode."
+        max_tokens_test = 30  # Keep it very short
+
+        # The current_request_id will contain "startup_test" during startup tests
+        is_startup_test = self.current_request_id and "startup_test" in self.current_request_id
+        
+        # For startup tests, we now prepare a simplified payload since we won't actually invoke the model
+        if is_startup_test:
+            llm_logger.info(f"Preparing simplified test request for {model_key} during startup test")
+            # Return a very minimal payload since it won't be used for actual invocation
+            return {"test": True, "message": "Test payload for startup connectivity test"}
+
+        # For regular tests (not during startup), continue with normal test payload
+        if provider_name == "anthropic":
+             # For anthropic, pass both system instructions and the user prompt.
+             payload = self._prepare_anthropic_request(base_body, test_system_instructions, test_user_prompt)
+             payload['max_tokens'] = max_tokens_test
+             return payload
+        elif provider_name == "meta":
+             # For meta, pass both system instructions and the user prompt.
+             payload = self._prepare_meta_request(base_body, test_system_instructions, test_user_prompt)
+             payload['max_gen_len'] = max_tokens_test
+             # Ensure temperature is reasonable for a simple test
+             payload['temperature'] = min(payload.get('temperature', 0.5), 0.7)
+             payload['top_p'] = min(payload.get('top_p', 0.9), 0.9)
+             return payload
+        else:
+             # For generic test payloads, concatenate system instructions and user prompt.
+             payload = {
+                 'prompt': f"{test_system_instructions}\n{test_user_prompt}",
+                 'max_tokens': max_tokens_test
+             }
+             # Merge common parameters from base_body if they exist
+             for key in ['temperature', 'top_p', 'top_k']:
+                 if key in base_body:
+                     payload[key] = base_body[key]
+             return payload
+
+    
+
+# --- Main Execution ---
 if __name__ == "__main__":
-    test_aws_connection() 
+    llm_logger.info("Running Bedrock LLM Service directly for connection test.")
+
+    # Instantiate the service (loads config automatically)
+    try:
+        bedrock_service = BedrockService()
+
+        # Run the connection test
+        test_passed = bedrock_service.test_aws_connection()
+
+        if test_passed:
+            llm_logger.info("Main: AWS Connection Test Completed Successfully.")
+        else:
+            llm_logger.error("Main: AWS Connection Test Failed.")
+            sys.exit(1) # Exit with error code if tests fail
+
+    except ConnectionError as ce:
+         llm_logger.critical(f"Failed to initialize BedrockLLMService due to connection error: {ce}", exc_info=True)
+         sys.exit(1)
+    except Exception as e:
+         llm_logger.critical(f"An unexpected error occurred during service initialization or testing: {e}", exc_info=True)
+         sys.exit(1)

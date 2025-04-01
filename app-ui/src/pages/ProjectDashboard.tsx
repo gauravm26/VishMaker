@@ -3,14 +3,12 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'; // Impo
 import CreateProjectForm from '@features/project_management/ui/components/CreateProjectForm';
 import ProjectList from '@features/project_management/ui/components/ProjectList';
 import CanvasViewer from '@/components/canvas/CanvasViewer';
-import UserFlowTable from '@/components/UserFlowTable';
 
 const ProjectDashboard: React.FC = () => {
     const [listRefreshKey, setListRefreshKey] = useState<number>(0);
     const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
     const [canvasRefreshNonce, setCanvasRefreshNonce] = useState<number>(0);
     const [generatingProjectId, setGeneratingProjectId] = useState<number | null>(null);
-    const [activeTab, setActiveTab] = useState<'canvas' | 'userflow'>('userflow');
 
     // --- Use a ref to track the latest selectedProjectId for the async callback ---
     // This avoids issues with stale closures in handleGenerationComplete
@@ -106,40 +104,15 @@ const ProjectDashboard: React.FC = () => {
             
             {/* Right Pane */}
             <div className="w-3/4 p-4 flex flex-col overflow-hidden bg-white dark:bg-gray-900"> {/* Adjusted bg */}
-                <div className="flex mb-3 shrink-0">
-                    <h2 className="text-xl font-semibold dark:text-gray-100 flex-grow">
-                        {selectedProjectId !== null ? `Project ${selectedProjectId}` : 'No project selected'}
-                    </h2>
-                    <div className="flex border rounded overflow-hidden">
-                        <button 
-                            className={`px-4 py-1 ${activeTab === 'userflow' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-                            onClick={() => setActiveTab('userflow')}
-                        >
-                            User Flow
-                        </button>
-                        <button 
-                            className={`px-4 py-1 ${activeTab === 'canvas' ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-                            onClick={() => setActiveTab('canvas')}
-                        >
-                            Canvas
-                        </button>
-                    </div>
-                </div>
+                <h2 className="text-xl font-semibold mb-3 shrink-0 dark:text-gray-100">
+                    {selectedProjectId !== null ? `Project ${selectedProjectId}` : 'No project selected'}
+                </h2>
                 
                 <div className="flex-grow border rounded shadow-sm bg-gray-100 dark:bg-gray-800 relative overflow-hidden">
-                    {activeTab === 'canvas' ? (
-                        <CanvasViewer
-                            projectId={selectedProjectId}
-                            refreshTrigger={canvasRefreshNonce}
-                        />
-                    ) : (
-                        <div className="p-4 h-full overflow-auto">
-                            <UserFlowTable
-                                projectId={selectedProjectId}
-                                refreshTrigger={canvasRefreshNonce}
-                            />
-                        </div>
-                    )}
+                    <CanvasViewer
+                        projectId={selectedProjectId}
+                        refreshTrigger={canvasRefreshNonce}
+                    />
                 </div>
             </div>
         </div>

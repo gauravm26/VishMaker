@@ -1,0 +1,43 @@
+1. Python Virtual Environment Activated: Python 3.13.2
+2. Existing Processes: None
+3. PostgreSQL Connection: Database 'vishmaker_db' already exists
+Success, Database: vishmaker_db
+2025-04-01 16:17:02,061 [INFO] --- LLM Service Script Start ---
+2025-04-01 16:17:02,061 [INFO] LLM logging initialized
+2025-04-01 16:17:02,062 [INFO] Loaded environment variables from /Users/gauravmishra/Documents/Idea/VishGoogle/global/.env
+2025-04-01 16:17:02,062 [INFO] Successfully loaded configuration from /Users/gauravmishra/Documents/Idea/VishGoogle/global/config.json
+2025-04-01 16:17:02,338 [INFO] AWS Bedrock client initialized successfully in region us-east-1
+2025-04-01 16:17:02,339 [INFO] [startup_test_model1] Received request for model_key: model1 (test mode)
+2025-04-01 16:17:02,339 [INFO] [startup_test_model1] Step 1: Preparing test request for model1
+2025-04-01 16:17:02,339 [INFO] Preparing simplified test request for model1 during startup test
+2025-04-01 16:17:02,339 [INFO] [startup_test_model1] Bypassing actual model invocation during startup test for model1
+2025-04-01 16:17:02,339 [INFO] [startup_test_model2] Received request for model_key: model2 (test mode)
+2025-04-01 16:17:02,339 [INFO] [startup_test_model2] Step 1: Preparing test request for model2
+2025-04-01 16:17:02,339 [INFO] Preparing simplified test request for model2 during startup test
+2025-04-01 16:17:02,339 [INFO] [startup_test_model2] Bypassing actual model invocation during startup test for model2
+2025-04-01 16:17:02,339 [INFO] [startup_test_model3] Received request for model_key: model3 (test mode)
+2025-04-01 16:17:02,339 [INFO] [startup_test_model3] Step 1: Preparing test request for model3
+2025-04-01 16:17:02,339 [INFO] Preparing simplified test request for model3 during startup test
+2025-04-01 16:17:02,339 [INFO] [startup_test_model3] Bypassing actual model invocation during startup test for model3
+2025-04-01 16:17:02,339 [INFO] [startup_test_model4] Received request for model_key: model4 (test mode)
+2025-04-01 16:17:02,339 [INFO] [startup_test_model4] Step 1: Preparing test request for model4
+2025-04-01 16:17:02,339 [INFO] Preparing simplified test request for model4 during startup test
+2025-04-01 16:17:02,339 [INFO] [startup_test_model4] Bypassing actual model invocation during startup test for model4
+4. LLM Models
+Logging LLM interactions to: /Users/gauravmishra/Documents/Idea/VishGoogle/logs/llm_interactions.log
+    - model1: anthropic.claude-3-7-sonnet-20250219-v1:0 : Success
+    - model2: meta.llama3-3-70b-instruct-v1:0 : Success
+    - model3: meta.llama3-1-8b-instruct-v1:0 : Success
+    - model4: anthropic.claude-3-5-sonnet-20241022-v2:0 : Success
+Starting backend server on port 8000...
+Starting frontend server on port 3000...
+5. Started backend server on http://localhost:8000: PID 33503
+6. Started frontend server on http://localhost:3000: PID 33504
+
+Application started successfully! Log saved to /Users/gauravmishra/Documents/Idea/VishGoogle/logs/startup.log
+Frontend is running at: [1mhttp://localhost:3000[0m
+Backend is running at: [1mhttp://localhost:8000[0m
+
+[0;33mNOTE: Check logs/frontend.log and logs/backend.log for detailed output[0m
+Stopping servers...
+Servers stopped.

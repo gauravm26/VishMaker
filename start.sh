@@ -10,6 +10,9 @@ BOLD='\033[1m'
 # Change Directory to the root directory
 cd /Users/gauravmishra/Documents/Idea/VishGoogle
 
+#Clear the logs directory
+rm -rf logs/*
+
 # Load environment variables
 set -a
 source global/.env
@@ -147,17 +150,32 @@ try:
         # First print header
         print('4. LLM Models')
         
-        # For each model, test connection and print status
+        # For each model, test connection using get_model_response
         from infrastructure.llms.llm_models import BedrockService
         bedrock = BedrockService()
         if not bedrock.client:
             raise Exception('Could not connect to AWS Bedrock')
         
-        for model_id, model_data in config['llm']['models'].items():
-            model_name = model_data['model']
-            # Just print success without actual testing
-            # In production, you'd want to test the actual connection
-            print(f'    - {model_id}: {model_name} : Success')
+        # Test each model with test_mode=True
+        for model_key in config['llm']['models'].keys():
+            try:
+                # When test_mode=True and during startup, we bypass actual model invocation
+                content, metadata = bedrock.get_model_response(
+                    model_key=model_key,
+                    instruction=None,
+                    user_text=None,
+                    request_id=f'startup_test_{model_key}',
+                    test_mode=True
+                )
+                
+                if content is not None:
+                    model_id = metadata.get('model_id', 'unknown')
+                    print(f'    - {model_key}: {model_id} : Success')
+                else:
+                    error = metadata.get('error', 'Unknown error')
+                    print(f'    - {model_key}: Error - {error}')
+            except Exception as model_error:
+                print(f'    - {model_key}: Error - {str(model_error)}')
     else:
         print('No models defined in config.json')
 except Exception as e:

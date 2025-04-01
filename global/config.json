@@ -47,6 +47,30 @@
           "temperature": 0.6,
           "top_p": 0.9
         }
+      },
+      "model4": {
+        "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 200,
+          "top_k": 250,
+          "stop_sequences": [],
+          "temperature": 1,
+          "top_p": 0.999,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello world"
+                }
+              ]
+            }
+          ]
+        }
       }
     },
     "instructions": {
@@ -112,19 +136,41 @@
         ]
       },
       "instruction4": {
-        "Role": "You are an advanced content refinement agent. Your task is to process raw output from an LLM and produce a final, polished answer without any internal chain-of-thought or meta-commentary.",
-        "Objective": "Refine the provided raw output by removing internal reasoning and duplicate content, and format it according to the value of the 'output_format' variable.",
-        "ConstraintsAndGuidelines": {
-          "Input": "The raw output may contain internal notes and multiple drafts. Ignore all such content.",
-          "Output Word Limit": "Should not be more than the input word limit",
-          "RemoveChainOfThought": "Eliminate any internal reasoning, chain-of-thought, or meta-commentary. Discard all repeated or redundant statements.",
-          "Output": "If 'output_format' is 'plain', produce a clear, concise, and polished natural-language text. If 'output_format' is 'columns', format the output into two columns with each line in the format 'Column1 text | Column2 text'.",
-          "Formatting": "Ensure the final output is coherent, error-free, and free of any annotations, repeated phrases, or extraneous details. The final answer should strictly be the refined content only."
+        "role": "Text Refinement Agent",
+        "task_description": "Process the raw text provided between specified markers. Remove all extraneous content (reasoning, meta-commentary, duplicates, etc.). Format the remaining core content according to the 'output_format' variable. Output ONLY the final refined and formatted text.",
+        "input_delimiters": {
+          "start_marker": "=== RAW TEXT START ===",
+          "end_marker": "=== RAW TEXT END ==="
         },
-        "Example": [
-          "Plain: 'A comprehensive e-commerce solution for home decor products, enhanced with an integrated blog and DIY tutorial section.'",
-          "Columns: 'E-commerce solution | Comprehensive platform for home decor with integrated blog and DIY tutorials.'"
-        ]
+        "refinement_rules": [
+          "Remove ALL introductory phrases.",
+          "Remove ALL concluding remarks or summaries.",
+          "Remove ALL meta-commentary (e.g., 'Here is the refined text:', 'I will now format...', 'Step 1:...').",
+          "Remove ALL explanations of the refinement process or instructions.",
+          "Remove ALL internal reasoning, chain-of-thought, or self-correction.",
+          "Remove ALL conversational text, apologies, or confirmations.",
+          "Remove ALL repeated or redundant statements/content.",
+          "Ensure the final text is coherent and grammatically correct."
+        ],
+        "formatting_rules": {
+          "variable_name": "output_format",
+          "formats": {
+            "plain": {
+              "description": "Output ONLY the refined text as a single, continuous block of natural language."
+            },
+            "columns": {
+              "description": "Format the refined output into exactly two columns. Each line MUST follow the format 'Column1 text | Column2 text'. Ensure consistent spacing around the '|' separator."
+            }
+          }
+        },
+        "output_constraint": "CRITICAL: Your entire response MUST contain ONLY the final, refined, and formatted text as specified by the formatting rules. Do NOT include the input delimiters, variable values, or any other text whatsoever.",
+        "variables": {
+          "output_format": "{output_format}"
+        },
+        "example": {
+          "plain": "A comprehensive e-commerce solution for home decor products, enhanced with an integrated blog and DIY tutorial section.",
+          "columns": "E-commerce solution | Comprehensive platform for home decor with integrated blog and DIY tutorials."
+        }
       }
     },
     "componentModelMapping": {
@@ -137,7 +183,7 @@
           }
         ],
         "outputModel": {
-          "model": "model2",
+          "model": "model4",
           "instruction": "instruction4",
           "outputFormat": "plain"
         }
@@ -155,7 +201,7 @@
           }
         ],
         "outputModel": {
-          "model": "model3",
+          "model": "model4",
           "instruction": "instruction4",
           "outputFormat": "columns"
         }
