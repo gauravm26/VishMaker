@@ -171,7 +171,7 @@ class BedrockService:
             llm_logger.error(f"{log_prefix}Bedrock client is not initialized. Cannot invoke model.")
             return None, {"error": "Client not initialized", "model_key": model_key}
 
-        # Default empty values if None is provided
+        # Default empty values if None is provided for Test Mode
         instruction = instruction or {"System: This is a test request. Execute it in demo mode."}
         user_text = user_text or  "Hello! Please reply with a short, simple greeting like 'Hi there!'."
 
@@ -274,7 +274,7 @@ class BedrockService:
 
         formatted_lines = []
         for key, value in instruction.items():
-            if key in ['variables', 'example', 'output_format']: continue # Skip structural keys
+            if key in ['variables', 'example']: continue # Skip structural keys
 
             display_key = re.sub(r'([a-z])([A-Z])', r'\1 \2', key).replace('_', ' ').title()
 

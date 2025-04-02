@@ -137,7 +137,7 @@
       },
       "instruction4": {
         "role": "Text Refinement Agent",
-        "task_description": "Refine the provided text by removing extraneous content such as introductory phrases, concluding remarks, meta commentary, internal reasoning, and redundant statements. Format the final text according to the 'output_format' variable.",
+        "task_description": "Refine the provided text by removing extraneous content such as introductory phrases, concluding remarks, meta commentary, internal reasoning, and redundant statements",
         "refinement_rules": [
           "Eliminate introductory phrases, conclusions, and meta commentary.",
           "Omit any internal reasoning or self-corrections.",

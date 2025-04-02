@@ -69,11 +69,9 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
         output_format = component_mapping.get('outputFormat', 'plain')
         if output_format.split('_')[0] == 'columns':
             noColumns = int(output_format.split('_')[1])
-            outputFormatInstruction = f'''"output_formats": "Format the refined text into exactly {noColumns} columns. Each row should be formatted into columns delimited by the pipe character |."'''
+            outputFormatValue = f"Format the refined text into exactly {noColumns} columns. Each row should be formatted into columns delimited by the pipe character |."
         else:
-            outputFormatInstruction = f'''"output_formats": "Output the refined text as a single, continuous block of natural language."'''
-
-        model_instructions.append(outputFormatInstruction)
+            outputFormatValue = "Output the refined text as a single, continuous block of natural language."
 
         # Initialize Bedrock service
         llm_logger.info(f"[{request_id}] Initializing Bedrock service")
@@ -100,8 +98,10 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
             for instr_key, instr_data in config['llm'].get('instructions', {}).items():
                 if instr_key == instruction_key:
                     instruction = instr_data
+                    instruction['output_format'] = outputFormatValue
                     break
-            
+            llm_logger.info(f"[{request_id}] Instruction: {instruction}")
+
             if not instruction:
                 llm_logger.error(f"[{request_id}] Instruction '{instruction_key}' not found in configuration")
                 raise HTTPException(status_code=500, detail=f"Instruction '{instruction_key}' not found in configuration")
@@ -147,7 +147,9 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 for instr_key, instr_data in config['llm'].get('instructions', {}).items():
                     if instr_key == output_instruction_key:
                         output_instruction = instr_data
+                        output_instruction['output_format'] = outputFormatValue
                         break
+                llm_logger.info(f"[{request_id}] Output instruction: {output_instruction}")
                 
                 if output_instruction:
                     try:
