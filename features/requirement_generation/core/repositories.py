@@ -1,7 +1,7 @@
 # features/requirement_generation/core/repositories.py
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any, Optional
-from shared.core.models.requirement import UserFlow, FlowStep, HighLevelRequirement, LowLevelRequirement, TestCase
+from shared.core.models.requirement import UserFlow, HighLevelRequirement, LowLevelRequirement, TestCase
 from shared.core.models.project import Project # Need project for linking
 
 class RequirementRepository:
@@ -12,28 +12,24 @@ class RequirementRepository:
         Expects generated_data in a specific structure (adapt as needed based on LLM output).
         Example structure:
         {
-            "flows": [{"name": "Flow 1", "description": "...", "steps": [{"name": "Step 1.1", "order": 0}, ...]}, ...],
-            "hl_reqs": [{"flow_step_name": "Step 1.1", "flow_name": "Flow 1", "req": "HLR 1"}, ...],
-            "ll_reqs": [{"hl_req_text": "HLR 1", "req": "LLR 1.1", "tech": "..."}, ...]
+            "flows": [{"name": "Flow 1", "description": "...", "high_level_requirements": [{"text": "HLR 1", "order": 0}, ...]}, ...],
+            "ll_reqs": [{"hl_req_text": "HLR 1", "flow_name": "Flow 1", "req": "LLR 1.1", "tech": "..."}, ...],
+            "test_cases": [{"parent_llr_text": "LLR 1.1", "desc": "Test Case 1", "expected": "Expected result"}, ...]
         }
-        NOTE: This structure requires mapping names/text back to IDs, which can be inefficient.
-              A better approach might be to structure LLM output with relationships or process it differently.
-              This is a simplified example.
         """
         # --- Clear existing requirements for this project (Optional: Or implement update logic) ---
         # This simple version deletes everything first for idempotency during simulation/testing
         existing_flows = db.query(UserFlow).filter(UserFlow.project_id == project_id).all()
         for flow in existing_flows:
-            db.delete(flow) # Cascade delete should handle steps, HLRs, LLRs due to model relationships
+            db.delete(flow) # Cascade delete should handle HLRs, LLRs due to model relationships
         db.commit()
         # --- End Clear ---
 
         flow_map: Dict[str, UserFlow] = {}
-        step_map: Dict[str, FlowStep] = {} # Key: "Flow Name::Step Name"
-        hlr_map: Dict[str, HighLevelRequirement] = {} # Key: "Step Name::HLR Text"
+        hlr_map: Dict[str, HighLevelRequirement] = {} # Key: "Flow Name::HLR Text"
         llr_map: Dict[str, LowLevelRequirement] = {} # Key: Some unique LLR identifier (e.g., text), Value: DB object
 
-        # 1. Save Flows and Steps
+        # 1. Save Flows and High-Level Requirements
         for flow_data in generated_data.get("flows", []):
             db_flow = UserFlow(
                 name=flow_data["name"],
@@ -41,56 +37,30 @@ class RequirementRepository:
                 project_id=project_id
             )
             db.add(db_flow)
-            db.flush() # Flush to get the db_flow.id before adding steps
+            db.flush() # Flush to get the db_flow.id before adding HLRs
             flow_map[db_flow.name] = db_flow
 
-            for i, step_data in enumerate(flow_data.get("steps", [])):
-                db_step = FlowStep(
-                    name=step_data["name"],
-                    order=step_data.get("order", i), # Use provided order or default to list index
+            for i, hlr_data in enumerate(flow_data.get("high_level_requirements", [])):
+                db_hlr = HighLevelRequirement(
+                    requirement_text=hlr_data["text"],
+                    order=hlr_data.get("order", i), # Use provided order or default to list index
                     user_flow_id=db_flow.id
                 )
-                db.add(db_step)
-                db.flush() # Get db_step.id
-                step_map[f"{db_flow.name}::{db_step.name}"] = db_step
+                db.add(db_hlr)
+                db.flush() # Get db_hlr.id
+                # Key needs to be unique enough to find the HLR later for LLR mapping
+                hlr_map[f"{db_flow.name}::{db_hlr.requirement_text}"] = db_hlr
 
-        # 2. Save High-Level Requirements
-        for hlr_data in generated_data.get("hl_reqs", []):
-            flow_name = hlr_data.get("flow_name") # Need flow name to find step correctly
-            step_name = hlr_data.get("flow_step_name")
-            step_key = f"{flow_name}::{step_name}" if flow_name else step_name # Adjust key format if needed
-
-            target_step = step_map.get(step_key)
-            if not target_step:
-                print(f"WARNING: Could not find step '{step_key}' for HLR: {hlr_data['req']}")
-                continue # Skip if step not found
-
-            db_hlr = HighLevelRequirement(
-                requirement_text=hlr_data["req"],
-                flow_step_id=target_step.id
-            )
-            db.add(db_hlr)
-            db.flush() # Get db_hlr.id
-            # Key needs to be unique enough to find the HLR later for LLR mapping
-            hlr_map[f"{step_key}::{db_hlr.requirement_text}"] = db_hlr
-
-        # 3. Save Low-Level Requirements
+        # 2. Save Low-Level Requirements
         for llr_data in generated_data.get("ll_reqs", []):
             # Need a reliable way to link LLR back to HLR
-            # Using HLR text + step name assumes HLR text is unique per step. Risky!
-            # A better LLM output structure or parsing logic is needed long-term.
-            hlr_text_key_part = llr_data.get("hl_req_text") # Assuming LLM provides the parent HLR text
+            flow_name = llr_data.get("flow_name") 
+            hlr_text = llr_data.get("hl_req_text")
+            hlr_key = f"{flow_name}::{hlr_text}"
 
-            # Try to find the parent HLR based on text (demonstration - brittle)
-            parent_hlr = None
-            for key, hlr in hlr_map.items():
-                 # This simple text match is not robust
-                if key.endswith(f"::{hlr_text_key_part}"):
-                     parent_hlr = hlr
-                     break # Assume first match is correct
-
+            parent_hlr = hlr_map.get(hlr_key)
             if not parent_hlr:
-                print(f"WARNING: Could not find parent HLR for LLR: {llr_data['req']}")
+                print(f"WARNING: Could not find parent HLR '{hlr_key}' for LLR: {llr_data['req']}")
                 continue # Skip if HLR not found
 
             db_llr = LowLevelRequirement(
@@ -104,12 +74,12 @@ class RequirementRepository:
             llr_key = f"{parent_hlr.id}::{db_llr.requirement_text}"
             llr_map[llr_key] = db_llr
 
+        # 3. Save Test Cases
         for tc_data in generated_data.get("test_cases", []):
             # Need a way to link Test Case back to LLR
-            # Assuming LLM provides the parent LLR text or similar identifier
             parent_llr_text = tc_data.get("parent_llr_text")
 
-            # Find parent LLR using the brittle text match approach for simulation
+            # Find parent LLR using the text match approach
             parent_llr = None
             for key, llr in llr_map.items():
                  # This simple text match is not robust
@@ -138,8 +108,7 @@ class RequirementRepository:
         return (
             db.query(UserFlow)
             .options(
-                joinedload(UserFlow.steps) # Load steps
-                .joinedload(FlowStep.high_level_requirements) # Load HLRs for each step
+                joinedload(UserFlow.high_level_requirements) # Load HLRs directly for each flow
                 .joinedload(HighLevelRequirement.low_level_requirements) # Load LLRs for each HLR
                 .joinedload(LowLevelRequirement.test_cases) # Load test cases for each LLR
             )

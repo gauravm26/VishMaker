@@ -31,16 +31,9 @@ class LowLevelRequirement(BaseModel):
 class HighLevelRequirement(BaseModel):
     id: int
     requirement_text: str
+    order: int  # Added order field
     created_at: datetime
     low_level_requirements: List[LowLevelRequirement] = [] # Include nested LLRs
-    model_config = ConfigDict(from_attributes=True)
-
-class FlowStep(BaseModel):
-    id: int
-    name: str
-    order: int
-    created_at: datetime
-    high_level_requirements: List[HighLevelRequirement] = [] # Include nested HLRs
     model_config = ConfigDict(from_attributes=True)
 
 class UserFlow(BaseModel):
@@ -49,7 +42,7 @@ class UserFlow(BaseModel):
     description: Optional[str] = None
     project_id: int
     created_at: datetime
-    steps: List[FlowStep] = [] # Include nested steps
+    high_level_requirements: List[HighLevelRequirement] = [] # Direct connection to HLRs
     model_config = ConfigDict(from_attributes=True)
 
 # Schema for the overall response when getting requirements for a project

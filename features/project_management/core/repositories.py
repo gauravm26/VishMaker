@@ -55,8 +55,8 @@ class ProjectRepository:
             # Get a copy of project data before deletion (for return value)
             deleted_project = db_project
             
-            # First delete related user_flows to avoid foreign key constraint errors
-            # Find and delete all related records using raw SQL to avoid circular import issues
+            # Delete related entities to avoid foreign key constraint errors
+            # Using raw SQL to avoid circular import issues
             
             # 1. First delete test_cases that are linked to this project via the chain
             db.execute(
@@ -65,8 +65,7 @@ class ProjectRepository:
                 WHERE low_level_requirement_id IN (
                     SELECT llr.id FROM low_level_requirements llr
                     JOIN high_level_requirements hlr ON llr.high_level_requirement_id = hlr.id
-                    JOIN flow_steps fs ON hlr.flow_step_id = fs.id
-                    JOIN user_flows uf ON fs.user_flow_id = uf.id
+                    JOIN user_flows uf ON hlr.user_flow_id = uf.id
                     WHERE uf.project_id = :project_id
                 )
                 """),
@@ -79,31 +78,17 @@ class ProjectRepository:
                 DELETE FROM low_level_requirements 
                 WHERE high_level_requirement_id IN (
                     SELECT hlr.id FROM high_level_requirements hlr
-                    JOIN flow_steps fs ON hlr.flow_step_id = fs.id
-                    JOIN user_flows uf ON fs.user_flow_id = uf.id
+                    JOIN user_flows uf ON hlr.user_flow_id = uf.id
                     WHERE uf.project_id = :project_id
                 )
                 """),
                 {"project_id": project_id}
             )
             
-            # 3. Delete high_level_requirements
+            # 3. Delete high_level_requirements directly linked to user_flows
             db.execute(
                 text("""
                 DELETE FROM high_level_requirements 
-                WHERE flow_step_id IN (
-                    SELECT fs.id FROM flow_steps fs
-                    JOIN user_flows uf ON fs.user_flow_id = uf.id
-                    WHERE uf.project_id = :project_id
-                )
-                """),
-                {"project_id": project_id}
-            )
-            
-            # 4. Delete flow_steps
-            db.execute(
-                text("""
-                DELETE FROM flow_steps 
                 WHERE user_flow_id IN (
                     SELECT id FROM user_flows
                     WHERE project_id = :project_id
@@ -112,7 +97,7 @@ class ProjectRepository:
                 {"project_id": project_id}
             )
             
-            # 5. Delete user_flows
+            # 4. Delete user_flows
             db.execute(
                 text("DELETE FROM user_flows WHERE project_id = :project_id"),
                 {"project_id": project_id}
