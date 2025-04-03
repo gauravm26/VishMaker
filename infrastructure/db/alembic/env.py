@@ -27,8 +27,8 @@ else:
 
 
 try:
-    from infrastructure.db.db_core import Base
-    from shared.core import models
+    from infrastructure.db import Base
+    target_metadata = Base.metadata
     print("DEBUG: Alembic env.py - Successfully imported Base and models.")
 except ImportError as e:
     print(f"ERROR: Alembic env.py - Failed to import Base or models. Error: {e}")

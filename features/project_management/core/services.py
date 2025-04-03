@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from features.project_management.core.repositories import project_repo, ProjectRepository # Import instance and class
 from features.project_management.api import schemas
 from typing import List, Optional
-from shared.core.models.project import Project as ProjectModel
+from infrastructure.db.requirement import ProjectEntity as ProjectModel
 
 class ProjectService:
 

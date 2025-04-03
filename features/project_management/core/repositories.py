@@ -1,7 +1,7 @@
 # features/project_management/core/repositories.py
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from shared.core.models.project import Project as ProjectModel # Rename model import
+from infrastructure.db.requirement import ProjectEntity as ProjectModel # Import the ProjectEntity with alias
 from features.project_management.api import schemas # Import schemas from the feature's api dir
 from typing import List, Optional
 

@@ -377,11 +377,10 @@ if __name__ == "__main__":
         
         # Explicitly import known models to ensure they're registered
         try:
-            from features.project_setup.core.models import Project, ProjectEnvironment, ProjectDependency
-            print(f"Explicitly imported models: Project, ProjectEnvironment, ProjectDependency")
-            
+            from infrastructure.db.requirement import ProjectEntity, UserFlowEntity, HighLevelRequirementEntity, LowLevelRequirementEntity, TestCaseEntity
+                      
             # Print model __tablename__ values to verify registration
-            print(f"Table names: {Project.__tablename__}, {ProjectEnvironment.__tablename__}, {ProjectDependency.__tablename__}")
+            print(f"Table names: {ProjectEntity.__tablename__}, {UserFlowEntity.__tablename__}, {HighLevelRequirementEntity.__tablename__}, {LowLevelRequirementEntity.__tablename__}, {TestCaseEntity.__tablename__}")
             
             # Get the SQLAlchemy tables from the metadata
             print("\nRegistered tables in metadata:")

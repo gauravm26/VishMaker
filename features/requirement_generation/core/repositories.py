@@ -1,8 +1,8 @@
 # features/requirement_generation/core/repositories.py
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any, Optional
-from shared.core.models.requirement import UserFlow, HighLevelRequirement, LowLevelRequirement, TestCase
-from shared.core.models.project import Project # Need project for linking
+from infrastructure.db.requirement import UserFlowEntity as UserFlow, HighLevelRequirementEntity as HighLevelRequirement, LowLevelRequirementEntity as LowLevelRequirement, TestCaseEntity as TestCase
+from infrastructure.db.requirement import ProjectEntity as Project # Need project for linking
 
 class RequirementRepository:
 

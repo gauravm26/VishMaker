@@ -45,7 +45,7 @@ class HighLevelRequirementEntity(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     parent_user_flow = relationship("UserFlowEntity", back_populates="high_level_requirement_list")
-    low_level_requirement_list = relationship("LowLevelRequirementEntity", back_populates="high_level_requirement", cascade="all, delete-orphan")
+    low_level_requirement_list = relationship("LowLevelRequirementEntity", back_populates="parent_high_level_requirement", cascade="all, delete-orphan")
 
 # --- Low-Level Requirement (LLR) ---
 class LowLevelRequirementEntity(Base):

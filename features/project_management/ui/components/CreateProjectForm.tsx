@@ -135,14 +135,14 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 
                 console.log("LLM Response received:", response);
                 
-                // Process user flow result (should be pipe-delimited)
+                // Process user flow result
                 setProgressUpdate("User flow generated. Saving to database...");
                 
-                // Trigger requirement generation API to save the user flow
-                await apiClient(`/requirements/generate/${project.id}`, {
+                // Save the LLM response to the project
+                await apiClient(`/projects/${project.id}/update-flow`, {
                     method: 'POST',
                     body: {
-                        component_id: componentId  // Required field
+                        user_flow: response.result
                     }
                 });
                 

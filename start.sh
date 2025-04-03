@@ -85,14 +85,8 @@ else
     echo "2. Existing Processes: None" | tee -a $LOG_FILE
 fi
 
-# 3. Install dependencies if needed
-if [ ! -f "$VENV_PATH/pip_installed" ]; then
-    echo "Installing Python dependencies..."
-    pip install -r app-api/requirements.txt
-    touch "$VENV_PATH/pip_installed"
-fi
 
-# 4. Check database connection
+# 3. Check database connection
 # Capture output but don't log yet
 DB_RESULT=$(python3 -c "
 import sys
@@ -126,6 +120,12 @@ except Exception as e:
 
 DB_STATUS=$(echo "$DB_RESULT" | grep -v DB_STATUS)
 echo "3. PostgreSQL Connection: $DB_STATUS" | tee -a $LOG_FILE
+
+#4 Alembic Migration
+# alembic -c $ALEMBIC_CONFIG stamp head  ## To force the manual updates on tables in the current version
+alembic -c $ALEMBIC_CONFIG revision --autogenerate -m "Migration"
+alembic -c $ALEMBIC_CONFIG upgrade head
+echo "4. Alembic Migration: Done" | tee -a $LOG_FILE
 
 # 5. Check LLM models and their connectivity
 # Use the existing test_aws_connection method but process its output into a simplified format
