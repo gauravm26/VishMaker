@@ -37,6 +37,9 @@ class ProjectService:
         """Delete a project."""
         # Future: Add business logic (e.g., cleanup related resources)
         return self.repo.delete_project(db, project_id)
+           
+
+
 
 
 # Instantiate the service (can be used directly or injected)

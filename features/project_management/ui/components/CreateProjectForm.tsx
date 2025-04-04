@@ -54,6 +54,9 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             const response = await LlmService.processWithLlm(
                 componentId, 
                 text,
+                undefined, // No project ID for refinement
+                false, // Don't save to database
+                null, // No target table for refinement
                 (update: string) => {
                     console.log("Progress update received:", update);
                     setProgressUpdate(update);
@@ -123,10 +126,13 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             
             // Process with LLM
             try {
-                console.log(`Processing with ${componentId}...`);
+                console.log(`Processing with ${componentId}... for project ID: ${project.id}`);
                 const response = await LlmService.processWithLlm(
                     componentId, 
                     text,
+                    project.id, // Pass project ID to the LLM service
+                    true, // Save to database
+                    'user_flow', // Target table is user_flow
                     (update: string) => {
                         console.log("Progress update received:", update);
                         setProgressUpdate(update);
@@ -136,16 +142,10 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 console.log("LLM Response received:", response);
                 
                 // Process user flow result
-                setProgressUpdate("User flow generated. Saving to database...");
+                setProgressUpdate("User flow generated.");
                 
-                // Save the LLM response to the project
-                await apiClient(`/projects/${project.id}/update-flow`, {
-                    method: 'POST',
-                    body: {
-                        user_flow: response.result
-                    }
-                });
-                
+                // The LLM controller now handles saving the user flow directly
+                // So we don't need to make a separate call to save the flow
                 setProgressUpdate("User flow saved successfully!");
                 
                 // Reset form and notify parent

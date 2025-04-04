@@ -4,20 +4,27 @@ import sys
 import logging
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Body, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
 
 # Add infrastructure to path for BedrockService import
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 
 from infrastructure.llms.llm_models import BedrockService, load_config, llm_logger
+# Import the requirement generation service directly
+from features.requirement_generation.core.services import req_gen_service
+from infrastructure.db.db_core import get_db
 
 router = APIRouter()
 
 class LlmProcessRequest(BaseModel):
     componentId: str
     text: str
+    project_id: Optional[int] = None
+    save_to_db: bool = True
+    target_table: Optional[str] = None  # Options: "user_flow", "high_level_requirement", "low_level_requirement", "test_case"
 
 class LlmProcessResponse(BaseModel):
     result: str
@@ -26,7 +33,7 @@ class LlmProcessResponse(BaseModel):
     progressUpdates: list[str] = []
 
 @router.post("/process", response_model=LlmProcessResponse)
-async def process_with_llm(request: LlmProcessRequest = Body(...)):
+async def process_with_llm(request: LlmProcessRequest = Body(...), background_tasks: BackgroundTasks = None):
     """Process text using an LLM based on the component configuration"""
     request_id = datetime.now().strftime("%Y%m%d%H%M%S")
     
@@ -67,7 +74,8 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
 
         # Get the output format
         output_format = component_mapping.get('outputFormat', 'plain')
-        if output_format.split('_')[0] == 'columns':
+        output_type = output_format.split('_')[0]
+        if output_type == 'columns':
             noColumns = int(output_format.split('_')[1])
             outputFormatValue = f"Format the refined text into exactly {noColumns} columns. Each row should be formatted into columns delimited by the pipe character |."
         else:
@@ -153,7 +161,6 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                 
                 if output_instruction:
                     try:
-
                         progress_updates.append(f"Refining output with model {output_model_key}")
                         
                         # Call get_model_response for output refinement
@@ -178,13 +185,28 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
                         llm_logger.error(f"[{request_id}] Output refinement error: {str(e)}")
                         # Continue with original result if refinement fails
         
-        # Return the final response
-        return LlmProcessResponse(
+        # Create the response object first
+        response = LlmProcessResponse(
             result=current_text,
             modelId=final_model_id,
             instructionId=final_instruction_id,
             progressUpdates=progress_updates
         )
+        
+        # Add saving to database as a background task if requested
+        if request.save_to_db and request.project_id is not None:
+            progress_updates.append(f"Scheduling database save for {request.target_table} data...")
+            background_tasks.add_task(
+                save_to_database,
+                content=current_text,
+                project_id=request.project_id,
+                target_table=request.target_table,
+                request_id=request_id,
+                progress_updates=progress_updates
+            )
+        
+        # Return the final response immediately
+        return response
         
     except HTTPException as http_ex:
         # Re-raise HTTP exceptions
@@ -193,4 +215,42 @@ async def process_with_llm(request: LlmProcessRequest = Body(...)):
         # Log the exception
         llm_logger.error(f"[{request_id}] Unhandled exception: {str(e)}", exc_info=True)
         # Return a generic error message
-        raise HTTPException(status_code=500, detail=f"Error processing LLM request: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error processing LLM request: {str(e)}")
+
+async def save_to_database(content: str, project_id: int, target_table: str, request_id: str, progress_updates: List[str]) -> bool:
+    """
+    Save content to the appropriate database table using the service layer directly.
+    
+    Args:
+        content: The formatted content to save
+        project_id: The project ID to associate with the content
+        target_table: The target table type ('user_flow', 'high_level_requirement', etc.)
+        request_id: The request ID for logging
+        progress_updates: List to append progress updates to
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    llm_logger.info(f"[{request_id}] Saving to database. Target: {target_table}, Project ID: {project_id}")
+    progress_updates.append(f"Saving {target_table} data to database...")
+    
+    try:
+        # Get database session
+        db = next(get_db())
+        
+        # Call service to save the data - let the service handle the parsing
+        req_gen_service.save_llm_generated_data(
+            db=db, 
+            project_id=project_id, 
+            table_type=target_table,
+            raw_content=content
+        )
+        
+        llm_logger.info(f"[{request_id}] Successfully saved to database")
+        progress_updates.append(f"Successfully saved to database")
+        return True
+        
+    except Exception as e:
+        llm_logger.error(f"[{request_id}] Exception saving to database: {str(e)}")
+        progress_updates.append(f"Failed to save to database: {str(e)}")
+        return False

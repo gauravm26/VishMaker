@@ -24,27 +24,26 @@ export interface ProjectRequirementsResponse {
 export interface UserFlow {
   id: number;
   name: string;
-  description?: string; // Add description property
-  steps: FlowStep[]; // Updated to use specific FlowStep type 
-}
-
-export interface FlowStep {
-  id: number;
-  name: string;
-  high_level_requirements: HighLevelRequirement[]; // Updated to use specific HLR type
+  description?: string;
+  project_id: number;
+  created_at: string;
+  high_level_requirement_list: HighLevelRequirement[]; // Match backend field name
 }
 
 export interface HighLevelRequirement {
   id: number;
   requirement_text: string;
-  low_level_requirements: LowLevelRequirement[]; // Updated to use specific LLR type
+  order: number;
+  created_at: string;
+  low_level_requirement_list: LowLevelRequirement[]; // Match backend field name
 }
 
 export interface LowLevelRequirement {
   id: number;
   requirement_text: string;
   tech_stack_details?: string;
-  test_cases: TestCase[]; // Add test_cases property
+  created_at: string;
+  test_case_list: TestCase[]; // Match backend field name
 }
 
 export interface TestCase {
