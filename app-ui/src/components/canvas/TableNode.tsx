@@ -138,7 +138,13 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
             {/* Node Header */}
             <div className="bg-gray-200 dark:bg-gray-700 p-2 border-b border-gray-400 dark:border-gray-600 font-bold text-center text-base relative text-gray-900 dark:text-gray-100">
                 {title}
-                <Handle type="target" position={Position.Left} id={`${nodeId}-target`} className="!bg-red-500 !w-3 !h-3" style={{ top: '50%', left: '-6px' }} />
+                <Handle 
+                    type="target" 
+                    position={Position.Left} 
+                    id={`${nodeId}-target`} 
+                    className="!bg-red-500 !w-3 !h-3" 
+                    style={{ top: '50%', left: '-7px' }} 
+                />
             </div>
 
             {/* Node Body - Table Container with no padding to align borders */}
@@ -165,15 +171,6 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                             ) : (
                                 <>
                                     {col.label}
-                                    {/* Delete Column Button (Only show on hover if editable) */}
-                                    {col.editable !== false && (
-                                        <button
-                                            onClick={() => handleDeleteColumn(col.key)}
-                                            className="absolute top-0 right-0 bg-red-500 text-white text-xs px-1 rounded opacity-0 group-hover:opacity-100"
-                                        >
-                                            ×
-                                        </button>
-                                    )}
                                 </>
                             )}
                         </div>
@@ -222,7 +219,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                 className="!bg-teal-500 !w-3 !h-3 dark:bg-teal-400" 
                                                 style={{ 
                                                     top: '50%', 
-                                                    right: '-20px'
+                                                    right: '-7px'
                                                 }} 
                                             />
                                         )}
