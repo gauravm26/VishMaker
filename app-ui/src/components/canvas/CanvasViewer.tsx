@@ -503,7 +503,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             type: 'tableNode',
             data: {
                 title: title,
-                componentId: nodeId, // Use the nodeId as componentId for LLM processing
+                componentId: nodeId.split('_').slice(0, 2).join('_'), // Use the nodeId as componentId for LLM processing
                 columns: baseColumns,
                 rows: visibleRows,
                 allRows: tableRows,
@@ -534,7 +534,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         currentKey: string,              // Current key in the data (e.g., 'flows')
         level: number = 0,               // Current level in the hierarchy (for positioning)
         parentNodeId: string | null = null, // Parent node ID for edge connections
-        parentRowIndex: number = -1      // Index of the parent row that owns this table
+        parentRowIndex: number = -1,     // Index of the parent row that owns this table
+        projectId: number | null = null  // Project ID for root node naming
     ): { nodes: CustomNode[], edges: Edge[] } => {
         // Check if we have data for this level
         if (!data[currentKey] || !data[currentKey].length) {
@@ -542,16 +543,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         }
 
         const items = data[currentKey];
+        console.log(`Building hierarchical tables for ${currentKey} with ${items.length} items, and data: ${JSON.stringify(data)}`);
         
         // Get a sample item to determine fields
         const sampleItem = items[0] || {};
         const { displayField, descriptionField, childrenField } = determineFields(sampleItem);
-        
-        // Create standardized table type name from the key
-        const tableType = currentKey
-            .replace(/_list$/, '')  // Remove _list suffix if present
-            .replace(/s$/, '')      // Make singular if plural
-            .replace(/_/g, '');     // Remove underscores
         
         // Format a nice title for display
         const title = formatDisplayName(currentKey);
@@ -563,7 +559,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         // Handle User Flows table (root level)
         if (level === 0) {
             // Create a single table for user flows
-            const nodeId = `${tableType}_genChildReq`;            
+            const nodeId = `flow_genChildReq_${projectId || 'root'}`;           
             console.log(`Creating root node: ${nodeId}`);
             
         const tableNode = createGenericTable(
@@ -573,7 +569,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             { displayField, descriptionField },
             []
         );
-        
+            
             // Position the node
             tableNode.position = { x: 0, y: 0 };
             
@@ -587,14 +583,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                     if (flow[childrenField] && Array.isArray(flow[childrenField]) && flow[childrenField].length > 0) {
                         // Create a separate table for this flow's HLRs
                         const hlrTitle = `${flow[displayField]} HLRs`;
-                        const hlrNodeId = `${tableType}_${flowIndex}_hlr`;
+                        const flowUiid = flow.uiid || flow.id || `flow-${flowIndex}`;
+                        const hlrNodeId = `highlevelrequirement_genChildReq_${flowUiid}`;
                         
                         console.log(`Creating HLR table for flow ${flowIndex}: ${hlrNodeId}`);
                         
                         // Filter children to only include those with matching parent_uiid
-                        const flowUiid = flow.uiid;
-                        console.log(`Flow ${flowIndex} UIID: ${flowUiid}`);
-                        
                         const matchingChildren = flow[childrenField].filter((child: any) => 
                             child.parent_uiid === flowUiid
                         );
@@ -603,7 +597,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                         
                         // Only create a table if there are matching children
                         if (matchingChildren.length > 0) {
-                            // Create a table for this flow's HLRs
+                            // Create table for this flow's HLRs using the flow's UIID in the nodeId
                             const hlrTable = createGenericTable(
                                 matchingChildren,
                                 hlrNodeId,
@@ -661,14 +655,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                     
                                     // Create a separate table for this HLR's LLRs
                                     const llrTitle = `${hlr[displayField]} LLRs`;
-                                    const llrNodeId = `${tableType}_${flowIndex}_hlr_${hlrIndex}_llr`;
+                                    // Include HLR's UIID in the LLR nodeId
+                                    const hlrUiid = hlr.uiid || hlr.id || `hlr-${hlrIndex}`;
+                                    const llrNodeId = `lowlevelrequirement_genChildReq_${hlrUiid}`;
                                     
                                     console.log(`Creating LLR table for HLR ${hlrIndex}: ${llrNodeId}`);
                                     
                                     // Filter LLRs to only include those with matching parent_uiid
-                                    const hlrUiid = hlr.uiid;
-                                    console.log(`HLR ${hlrIndex} UIID: ${hlrUiid}`);
-                                    
                                     const matchingLLRs = hlr.low_level_requirement_list.filter((llr: any) => 
                                         llr.parent_uiid === hlrUiid
                                     );
@@ -734,14 +727,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                                 
                                                 // Create a separate table for this LLR's test cases
                                                 const tcTitle = `${llr[displayField]} Tests`;
-                                                const tcNodeId = `${tableType}_${flowIndex}_hlr_${hlrIndex}_llr_${llrIndex}_tc`;
+                                                // Include LLR's UIID in the TC nodeId
+                                                const llrUiid = llr.uiid || llr.id || `llr-${llrIndex}`;
+                                                const tcNodeId = `testcase_genChildReq_${llrUiid}`;
                                                 
                                                 console.log(`Creating TC table for LLR ${llrIndex}: ${tcNodeId}`);
                                                 
                                                 // Filter test cases to only include those with matching parent_uiid
-                                                const llrUiid = llr.uiid;
-                                                console.log(`LLR ${llrIndex} UIID: ${llrUiid}`);
-                                                
                                                 const matchingTCs = llr.test_case_list.filter((tc: any) => 
                                                     tc.parent_uiid === llrUiid
                                                 );
@@ -855,7 +847,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             if (response.flows && response.flows.length > 0) {
                 const { nodes: builtNodes, edges: builtEdges } = buildHierarchicalTables(
                     { flows: response.flows },
-                    'flows'
+                    'flows',
+                    0,       // level
+                    null,    // parentNodeId
+                    -1,      // parentRowIndex
+                    projectId // Pass the projectId
                 );
                 
                 // Add animations for new nodes
@@ -990,7 +986,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             
             console.log(`Calling LLM service with componentId=${componentId}, projectId=${projectId}, parent_uiid=${rowUiid}`);
             const response = await LlmService.processWithLlm(
-                componentId,
+                componentId.split('_').slice(0, 2).join('_'),
                 text,
                 projectId,
                 true, // Save to database
@@ -1092,7 +1088,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             </div>;
         }
 
-        // Return the React Flow component with just the user flow node
+        // Return the React Flow comfonent with just the user flow node
         return (
             <ReactFlow
                 nodes={nodes}
