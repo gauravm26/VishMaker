@@ -1082,9 +1082,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 attributionPosition="bottom-right"
                 snapToGrid={true}
                 snapGrid={[15, 15]}
+                nodesConnectable={false}
+                edgesFocusable={false}
             >
                 <Controls />
-                <MiniMap />
+                <MiniMap pannable={true} />
                 <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
             </ReactFlow>
         );

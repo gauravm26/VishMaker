@@ -145,6 +145,50 @@
           "Password Reset Functionality | Ability to reset the account when the password is forgotten.",
           "Email Confirmation Process | Ability to confirm the email address if it is used for registration."
         ]
+      },
+      "instruction6": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each high-level requirement, generate a detailed list of low-level requirements that comprehensively cover all aspects including UX, UI, APIs, Database, analytics, and more. Each requirement should be unique and mutually exclusive.",
+        "ConstraintsAndGuidelines": {
+          "Input": "High-Level Requirement description.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core business outcomes and measurable objectives implied by the high-level requirement.",
+            "UX Expert": "Detail the necessary user interactions, interface components, and usability considerations required to fulfill the requirement.",
+            "Technical Architect": "Outline the technical components, API integrations, database modifications, analytics tracking, and any other system-level requirements needed."
+          },
+          "Output": "Provide a consolidated list of detailed low-level requirements for the given high-level requirement. Each requirement must be unique and mutually exclusive.",
+          "Scope": "Ensure the low-level requirements comprehensively cover all facets of the requirement including UX, UI, APIs, Database, and analytics without introducing unrelated features.",
+          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the high-level requirement.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Email Verification UI | Design an interactive form for email verification with error handling and validation.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Email Verification UI | Design an interactive form for email verification, including user prompts, error handling, and validation.",
+          "OAuth API Integration | Implement API endpoints to facilitate Google and Facebook authentication with secure token management.",
+          "Database Schema Update | Modify the user table to include fields for email verification status and timestamp.",
+          "Analytics Tracking | Set up event tracking to monitor email verification success rates and user engagement."
+        ]
+      },
+      "instruction7": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each low-level requirement, generate a comprehensive set of test cases that cover all aspects of the requirement, including UI interactions, visual changes, API responses, backend data validation, animations, and other system behaviors.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Low-Level Requirement description.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the measurable outcomes and key performance indicators relevant to the requirement.",
+            "UX Expert": "Detail the expected user interactions, visual changes, animations, and error states that must be validated.",
+            "Technical Architect": "Outline system-level validations such as API responses, data integrity in the backend, integration points, and error handling mechanisms."
+          },
+          "Output": "Provide a consolidated list of comprehensive test cases for the given low-level requirement. Each test case must be unique and mutually exclusive, covering every aspect of the functionality.",
+          "Scope": "Ensure the test cases comprehensively cover all facets including UI, UX, APIs, backend database, animations, and system integrations without adding unrelated tests.",
+          "NoFeatureCreep": "Do not include additional tests that extend beyond what is directly implied by the low-level requirement.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each test case MUST be on a new line with the test case name and description separated by a pipe character (|). Example: 'Button Click Test | Validate that clicking the submit button triggers the appropriate API call and changes button color to indicate action.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Button Click Test | Validate that clicking the submit button triggers the correct API call and changes the button color as expected.",
+          "Animation Test | Ensure that the button animates smoothly on hover and during the click action.",
+          "API Response Test | Confirm that the API returns the correct data and error codes for valid and invalid inputs.",
+          "Database Update Test | Verify that the API response data is correctly stored in the backend database with accurate timestamps and statuses."
+        ]
       }
     },
     "componentModelMapping": {
@@ -202,7 +246,7 @@
         "modelInstructions": [
           {
             "model": "model1",
-            "instruction": "instruction5"
+            "instruction": "instruction6"
           }
         ],
         "outputModel": {
@@ -217,7 +261,7 @@
         "modelInstructions": [
           {
             "model": "model1",
-            "instruction": "instruction5"
+            "instruction": "instruction7"
           }
         ],
         "outputModel": {
