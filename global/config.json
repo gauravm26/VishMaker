@@ -27,28 +27,6 @@
         }
       },
       "model2": {
-        "modelId": "meta.llama3-3-70b-instruct-v1:0",
-        "contentType": "application/json",
-        "accept": "application/json",
-        "body": {
-          "prompt": "this is where you place your input text",
-          "max_gen_len": 2048,
-          "temperature": 0.6,
-          "top_p": 0.9
-        }
-      },
-      "model3": {
-        "modelId": "meta.llama3-1-8b-instruct-v1:0",
-        "contentType": "application/json",
-        "accept": "application/json",
-        "body": {
-          "prompt": "this is where you place your input text",
-          "max_gen_len": 2048,
-          "temperature": 0.6,
-          "top_p": 0.9
-        }
-      },
-      "model4": {
         "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
         "contentType": "application/json",
         "accept": "application/json",
@@ -145,37 +123,105 @@
           "Ensure the text is coherent and grammatically correct."
         ],
         "output_constraint": "Output ONLY the final refined and formatted text as specified."
+      },
+      "instruction5": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each user flow step, create a detailed list of high-level requirements that are unique and mutually exclusive, clearly defining the functionality and features needed.",
+        "ConstraintsAndGuidelines": {
+          "Input": "User Flow step description (e.g., 'User Authentication').",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core business objectives and outcomes related to the user flow step.",
+            "UX Expert": "Define the necessary user interactions, usability considerations, and interface elements.",
+            "Technical Architect": "Outline the technical components, integrations, and systems required to support the functionality."
+          },
+          "Output": "Provide a consolidated list of detailed high-level requirements for the given user flow step. Each requirement must be unique and mutually exclusive.",
+          "Scope": "Focus solely on the major functionalities implied by the user flow step without introducing unrelated features.",
+          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the user flow step.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Account Verification Page | A web page for user account verification, ensuring users can confirm their identity.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Account Verification Page | A web page for user account verification.",
+          "Social Login Options | Ability to login through Google, Facebook, or via user id and password.",
+          "Password Reset Functionality | Ability to reset the account when the password is forgotten.",
+          "Email Confirmation Process | Ability to confirm the email address if it is used for registration."
+        ]
       }
     },
     "componentModelMapping": {
       "component1": {
-        "componentId": "initialPromptButton",
+        "componentId": "gen_initialPrompt",
         "modelInstructions": [
           {
-            "model": "model1",
+            "model": "model2",
             "instruction": "instruction1"
           }
         ],
         "outputModel": {
-          "model": "model4",
+          "model": "model1",
           "instruction": "instruction4"
         },
         "outputFormat": "plain"
       },
       "component2": {
-        "componentId": "createProjectButton",
+        "componentId": "gen_userflow",
+        "targetTable": "user_flow",
         "modelInstructions": [
           {
-            "model": "model1",
+            "model": "model2",
             "instruction": "instruction2"
           },
           {
-            "model": "model4",
+            "model": "model1",
             "instruction": "instruction3"
           }
         ],
         "outputModel": {
-          "model": "model4",
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component3": {
+        "componentId": "flow_genChildReq",
+        "targetTable": "high_level_requirements",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction5"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component4": {
+        "componentId": "highlevelrequirement_genChildReq",
+        "targetTable": "low_level_requirements",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction5"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component5": {
+        "componentId": "lowlevelrequirement_genChildReq",
+        "targetTable": "test_cases",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction5"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
           "instruction": "instruction4"
         },
         "outputFormat": "columns_2"

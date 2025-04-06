@@ -28,7 +28,7 @@ def create_project_endpoint(
     Create a new project.
     """
     try:
-        created_project = service.create_new_project(db=db, project_create=project_in)
+        created_project = service.create_project(db=db, project=project_in)
         return created_project
     except ValueError as e: # Catch potential validation errors from the service
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -93,7 +93,7 @@ def update_project_endpoint(
     Note: This PUT implementation allows partial updates based on ProjectUpdate schema.
     A strict PUT might require all fields or use a different schema (e.g., ProjectBase).
     """
-    updated_project = service.update_existing_project(db, project_id=project_id, project_update=project_in)
+    updated_project = service.update_project(db, project_id=project_id, project_update=project_in)
     if updated_project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return updated_project
@@ -112,7 +112,7 @@ def delete_project_endpoint(
     Delete a project by its ID.
     """
     try:
-        deleted_project = service.delete_single_project(db, project_id=project_id)
+        deleted_project = service.delete_project(db, project_id=project_id)
         if deleted_project is None:
             # Project wasn't found, but for DELETE we return 204 as the end state is achieved
             pass

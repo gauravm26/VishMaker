@@ -8,6 +8,7 @@ from infrastructure.db.requirement import UserFlowEntity as UserFlow, HighLevelR
 from infrastructure.db.requirement import ProjectEntity as Project # Need project for linking
 import sys, os
 from pathlib import Path
+import time
 
 # Add infrastructure to path for BedrockService import
 project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -25,15 +26,16 @@ class RequirementGenerationService:
     ):
          self.project_service = project_svc
 
-    def save_llm_generated_data(self, db: Session, project_id: int, table_type: str, raw_content: str):
+    def save_llm_generated_data(self, db: Session, project_id: int, table_type: str, raw_content: str, parent_uiid: Optional[str] = None):
         """
         Generic method to save LLM-generated data to the appropriate table.
         
         Args:
             db: Database session
-            project_id: ID of the project to save data for
-            table_type: Type of table to save to ('user_flow', 'high_level_requirement', etc.)
+            project_id: ID of the project to associate with the content
+            table_type: Type of table to save to ('user_flow', 'high_level_requirement', 'low_level_requirement', 'test_case')
             raw_content: Raw pipe-delimited content from the LLM
+            parent_uiid: UIID of the parent entity (if applicable)
             
         Returns:
             bool: True if successful
@@ -46,63 +48,31 @@ class RequirementGenerationService:
         # Parse the raw content into a standardized format
         parsed_data = self._parse_pipe_delimited_content(raw_content)
         
-        # Call appropriate method based on table_type
+        # Insert data directly into the target table based on table_type
         if table_type == "user_flow":
-            # Convert standardized format to user flow format
-            flows_data = self._convert_to_user_flow_format(parsed_data)
-            generated_data = {
-                "flows": flows_data,
-                "ll_reqs": [], 
-                "test_cases": []
-            }
-            return self.save_requirements(db, project_id, generated_data)
+            return self._save_user_flows(db, parsed_data, project_id)
             
         elif table_type == "high_level_requirement":
-            # Convert standardized format to high-level requirement format
-            hlr_data = self._convert_to_hlr_format(parsed_data)
-            generated_data = {
-                "hlrs": hlr_data,
-                "ll_reqs": [],
-                "test_cases": []
-            }
-            return self.save_high_level_requirements(db, project_id, generated_data)
+            return self._save_high_level_requirements(db,  parsed_data, parent_uiid)
             
         elif table_type == "low_level_requirement":
-            # Convert standardized format to low-level requirement format
-            llr_data = self._convert_to_llr_format(parsed_data)
-            generated_data = {
-                "ll_reqs": llr_data,
-                "test_cases": []
-            }
-            return self.save_low_level_requirements(db, project_id, generated_data)
+            return self._save_low_level_requirements(db, parsed_data, parent_uiid)
             
         elif table_type == "test_case":
-            # Convert standardized format to test case format
-            test_case_data = self._convert_to_test_case_format(parsed_data)
-            generated_data = {
-                "test_cases": test_case_data
-            }
-            return self.save_test_cases(db, project_id, generated_data)
+            return self._save_test_cases(db, parsed_data, parent_uiid)
             
         else:
-            # Default to user flow
-            flows_data = self._convert_to_user_flow_format(parsed_data)
-            generated_data = {
-                "flows": flows_data,
-                "ll_reqs": [], 
-                "test_cases": []
-            }
-            return self.save_requirements(db, project_id, generated_data)
+            raise ValueError(f"Unknown table type: {table_type}")
     
     def _parse_pipe_delimited_content(self, content: str) -> List[Dict[str, Any]]:
         """
         Parse pipe-delimited LLM output into a standardized format.
         
         Expected format:
-        Name/Title | Description/Details
+        Name/Title | Description/Details | UIID (optional)
         
         Returns:
-        List of dictionaries with name, description, and order
+        List of dictionaries with name, description, uiid, and order
         """
         if not content or not content.strip():
             raise ValueError("Content is empty")
@@ -131,39 +101,66 @@ class RequirementGenerationService:
                 else:
                     line = f"Item {i+1} | {line}"
                 
-            parts = line.split('|', 1)
+            parts = line.split('|')
             name = parts[0].strip()
             description = parts[1].strip() if len(parts) > 1 else ""
+            
+            # Extract UIID if present, or generate a unique one
+            uiid = parts[2].strip() if len(parts) > 2 and parts[2].strip() else f"auto-{i}-{hash(name + description) & 0xffffffff}"
             
             items.append({
                 "name": name,
                 "description": description,
+                "uiid": uiid,
                 "order": i
             })
         
         return items
     
     def _validate_pipe_delimited_format(self, text: str) -> bool:
-        """Validate that the text is in pipe-delimited format"""
+        """
+        Validate that the text is in pipe-delimited format.
+        Checks that most lines contain at least one pipe character.
+        """
         lines = text.strip().split('\n')
-        return all('|' in line for line in lines if line.strip())
+        valid_lines = [line for line in lines if line.strip()]
+        if not valid_lines:
+            return False
+            
+        # Check if at least 70% of lines have a pipe character
+        lines_with_pipe = sum(1 for line in valid_lines if '|' in line)
+        return lines_with_pipe / len(valid_lines) >= 0.7
     
     def _fix_output_format(self, text: str) -> str:
-        """Attempt to fix the output format if it's not pipe-delimited"""
+        """
+        Attempt to fix the output format if it's not pipe-delimited.
+        Looks for patterns in the text that might indicate name/description pairs.
+        """
         lines = text.strip().split('\n')
         formatted_lines = []
         
-        for line in lines:
-            if line.strip():
-                if '|' not in line:
-                    # Attempt to split into name and description
-                    parts = line.split('.', 1)
-                    if len(parts) == 2:
-                        formatted_lines.append(f"{parts[0].strip()} | {parts[1].strip()}")
-                    else:
-                        formatted_lines.append(f"Step {len(formatted_lines) + 1} | {line.strip()}")
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+                
+            if '|' not in line:
+                # Try different splitting strategies
+                if ':' in line:
+                    # Split by colon (common in key-value pairs)
+                    parts = line.split(':', 1)
+                    formatted_lines.append(f"{parts[0].strip()} | {parts[1].strip()}")
+                elif '. ' in line and line[0].isdigit():
+                    # Split numbered items (e.g., "1. First item")
+                    parts = line.split('. ', 1)
+                    formatted_lines.append(f"Item {parts[0].strip()} | {parts[1].strip()}")
+                elif line.strip().startswith('- '):
+                    # Handle bullet points
+                    content = line.strip()[2:]
+                    formatted_lines.append(f"Item {i+1} | {content}")
                 else:
-                    formatted_lines.append(line)
+                    formatted_lines.append(f"Item {i+1} | {line.strip()}")
+            else:
+                formatted_lines.append(line)
         
         return '\n'.join(formatted_lines)
     
@@ -188,11 +185,11 @@ class RequirementGenerationService:
     
     def _convert_to_llr_format(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert standardized data to low-level requirement format"""
-        return [{"req": item.get("name", ""), "tech": item.get("description", "")} for item in data]
+        return [{"name": item.get("name", ""), "description": item.get("description", "")} for item in data]
     
     def _convert_to_test_case_format(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert standardized data to test case format"""
-        return [{"desc": item.get("name", ""), "expected": item.get("description", "")} for item in data]
+        return [{"name": item.get("name", ""), "description": item.get("description", "")} for item in data]
 
     # --- ADD REPOSITORY METHODS ---
     def get_project_requirements(self, db: Session, project_id: int) -> List[UserFlow]:
@@ -221,207 +218,109 @@ class RequirementGenerationService:
         # Return the flows directly - Pydantic will handle the conversion from ORM objects
         return flows
     
-    def save_requirements(self, db: Session, project_id: int, generated_data: Dict[str, List[Dict[str, Any]]]):
+    def _save_user_flows(self, db: Session, parsed_data: List[Dict[str, Any]], project_id: int) -> bool:
         """
-        Saves the structured requirements data to the database.
-        Expects generated_data in a specific structure (adapt as needed based on LLM output).
-        Example structure:
-        {
-            "flows": [{"name": "Flow 1", "description": "...", "high_level_requirement_list": [{"text": "HLR 1", "order": 0}, ...]}, ...],
-            "ll_reqs": [{"hl_req_text": "HLR 1", "flow_name": "Flow 1", "req": "LLR 1.1", "tech": "..."}, ...],
-            "test_cases": [{"parent_llr_text": "LLR 1.1", "desc": "Test Case 1", "expected": "Expected result"}, ...]
-        }
+        Save parsed data directly to the user_flow table.
+        Project ID is the parent key for user flows.
         """
-        # Verify project exists
-        project = self.project_service.get_project(db, project_id)
-        if not project:
-            raise ValueError(f"Project with ID {project_id} not found.")
-        
-        # --- Clear existing requirements for this project (Optional: Or implement update logic) ---
-        # This simple version deletes everything first for idempotency during simulation/testing
-        existing_flows = db.query(UserFlow).filter(UserFlow.project_id == project_id).all()
-        for flow in existing_flows:
-            db.delete(flow) # Cascade delete should handle HLRs, LLRs due to model relationships
-        db.commit()
-        # --- End Clear ---
-
-        flow_map: Dict[str, UserFlow] = {}
-        hlr_map: Dict[str, HighLevelRequirement] = {} # Key: "Flow Name::HLR Text"
-        llr_map: Dict[str, LowLevelRequirement] = {} # Key: Some unique LLR identifier (e.g., text), Value: DB object
-
-        # 1. Save Flows and High-Level Requirements
-        for flow_data in generated_data.get("flows", []):
-            db_flow = UserFlow(
-                name=flow_data["name"],
-                description=flow_data.get("description"),
-                project_id=project_id
-            )
-            db.add(db_flow)
-            db.flush() # Flush to get the db_flow.id before adding HLRs
-            flow_map[db_flow.name] = db_flow
-
-            # Check if we have high_level_requirement_list in the flow_data
-            high_level_reqs = flow_data.get("high_level_requirement_list") or flow_data.get("high_level_requirements", [])
+        for item in parsed_data:
+            # Check if a flow with this UIID already exists
+            uiid = item.get("uiid")
+            existing_flow = None
             
-            # If no high-level requirements are provided, create one based on the flow itself
-            if not high_level_reqs:
-                # Create a high-level requirement with the flow name as the text
-                db_hlr = HighLevelRequirement(
-                    requirement_text=f"Implement {flow_data['name']}",
-                    order=0,
-                    user_flow_id=db_flow.id
-                )
-                db.add(db_hlr)
-                db.flush()
-                hlr_map[f"{db_flow.name}::Implement {flow_data['name']}"] = db_hlr
+            if uiid:
+                existing_flow = db.query(UserFlow).filter(
+                    UserFlow.uiid == uiid,
+                    UserFlow.project_id == project_id
+                ).first()
+            
+            if existing_flow:
+                # Update existing flow
+                existing_flow.name = item["name"]
+                existing_flow.description = item.get("description", "")
+                db.add(existing_flow)
             else:
-                for i, hlr_data in enumerate(high_level_reqs):
-                    # Support both dictionary structures that might be used
-                    req_text = hlr_data.get("text") or hlr_data.get("requirement_text", "")
-                    if not req_text:
-                        continue
-                        
-                    db_hlr = HighLevelRequirement(
-                        requirement_text=req_text,
-                        order=hlr_data.get("order", i), # Use provided order or default to list index
-                        user_flow_id=db_flow.id
-                    )
-                    db.add(db_hlr)
-                    db.flush() # Get db_hlr.id
-                    # Key needs to be unique enough to find the HLR later for LLR mapping
-                    hlr_map[f"{db_flow.name}::{db_hlr.requirement_text}"] = db_hlr
-
-        # 2. Save Low-Level Requirements
-        for llr_data in generated_data.get("ll_reqs", []):
-            # Need a reliable way to link LLR back to HLR
-            flow_name = llr_data.get("flow_name") 
-            hlr_text = llr_data.get("hl_req_text")
-            hlr_key = f"{flow_name}::{hlr_text}"
-
-            parent_hlr = hlr_map.get(hlr_key)
-            if not parent_hlr:
-                print(f"WARNING: Could not find parent HLR '{hlr_key}' for LLR: {llr_data['req']}")
-                continue # Skip if HLR not found
-
-            db_llr = LowLevelRequirement(
-                requirement_text=llr_data["req"],
-                tech_stack_details=llr_data.get("tech"),
-                high_level_requirement_id=parent_hlr.id
-            )
-            db.add(db_llr)
-            db.flush() # Get LLR ID
-            # Use a combination that's likely unique for the simulation to map LLR
-            llr_key = f"{parent_hlr.id}::{db_llr.requirement_text}"
-            llr_map[llr_key] = db_llr
-
-        # 3. Save Test Cases
-        for tc_data in generated_data.get("test_cases", []):
-            # Need a way to link Test Case back to LLR
-            parent_llr_text = tc_data.get("parent_llr_text")
-
-            # Find parent LLR using the text match approach
-            parent_llr = None
-            for key, llr in llr_map.items():
-                 # This simple text match is not robust
-                 if key.endswith(f"::{parent_llr_text}"):
-                      parent_llr = llr
-                      break
-
-            if not parent_llr:
-                print(f"WARNING: Could not find parent LLR for TestCase: {tc_data['desc']}")
-                continue
-
-            db_tc = TestCase(
-                description=tc_data["desc"],
-                expected_result=tc_data.get("expected"),
-                low_level_requirement_id=parent_llr.id
-            )
-            db.add(db_tc)
-        
-        db.commit() # Commit all changes
+                # Create new flow
+                db_flow = UserFlow(
+                    name=item["name"],
+                    description=item.get("description", ""),
+                    uiid=uiid or f"flow-{hash(item['name']) & 0xffffffff}",
+                    project_id=project_id
+                )
+                db.add(db_flow)
+            
+        db.commit()
         return True
         
-    def save_high_level_requirements(self, db: Session, project_id: int, generated_data: Dict[str, List[Dict[str, Any]]]):
+    def _save_high_level_requirements(self, db: Session, parsed_data: List[Dict[str, Any]], parent_uiid: Optional[str] = None) -> bool:
         """
-        Saves high-level requirements data for a project.
+        Save parsed data directly to the high_level_requirement table.
+        User flow ID is the parent key for high-level requirements.
+        """
+        # Print debugging information
+        print(f"Saving high-level requirements with parent_uiid: {parent_uiid}")
+        print(f"Number of items to save: {len(parsed_data)}")
         
-        Args:
-            db: Database session
-            project_id: ID of the project to save requirements for
-            generated_data: Dictionary containing structured high-level requirement data
-        """
-        # Verify project exists
-        project = self.project_service.get_project(db, project_id)
-        if not project:
-            raise ValueError(f"Project with ID {project_id} not found.")
+        # Always create new HLRs rather than updating existing ones
+        # This ensures we don't overwrite existing HLRs but append new ones
+        for item in parsed_data:
+            # Generate a unique UIID for the new requirement
+            # Don't reuse any existing UIIDs to avoid overwrites
+            new_uiid = f"hlr-{hash(item['name'] + str(time.time())) & 0xffffffff}"
             
-        # Validate minimal required structure
-        if "hlrs" not in generated_data or not generated_data["hlrs"]:
-            raise ValueError("Generated data must contain at least one high-level requirement")
+            # Create new HLR
+            db_hlr = HighLevelRequirement(
+                name=item["name"],
+                description=item.get("description", ""),
+                uiid=new_uiid,
+                parent_uiid=parent_uiid
+            )
+            db.add(db_hlr)
+            print(f"Created new HLR: {item['name']} with UIID: {new_uiid} for parent: {parent_uiid}")
             
-        # Get existing flows for this project
-        existing_flows = self.get_project_requirements(db, project_id)
+        db.commit()
+        return True
         
-        if not existing_flows:
-            raise ValueError(f"No flows found for project with ID {project_id}. Create a flow first.")
-        
-        # Take the first flow to attach high-level requirements to
-        flow_id = existing_flows[0].id
-        
-        # Create a modified structure compatible with save_requirements
-        modified_data = {
-            "flows": [{
-                "id": flow_id,  # Use existing flow ID
-                "high_level_requirements": generated_data["hlrs"]
-            }],
-            "ll_reqs": generated_data.get("ll_reqs", []),
-            "test_cases": generated_data.get("test_cases", [])
-        }
-        
-        # Call repository to save the requirements
-        return self.save_requirements(db, project_id, modified_data)
-        
-    def save_low_level_requirements(self, db: Session, project_id: int, generated_data: Dict[str, List[Dict[str, Any]]]):
+    def _save_low_level_requirements(self, db: Session, parsed_data: List[Dict[str, Any]], parent_uiid: Optional[str] = None) -> bool:
         """
-        Saves low-level requirements data for a project.
-        
-        Args:
-            db: Database session
-            project_id: ID of the project to save requirements for
-            generated_data: Dictionary containing structured low-level requirement data
+        Save parsed data directly to the low_level_requirement table.
+        High-level requirement ID is the parent key for low-level requirements.
         """
-        # Verify project exists
-        project = self.project_service.get_project(db, project_id)
-        if not project:
-            raise ValueError(f"Project with ID {project_id} not found.")
+        for item in parsed_data:
+            # Check if an LLR with this UIID already exists
+            new_uiid = f"llr-{hash(item['name'] + str(time.time())) & 0xffffffff}"
+                # Create new LLR
+            db_llr = LowLevelRequirement(
+                name=item["name"],
+                description=item.get("description", ""),
+                uiid=new_uiid,
+                parent_uiid=parent_uiid
+            )
+            db.add(db_llr)
             
-        # Validate minimal required structure
-        if "ll_reqs" not in generated_data or not generated_data["ll_reqs"]:
-            raise ValueError("Generated data must contain at least one low-level requirement")
+        db.commit()
+        return True
         
-        # For now, we'll reuse the existing save_requirements method
-        return self.save_requirements(db, project_id, generated_data)
-        
-    def save_test_cases(self, db: Session, project_id: int, generated_data: Dict[str, List[Dict[str, Any]]]):
+    def _save_test_cases(self, db: Session,  parsed_data: List[Dict[str, Any]], parent_uiid: Optional[str] = None) -> bool:
         """
-        Saves test case data for a project.
-        
-        Args:
-            db: Database session
-            project_id: ID of the project to save requirements for
-            generated_data: Dictionary containing structured test case data
+        Save parsed data directly to the test_case table.
+        Low-level requirement ID is the parent key for test cases.
         """
-        # Verify project exists
-        project = self.project_service.get_project(db, project_id)
-        if not project:
-            raise ValueError(f"Project with ID {project_id} not found.")
+        for item in parsed_data:
+            # Check if a test case with this UIID already exists
+            new_uiid = f"tc-{hash(item['name'] + str(time.time())) & 0xffffffff}"
             
-        # Validate minimal required structure
-        if "test_cases" not in generated_data or not generated_data["test_cases"]:
-            raise ValueError("Generated data must contain at least one test case")
-        
-        # For now, we'll reuse the existing save_requirements method
-        return self.save_requirements(db, project_id, generated_data)
+            # Create new test case
+            db_tc = TestCase(
+                name=item["name"],
+                description=item.get("description", ""),
+                uiid=new_uiid,
+                parent_uiid=parent_uiid
+            )
+            db.add(db_tc)
+           
+        db.commit()
+        return True
 
 # Instantiate the service (ensure it gets the default repo instance)
 req_gen_service = RequirementGenerationService()

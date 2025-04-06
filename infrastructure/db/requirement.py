@@ -1,5 +1,5 @@
 # shared/core/models/requirement.py
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Table
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from infrastructure.db.db_core import Base
@@ -24,6 +24,7 @@ class ProjectEntity(Base):
 class UserFlowEntity(Base):
     __tablename__ = "user_flows"
     id = Column(Integer, primary_key=True, index=True)
+    uiid = Column(String(255), nullable=False, unique=True, index=True)  # Add unique constraint and index
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
@@ -38,10 +39,11 @@ class HighLevelRequirementEntity(Base):
     __tablename__ = "high_level_requirements"
 
     id = Column(Integer, primary_key=True, index=True)
-    requirement_text = Column(Text, nullable=False)
-    user_flow_id = Column(Integer, ForeignKey("user_flows.id"), nullable=False, index=True)
-    order = Column(Integer, nullable=False, default=0)
-
+    uiid = Column(String(255), nullable=False, unique=True, index=True)  # Add unique constraint and index
+    parent_uiid = Column(String(255), ForeignKey("user_flows.uiid"), nullable=False, index=True)  # Foreign key to UserFlowEntity.uiid
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+   
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     parent_user_flow = relationship("UserFlowEntity", back_populates="high_level_requirement_list")
@@ -52,10 +54,11 @@ class LowLevelRequirementEntity(Base):
     __tablename__ = "low_level_requirements"
 
     id = Column(Integer, primary_key=True, index=True)
-    requirement_text = Column(Text, nullable=False)
-    tech_stack_details = Column(Text, nullable=True) # e.g., specific component, function signature
-    high_level_requirement_id = Column(Integer, ForeignKey("high_level_requirements.id"), nullable=False, index=True)
-
+    uiid = Column(String(255), nullable=False, unique=True, index=True)  # Add unique constraint and index
+    parent_uiid = Column(String(255), ForeignKey("high_level_requirements.uiid"), nullable=False, index=True)  # Foreign key to HighLevelRequirementEntity.uiid
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     parent_high_level_requirement = relationship("HighLevelRequirementEntity", back_populates="low_level_requirement_list")
@@ -65,9 +68,10 @@ class TestCaseEntity(Base):
     __tablename__ = "test_cases"
 
     id = Column(Integer, primary_key=True, index=True)
-    description = Column(Text, nullable=False) # e.g., "Verify login with valid credentials"
-    expected_result = Column(Text, nullable=True)
-    low_level_requirement_id = Column(Integer, ForeignKey("low_level_requirements.id"), nullable=False, index=True)
+    uiid = Column(String(255), nullable=False, unique=True, index=True)  # Add unique constraint and index
+    parent_uiid = Column(String(255), ForeignKey("low_level_requirements.uiid"), nullable=False, index=True)  # Foreign key to LowLevelRequirementEntity.uiid
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)    
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

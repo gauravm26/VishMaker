@@ -47,36 +47,43 @@ def get_project_requirements_endpoint(
                 description=flow.description,
                 project_id=flow.project_id,
                 created_at=flow.created_at,
-                high_level_requirement_list=[]
+                high_level_requirement_list=[],
+                uiid=flow.uiid
             )
             
             # Add high level requirements
             for hlr in flow.high_level_requirement_list:
                 pydantic_hlr = schemas.HighLevelRequirement(
                     id=hlr.id,
-                    requirement_text=hlr.requirement_text,
-                    order=hlr.order,
+                    name=hlr.name,
+                    description=hlr.description,
                     created_at=hlr.created_at,
-                    low_level_requirement_list=[]
+                    low_level_requirement_list=[],
+                    uiid=hlr.uiid,
+                    parent_uiid=hlr.parent_uiid
                 )
                 
                 # Add low level requirements
                 for llr in hlr.low_level_requirement_list:
                     pydantic_llr = schemas.LowLevelRequirement(
                         id=llr.id,
-                        requirement_text=llr.requirement_text,
-                        tech_stack_details=llr.tech_stack_details,
+                        name=llr.name,
+                        description=llr.description,
                         created_at=llr.created_at,
-                        test_case_list=[]
+                        test_case_list=[],
+                        uiid=llr.uiid,
+                        parent_uiid=llr.parent_uiid
                     )
                     
                     # Add test cases
                     for tc in llr.test_case_list:
                         pydantic_tc = schemas.TestCase(
                             id=tc.id,
+                            name=tc.name,
                             description=tc.description,
-                            expected_result=tc.expected_result,
-                            created_at=tc.created_at
+                            created_at=tc.created_at,
+                            uiid=tc.uiid,
+                            parent_uiid=tc.parent_uiid
                         )
                         pydantic_llr.test_case_list.append(pydantic_tc)
                     

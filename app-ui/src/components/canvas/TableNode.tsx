@@ -12,6 +12,7 @@ interface TableNodeActions {
     onAddColumn: (nodeId: string, columnDef: ColumnDef) => void;
     onDeleteColumn: (nodeId: string, columnKey: string) => void;
     onColumnHeaderChange: (nodeId: string, columnKey: string, newValue: string) => void;
+    onToggleSize: (nodeId: string) => void; // Add function to toggle table size
 }
 
 // Define unique menu ID
@@ -25,7 +26,11 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 ];
 
 const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions }>> = ({ data, id: nodeId, selected }) => {
-    const { title, rows, columns = DEFAULT_COLUMNS, actions } = data;
+    const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows } = data;
+    
+    // Debug: Log table data on render
+    console.log(`Table ${nodeId} render: ${title}, Rows: ${rows.length}, All rows: ${allRows.length}, Minimized: ${isMinimized}`);
+    
     const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
     const reactFlowInstance = useReactFlow(); // Hook to interact with React Flow
 
@@ -95,14 +100,42 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
     const displayContextMenu = (event: React.MouseEvent, type: 'header' | 'row' | 'background', rowIndex?: number, colKey?: string) => {
         event.preventDefault();
         event.stopPropagation();
-        console.log(`TableNode: Displaying ${type} context menu`, { nodeId, rowIndex, colKey });
+        
+        // Get UIID information for rows
+        let uiid: string | undefined;
+        let parentUiid: string | undefined;
+        
+        if (type === 'row' && rowIndex !== undefined && rows && rows[rowIndex]) {
+            // Extract the UIID from the row data
+            uiid = rows[rowIndex].uiid || rows[rowIndex].id;
+            
+            // Try to get parent UIID if available in originalData
+            if (rows[rowIndex].originalData) {
+                // The parent relationship could be in originalData based on table structure
+                const originalData = rows[rowIndex].originalData;
+                if (originalData.parent_uiid) {
+                    parentUiid = originalData.parent_uiid;
+                }
+            }
+        }
+        
+        console.log(`TableNode: Displaying ${type} context menu`, { 
+            nodeId, 
+            rowIndex, 
+            colKey,
+            uiid,
+            parentUiid 
+        });
+        
         show({
             event,
             props: {
                 nodeId,
                 type,
                 rowIndex,
-                colKey
+                colKey,
+                uiid,
+                parentUiid
             }
         });
     };
@@ -126,6 +159,13 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
     const handleDeleteColumn = (colKey: string) => {
         actions.onDeleteColumn(nodeId, colKey);
     };
+    
+    // Toggle table size (minimize/maximize)
+    const handleToggleSize = () => {
+        if (actions.onToggleSize) {
+            actions.onToggleSize(nodeId);
+        }
+    };
 
     // --- Rendering ---
     return (
@@ -136,8 +176,22 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
             onContextMenu={(e) => displayContextMenu(e, 'background')} // Context menu on whole node background
         >
             {/* Node Header */}
-            <div className="bg-gray-200 dark:bg-gray-700 p-2 border-b border-gray-400 dark:border-gray-600 font-bold text-center text-base relative text-gray-900 dark:text-gray-100">
-                {title}
+            <div className="bg-gray-200 dark:bg-gray-700 p-2 border-b border-gray-400 dark:border-gray-600 font-bold text-center text-base relative text-gray-900 dark:text-gray-100 flex justify-between items-center">
+                <div className="flex-1 text-center">{title}</div>
+                
+                {/* Minimize/Maximize Button */}
+                <button 
+                    className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 focus:outline-none transition-colors"
+                    onClick={handleToggleSize}
+                    title={isMinimized ? "Show all rows" : "Show fewer rows"}
+                >
+                    {isMinimized ? (
+                        <span className="text-xl">⤢</span> // Maximize icon
+                    ) : (
+                        <span className="text-xl">⤡</span> // Minimize icon
+                    )}
+                </button>
+                
                 <Handle 
                     type="target" 
                     position={Position.Left} 
@@ -182,8 +236,12 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     {rows.map((row, rowIndex) => (
                         <div
                             key={`row-${row.id}-${rowIndex}`}
-                            className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[35px] relative"
+                            className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[35px] relative group"
                             onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
+                            title={`UIID: ${row.uiid || row.id}`}
+                            data-row-id={row.id}
+                            data-row-index={rowIndex}
+                            data-row-sno={row.sno}
                         >
                             {sortedColumns.map((col, colIndex) => {
                                 const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colKey === col.key;
@@ -215,12 +273,13 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             <Handle 
                                                 type="source" 
                                                 position={Position.Right} 
-                                                id={`row-handle-${row.id}`}
+                                                id={`row-handle-${(Number(row.sno) > 0 && !isNaN(Number(row.sno))) ? Number(row.sno) - 1 : rowIndex}`} // Safely handle sno
                                                 className="!bg-teal-500 !w-3 !h-3 dark:bg-teal-400" 
                                                 style={{ 
                                                     top: '50%', 
                                                     right: '-7px'
                                                 }} 
+                                                onMouseEnter={() => console.log(`Row handle for sno=${row.sno}, index=${rowIndex}, id=${row.id}, handle=row-handle-${(Number(row.sno) > 0 && !isNaN(Number(row.sno))) ? Number(row.sno) - 1 : rowIndex}`)}
                                             />
                                         )}
                                     </div>
@@ -228,15 +287,18 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                             })}
                         </div>
                     ))}
-                    {rows.length === 0 && (
-                        <div className="p-2 text-center text-gray-400 dark:text-gray-500 italic">
-                            No items
-                        </div>
-                    )}
                 </div>
+                
+                {/* Show count of hidden rows if minimized */}
+                {isMinimized && allRows.length > rows.length && (
+                    <div className="text-center py-2 text-gray-500 dark:text-gray-400 text-sm border-t border-gray-200 dark:border-gray-700">
+                        {allRows.length - rows.length} more rows hidden. Click ⤢ to show all.
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
+// Use memo to prevent unnecessary re-renders
 export default memo(TableNode);

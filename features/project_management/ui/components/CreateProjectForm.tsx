@@ -21,7 +21,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
         event.preventDefault();
         
         // Get the button ID from the form
-        const buildButton = document.getElementById('createProjectButton');
+        const buildButton = document.getElementById('genReqUserFlow');
         if (buildButton) {
             // Call the AI processing directly
             handleBuildClick(buildButton.id, prompt);
@@ -55,8 +55,8 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 componentId, 
                 text,
                 undefined, // No project ID for refinement
+                undefined, // No parent_key for refinement
                 false, // Don't save to database
-                null, // No target table for refinement
                 (update: string) => {
                     console.log("Progress update received:", update);
                     setProgressUpdate(update);
@@ -132,7 +132,6 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                     text,
                     project.id, // Pass project ID to the LLM service
                     true, // Save to database
-                    'user_flow', // Target table is user_flow
                     (update: string) => {
                         console.log("Progress update received:", update);
                         setProgressUpdate(update);
@@ -210,7 +209,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                         />
                         <button
                             type="button"
-                            id="initialPromptButton"
+                            id="gen_initialPrompt"
                             onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
                             disabled={isSubmitting || isLlmProcessing}
                             className="absolute top-2 right-2 p-0.5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors border border-blue-500"
@@ -228,7 +227,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 
                 <div>
                     <button
-                        id="createProjectButton"
+                        id="gen_userflow"
                         type="button"
                         onClick={(e) => handleBuildClick(e.currentTarget.id, prompt)}
                         disabled={isSubmitting || isLlmProcessing}

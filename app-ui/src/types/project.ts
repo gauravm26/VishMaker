@@ -28,27 +28,32 @@ export interface UserFlow {
   project_id: number;
   created_at: string;
   high_level_requirement_list: HighLevelRequirement[]; // Match backend field name
+  uiid?: string;
 }
 
 export interface HighLevelRequirement {
   id: number;
-  requirement_text: string;
+  name: string; // Changed from requirement_text to match backend
+  description?: string; // Added to match backend
   order: number;
   created_at: string;
   low_level_requirement_list: LowLevelRequirement[]; // Match backend field name
+  uiid?: string;
 }
 
 export interface LowLevelRequirement {
   id: number;
-  requirement_text: string;
-  tech_stack_details?: string;
+  name: string; // Changed from requirement_text to match backend
+  description?: string; // Changed from tech_stack_details to match backend
   created_at: string;
   test_case_list: TestCase[]; // Match backend field name
+  uiid?: string;
 }
 
 export interface TestCase {
   id: number;
-  description: string;
-  expected_result: string | null;
+  name: string; // Changed from description to match backend
+  description?: string; // Changed from expected_result to match backend
   created_at: string;
+  uiid?: string;
 }

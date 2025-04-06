@@ -17,16 +17,16 @@ class ProjectService:
         # Direct database access (formerly in repository)
         return db.query(ProjectModel).offset(skip).limit(limit).all()
 
-    def create_new_project(self, db: Session, project_create: schemas.ProjectCreate) -> ProjectModel:
+    def create_project(self, db: Session, project: schemas.ProjectCreate) -> ProjectModel:
         """Create a new project."""
         # Business logic validation
-        if not project_create.name:
+        if not project.name:
             raise ValueError("Project name cannot be empty") # Example business rule
         
         # Direct database access (formerly in repository)
         db_project = ProjectModel(
-            name=project_create.name,
-            initial_prompt=project_create.initial_prompt
+            name=project.name,
+            initial_prompt=project.initial_prompt
             # created_at/updated_at are handled by the database defaults/triggers
         )
         db.add(db_project) # Add to session
@@ -34,7 +34,7 @@ class ProjectService:
         db.refresh(db_project) # Refresh instance to get ID and default values from DB
         return db_project
 
-    def update_existing_project(self, db: Session, project_id: int, project_update: schemas.ProjectUpdate) -> Optional[ProjectModel]:
+    def update_project(self, db: Session, project_id: int, project_update: schemas.ProjectUpdate) -> Optional[ProjectModel]:
         """Update an existing project."""
         # Direct database access (formerly in repository)
         db_project = self.get_project(db, project_id)
@@ -52,7 +52,7 @@ class ProjectService:
         db.refresh(db_project)
         return db_project
 
-    def delete_single_project(self, db: Session, project_id: int) -> Optional[ProjectModel]:
+    def delete_project(self, db: Session, project_id: int) -> Optional[ProjectModel]:
         """Delete a project."""
         try:
             db_project = self.get_project(db, project_id)
@@ -68,11 +68,11 @@ class ProjectService:
             # 1. First delete test_cases that are linked to this project via the chain
             db.execute(
                 text("""
-                DELETE FROM test_cases 
-                WHERE low_level_requirement_id IN (
-                    SELECT llr.id FROM low_level_requirements llr
-                    JOIN high_level_requirements hlr ON llr.high_level_requirement_id = hlr.id
-                    JOIN user_flows uf ON hlr.user_flow_id = uf.id
+                DELETE FROM test_cases tc
+                WHERE tc.parent_uiid IN (
+                    SELECT llr.uiid FROM low_level_requirements llr
+                    JOIN high_level_requirements hlr ON llr.parent_uiid = hlr.uiid
+                    JOIN user_flows uf ON hlr.parent_uiid = uf.uiid
                     WHERE uf.project_id = :project_id
                 )
                 """),
@@ -82,10 +82,10 @@ class ProjectService:
             # 2. Delete low_level_requirements
             db.execute(
                 text("""
-                DELETE FROM low_level_requirements 
-                WHERE high_level_requirement_id IN (
-                    SELECT hlr.id FROM high_level_requirements hlr
-                    JOIN user_flows uf ON hlr.user_flow_id = uf.id
+                DELETE FROM low_level_requirements llr
+                WHERE llr.parent_uiid IN (
+                    SELECT hlr.uiid FROM high_level_requirements hlr
+                    JOIN user_flows uf ON hlr.parent_uiid = uf.uiid
                     WHERE uf.project_id = :project_id
                 )
                 """),
@@ -95,10 +95,10 @@ class ProjectService:
             # 3. Delete high_level_requirements directly linked to user_flows
             db.execute(
                 text("""
-                DELETE FROM high_level_requirements 
-                WHERE user_flow_id IN (
-                    SELECT id FROM user_flows
-                    WHERE project_id = :project_id
+                DELETE FROM high_level_requirements hlr
+                WHERE hlr.parent_uiid IN (
+                    SELECT uf.uiid FROM user_flows uf
+                    WHERE uf.project_id = :project_id
                 )
                 """),
                 {"project_id": project_id}
@@ -125,18 +125,6 @@ class ProjectService:
             # Re-raise the exception to handle it at the API level
             raise
 
-    # Alias methods to maintain backward compatibility if needed
-    def get_projects(self, db: Session, skip: int = 0, limit: int = 100) -> List[ProjectModel]:
-        return self.get_all_projects(db, skip, limit)
-        
-    def create_project(self, db: Session, project: schemas.ProjectCreate) -> ProjectModel:
-        return self.create_new_project(db, project)
-        
-    def update_project(self, db: Session, project_id: int, project_update: schemas.ProjectUpdate) -> Optional[ProjectModel]:
-        return self.update_existing_project(db, project_id, project_update)
-        
-    def delete_project(self, db: Session, project_id: int) -> Optional[ProjectModel]:
-        return self.delete_single_project(db, project_id)
 
 # Instantiate the service (can be used directly or injected)
 project_service = ProjectService()

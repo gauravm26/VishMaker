@@ -2,11 +2,15 @@ import json
 import os
 import sys
 import logging
+import time
+import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, Body, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from infrastructure.db.db_core import get_db # DB session dependency
 
 # Add infrastructure to path for BedrockService import
 project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -14,7 +18,7 @@ sys.path.append(str(project_root))
 
 from infrastructure.llms.llm_models import BedrockService, load_config, llm_logger
 # Import the requirement generation service directly
-from features.requirement_generation.core.services import req_gen_service
+from features.requirement_generation.core.services import req_gen_service as req_gen_service_instance
 from infrastructure.db.db_core import get_db
 
 router = APIRouter()
@@ -23,14 +27,82 @@ class LlmProcessRequest(BaseModel):
     componentId: str
     text: str
     project_id: Optional[int] = None
+    parent_uiid: Optional[str] = None  # UIID of parent entity
     save_to_db: bool = True
-    target_table: Optional[str] = None  # Options: "user_flow", "high_level_requirement", "low_level_requirement", "test_case"
 
 class LlmProcessResponse(BaseModel):
     result: str
     modelId: str
     instructionId: str
     progressUpdates: list[str] = []
+    generated_uiids: List[str] = []  # List of UIIDs generated for the items
+
+def generate_uiid(table_type: str, index: int, text: str) -> str:
+    """
+    Generate a unique identifier for an item.
+    
+    Args:
+        table_type: Type of table ("user_flow", "high_level_requirement", etc.)
+        index: The item's index/position
+        text: Text to use for additional uniqueness
+        
+    Returns:
+        A unique ID string
+    """
+    # Normalize table_type to ensure consistency
+    normalized_table_type = table_type
+    if table_type == "high_level_requirements":
+        normalized_table_type = "high_level_requirement"
+    elif table_type == "low_level_requirements":
+        normalized_table_type = "low_level_requirement"
+    elif table_type == "test_cases":
+        normalized_table_type = "test_case"
+    
+    # Create a short prefix based on table type
+    prefix = normalized_table_type.split('_')[0][:3]  # First 3 chars of first word
+    
+    # Get current timestamp as base36 string (compact representation)
+    timestamp = time.time()
+    timestamp_str = format(int(timestamp * 1000), 'x')[-6:]  # Last 6 hex chars
+    
+    # Format: prefix-index-timestamp
+    return f"{prefix}_{index+1}_{timestamp_str}"
+
+def extract_items_from_content(content: str) -> List[Dict[str, Any]]:
+    """
+    Extract items from content based on pipe-delimited format.
+    Args:
+        content: Raw content text
+    Returns:
+        List of dictionaries with name and description fields
+    """
+    items = []
+    lines = content.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Check if it's a pipe-delimited line
+        if '|' in line:
+            parts = line.split('|')
+            name = parts[0].strip()
+            description = parts[1].strip() if len(parts) > 1 else ""
+            
+            items.append({
+                "name": name,
+                "description": description
+            })
+        # If not pipe-delimited, try to extract structured data
+        elif ':' in line and not line.lower().startswith(('id:', 'item name:', 'description:')):
+            parts = line.split(':', 1)
+            items.append({
+                "name": parts[0].strip(),
+                "description": parts[1].strip()
+            })
+    
+    return items
 
 @router.post("/process", response_model=LlmProcessResponse)
 async def process_with_llm(request: LlmProcessRequest = Body(...), background_tasks: BackgroundTasks = None):
@@ -39,6 +111,8 @@ async def process_with_llm(request: LlmProcessRequest = Body(...), background_ta
     
     # Keep track of progress updates
     progress_updates = []
+    # Initialize generated_uiids list to prevent undefined variable errors
+    generated_uiids = []
     
     try:
         # Log request information
@@ -65,6 +139,18 @@ async def process_with_llm(request: LlmProcessRequest = Body(...), background_ta
         if not component_mapping:
             llm_logger.error(f"[{request_id}] Component '{request.componentId}' not found in configuration")
             raise HTTPException(status_code=404, detail=f"Component '{request.componentId}' not found in configuration")
+        
+        # Get the target table from component config instead of request
+        target_table = component_mapping.get('targetTable')
+        llm_logger.info(f"[{request_id}] Found target table in config: {target_table}")
+        
+        # Normalize target_table to ensure consistency
+        if target_table == "high_level_requirements":
+            target_table = "high_level_requirement"
+        elif target_table == "low_level_requirements":
+            target_table = "low_level_requirement"
+        elif target_table == "test_cases":
+            target_table = "test_case"
         
         # Get the model instructions
         model_instructions = component_mapping.get('modelInstructions', [])
@@ -185,24 +271,50 @@ async def process_with_llm(request: LlmProcessRequest = Body(...), background_ta
                         llm_logger.error(f"[{request_id}] Output refinement error: {str(e)}")
                         # Continue with original result if refinement fails
         
+        # Extract items from the content to generate UIIDs
+        if output_type == 'columns':
+            items = extract_items_from_content(current_text)
+            
+            # Generate UIIDs for each item
+            generated_uiids = []
+            for i, item in enumerate(items):
+                uiid = generate_uiid(target_table, i, item["name"] + item["description"])
+                generated_uiids.append(uiid)
+            
+            # Prepare processed content with UIIDs
+            processed_lines = []
+            
+            if items:
+                # Re-format the content with UIIDs
+                for i, (item, uiid) in enumerate(zip(items, generated_uiids)):
+                    processed_lines.append(f"{item['name']} | {item['description']} | {uiid}")
+                
+                # Replace the content with the processed content including UIIDs
+                current_text = "\n".join(processed_lines)
+        # If not columns format, make sure we still have empty generated_uiids list
+        else:
+            generated_uiids = []
+        
         # Create the response object first
         response = LlmProcessResponse(
             result=current_text,
             modelId=final_model_id,
             instructionId=final_instruction_id,
-            progressUpdates=progress_updates
+            progressUpdates=progress_updates,
+            generated_uiids=generated_uiids
         )
         
         # Add saving to database as a background task if requested
-        if request.save_to_db and request.project_id is not None:
-            progress_updates.append(f"Scheduling database save for {request.target_table} data...")
+        if request.save_to_db and (request.project_id is not None or request.parent_uiid is not None):
+            progress_updates.append(f"Scheduling database save for {target_table} data...")
             background_tasks.add_task(
                 save_to_database,
                 content=current_text,
-                project_id=request.project_id,
-                target_table=request.target_table,
+                project_id=request.project_id,  # Use 0 if project_id is None
+                target_table=target_table,
                 request_id=request_id,
-                progress_updates=progress_updates
+                progress_updates=progress_updates,
+                parent_uiid=request.parent_uiid  # Pass the parent UIID
             )
         
         # Return the final response immediately
@@ -217,40 +329,36 @@ async def process_with_llm(request: LlmProcessRequest = Body(...), background_ta
         # Return a generic error message
         raise HTTPException(status_code=500, detail=f"Error processing LLM request: {str(e)}")
 
-async def save_to_database(content: str, project_id: int, target_table: str, request_id: str, progress_updates: List[str]) -> bool:
-    """
-    Save content to the appropriate database table using the service layer directly.
-    
-    Args:
-        content: The formatted content to save
-        project_id: The project ID to associate with the content
-        target_table: The target table type ('user_flow', 'high_level_requirement', etc.)
-        request_id: The request ID for logging
-        progress_updates: List to append progress updates to
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    llm_logger.info(f"[{request_id}] Saving to database. Target: {target_table}, Project ID: {project_id}")
-    progress_updates.append(f"Saving {target_table} data to database...")
-    
+async def save_to_database(
+    content: str,
+    project_id: int,
+    target_table: str,
+    request_id: str,
+    progress_updates: List[str],
+    parent_uiid: Optional[str] = None,
+):
+    """Save the generated content to the database."""
     try:
-        # Get database session
+        # Get database session using the generator approach
         db = next(get_db())
         
-        # Call service to save the data - let the service handle the parsing
-        req_gen_service.save_llm_generated_data(
-            db=db, 
-            project_id=project_id, 
+        # Log parameters
+        llm_logger.info(f"[{request_id}] Saving to database: table={target_table}, project_id={project_id}, parent_uiid={parent_uiid}")
+        
+        # Directly call service method to save data
+        req_gen_service_instance.save_llm_generated_data(
+            db=db,
+            project_id=project_id,
             table_type=target_table,
-            raw_content=content
+            raw_content=content,
+            parent_uiid=parent_uiid
         )
         
-        llm_logger.info(f"[{request_id}] Successfully saved to database")
-        progress_updates.append(f"Successfully saved to database")
-        return True
+        progress_updates.append(f"Successfully saved content to database ({target_table}).")
+        llm_logger.info(f"[{request_id}] Successfully saved content to database ({target_table}).")
         
     except Exception as e:
-        llm_logger.error(f"[{request_id}] Exception saving to database: {str(e)}")
-        progress_updates.append(f"Failed to save to database: {str(e)}")
-        return False
+        error_msg = f"Error saving to database: {str(e)}"
+        progress_updates.append(error_msg)
+        llm_logger.error(f"[{request_id}] {error_msg}")
+        llm_logger.exception(e)

@@ -12,6 +12,8 @@ export interface TableRowData {
     desc?: string | null; // Description is optional
     // We might store the original object ID for reference if needed
     originalId?: number;
+    uiid?: string; // UIID for this row (needed for parent-child relationships)
+    originalData?: any; // Original data from the database
     [key: string]: any; // Allow any arbitrary column values
 }
 
@@ -29,4 +31,10 @@ export interface TableNodeData {
     title: string;
     rows: TableRowData[];
     columns?: ColumnDef[];
+    componentId: string; // Unique ID for the component to be used for LLM processing
+    isMinimized?: boolean; // Whether the table is currently minimized (showing fewer rows)
+    allRows?: TableRowData[]; // All rows of the table (for minimized state)
+    onToggleSize?: (nodeId: string) => void; // Function to toggle between minimized/maximized
+    visibleRows?: TableRowData[]; // Rows currently visible (for minimized state)
+    actions?: any; // Actions to manipulate the table data
 }
