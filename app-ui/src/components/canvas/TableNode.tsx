@@ -268,18 +268,14 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             String(cellValue)
                                         )}
                                         
-                                        {/* Place handle in the last cell instead of separate cell */}
+                                        {/* Conditionally render the handle on the last column */}
                                         {isLastCol && (
-                                            <Handle 
-                                                type="source" 
-                                                position={Position.Right} 
-                                                id={`row-handle-${(Number(row.sno) > 0 && !isNaN(Number(row.sno))) ? Number(row.sno) - 1 : rowIndex}`} // Safely handle sno
-                                                className="!bg-teal-500 !w-3 !h-3 dark:bg-teal-400" 
-                                                style={{ 
-                                                    top: '50%', 
-                                                    right: '-7px'
-                                                }} 
-                                                onMouseEnter={() => console.log(`Row handle for sno=${row.sno}, index=${rowIndex}, id=${row.id}, handle=row-handle-${(Number(row.sno) > 0 && !isNaN(Number(row.sno))) ? Number(row.sno) - 1 : rowIndex}`)}
+                                            <Handle
+                                                type="source"
+                                                position={Position.Right}
+                                                id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
+                                                className="!bg-blue-500 !w-3 !h-3"
+                                                style={{ top: '50%', right: '-7px' }} // Adjust position as needed
                                             />
                                         )}
                                     </div>
@@ -296,6 +292,21 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     </div>
                 )}
             </div>
+            
+            {/* Special handle for minimized tables that will serve as connection point for hidden rows */}
+            {isMinimized && allRows.length > rows.length && (
+                <Handle
+                    type="source"
+                    position={Position.Bottom}
+                    id="minimized-rows-handle"
+                    className="!bg-purple-500 !w-4 !h-4"
+                    style={{ 
+                        right: '-7px',
+                        bottom: '+10px'
+                    }}
+                    title={`Connection point for ${allRows.length - rows.length} hidden rows`}
+                />
+            )}
         </div>
     );
 };

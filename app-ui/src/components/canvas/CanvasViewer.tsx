@@ -626,16 +626,25 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                             // Use flowIndex as fallback if sno is not available
                             const rawSno = Number(flow.sno || 0);
                             const actualRowIndex = !isNaN(rawSno) && rawSno > 0 ? rawSno - 1 : flowIndex;
-                            console.log(`Flow ${flowIndex} has sno=${flow.sno}, using row handle ID row-handle-${actualRowIndex}`);
+                            console.log(`Flow ${flowIndex} has sno=${flow.sno}, using row handle ID row-handle-${flow.uiid || flow.id}`);
                             
                             // Create an edge from the specific flow row to its HLR table
-                            const rowHandleId = `row-handle-${actualRowIndex}`;
-                            console.log(`Creating edge with handle ID: ${rowHandleId}`);
+                            const rowHandleId = `row-handle-${flow.uiid || flow.id}`;
+                            
+                            // Determine if this row might be hidden when table is minimized
+                            // If the row's index is >= DEFAULT_VISIBLE_ROWS, it will be hidden when minimized
+                            const mightBeHiddenWhenMinimized = actualRowIndex >= DEFAULT_VISIBLE_ROWS;
+                            
+                            // Use the special minimized handle if the row might be hidden
+                            const sourceHandleToUse = mightBeHiddenWhenMinimized ? 
+                                "minimized-rows-handle" : rowHandleId;
+                            
+                            console.log(`Creating edge with handle ID: ${sourceHandleToUse} (might be hidden: ${mightBeHiddenWhenMinimized})`);
                             
                             const flowToHlrEdge: Edge = {
                                 id: `edge-${nodeId}-row${actualRowIndex}-to-${hlrNodeId}`,
                                 source: nodeId,
-                                sourceHandle: rowHandleId,
+                                sourceHandle: sourceHandleToUse,
                                 target: hlrNodeId,
                                 type: 'smoothstep',
                                 animated: true
@@ -691,16 +700,24 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                         // Use hlrIndex as fallback if sno is not available
                                         const rawHlrSno = Number(hlr.sno || 0);
                                         const actualHlrRowIndex = !isNaN(rawHlrSno) && rawHlrSno > 0 ? rawHlrSno - 1 : hlrIndex;
-                                        console.log(`HLR ${hlrIndex} has sno=${hlr.sno}, using row handle ID row-handle-${actualHlrRowIndex}`);
+                                        console.log(`HLR ${hlrIndex} has sno=${hlr.sno}, using row handle ID row-handle-${hlr.uiid || hlr.id}`);
                                         
                                         // Create an edge from the specific HLR row to its LLR table
-                                        const hlrRowHandleId = `row-handle-${actualHlrRowIndex}`;
-                                        console.log(`Creating LLR edge with handle ID: ${hlrRowHandleId}`);
+                                        const hlrRowHandleId = `row-handle-${hlr.uiid || hlr.id}`;
+                                        
+                                        // Determine if this row might be hidden when table is minimized
+                                        const hlrMightBeHiddenWhenMinimized = actualHlrRowIndex >= DEFAULT_VISIBLE_ROWS;
+                                        
+                                        // Use the special minimized handle if the row might be hidden
+                                        const hlrSourceHandleToUse = hlrMightBeHiddenWhenMinimized ? 
+                                            "minimized-rows-handle" : hlrRowHandleId;
+                                        
+                                        console.log(`Creating LLR edge with handle ID: ${hlrSourceHandleToUse} (might be hidden: ${hlrMightBeHiddenWhenMinimized})`);
                                         
                                         const hlrToLlrEdge: Edge = {
                                             id: `edge-${hlrNodeId}-row${actualHlrRowIndex}-to-${llrNodeId}`,
                                             source: hlrNodeId,
-                                            sourceHandle: hlrRowHandleId,
+                                            sourceHandle: hlrSourceHandleToUse,
                                             target: llrNodeId,
                                             type: 'smoothstep',
                                             animated: true
@@ -758,16 +775,24 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                                     // Use llrIndex as fallback if sno is not available
                                                     const rawLlrSno = Number(llr.sno || 0);
                                                     const actualLlrRowIndex = !isNaN(rawLlrSno) && rawLlrSno > 0 ? rawLlrSno - 1 : llrIndex;
-                                                    console.log(`LLR ${llrIndex} has sno=${llr.sno}, using row handle ID row-handle-${actualLlrRowIndex}`);
+                                                    console.log(`LLR ${llrIndex} has sno=${llr.sno}, using row handle ID row-handle-${llr.uiid || llr.id}`);
                                                     
                                                     // Create an edge from the specific LLR row to its TC table
-                                                    const llrRowHandleId = `row-handle-${actualLlrRowIndex}`;
-                                                    console.log(`Creating TC edge with handle ID: ${llrRowHandleId}`);
+                                                    const llrRowHandleId = `row-handle-${llr.uiid || llr.id}`;
+                                                    
+                                                    // Determine if this row might be hidden when table is minimized
+                                                    const llrMightBeHiddenWhenMinimized = actualLlrRowIndex >= DEFAULT_VISIBLE_ROWS;
+                                                    
+                                                    // Use the special minimized handle if the row might be hidden
+                                                    const llrSourceHandleToUse = llrMightBeHiddenWhenMinimized ? 
+                                                        "minimized-rows-handle" : llrRowHandleId;
+                                                    
+                                                    console.log(`Creating TC edge with handle ID: ${llrSourceHandleToUse} (might be hidden: ${llrMightBeHiddenWhenMinimized})`);
                                                     
                                                     const llrToTcEdge: Edge = {
                                                         id: `edge-${llrNodeId}-row${actualLlrRowIndex}-to-${tcNodeId}`,
                                                         source: llrNodeId,
-                                                        sourceHandle: llrRowHandleId,
+                                                        sourceHandle: llrSourceHandleToUse,
                                                         target: tcNodeId,
                                                         type: 'smoothstep',
                                                         animated: true
@@ -1074,7 +1099,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
-                onConnect={(params: Connection) => setEdges((eds) => addEdge(params, eds))}
                 connectionLineType={ConnectionLineType.SmoothStep}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
