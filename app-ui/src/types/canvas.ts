@@ -37,4 +37,5 @@ export interface TableNodeData {
     onToggleSize?: (nodeId: string) => void; // Function to toggle between minimized/maximized
     visibleRows?: TableRowData[]; // Rows currently visible (for minimized state)
     actions?: any; // Actions to manipulate the table data
+    isTestCase?: boolean; // Whether this table contains test cases
 }

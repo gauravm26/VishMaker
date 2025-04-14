@@ -13,6 +13,7 @@ interface TableNodeActions {
     onDeleteColumn: (nodeId: string, columnKey: string) => void;
     onColumnHeaderChange: (nodeId: string, columnKey: string, newValue: string) => void;
     onToggleSize: (nodeId: string) => void; // Add function to toggle table size
+    onContextMenu?: (event: React.MouseEvent, props: any) => void; // Handle context menu from CanvasViewer
 }
 
 // Define unique menu ID
@@ -26,10 +27,10 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 ];
 
 const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions }>> = ({ data, id: nodeId, selected }) => {
-    const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows } = data;
+    const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows, isTestCase = false } = data;
     
     // Debug: Log table data on render
-    console.log(`Table ${nodeId} render: ${title}, Rows: ${rows.length}, All rows: ${allRows.length}, Minimized: ${isMinimized}`);
+    console.log(`Table ${nodeId} render: ${title}, Rows: ${rows.length}, All rows: ${allRows.length}, Minimized: ${isMinimized}, TestCase: ${isTestCase}`);
     
     const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
     const reactFlowInstance = useReactFlow(); // Hook to interact with React Flow
@@ -124,20 +125,36 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
             rowIndex, 
             colKey,
             uiid,
-            parentUiid 
+            parentUiid,
+            isTestCase
         });
         
-        show({
-            event,
-            props: {
+        // Use the parent's context menu handler if provided
+        if (actions.onContextMenu) {
+            actions.onContextMenu(event, {
                 nodeId,
                 type,
                 rowIndex,
                 colKey,
                 uiid,
-                parentUiid
-            }
-        });
+                parentUiid,
+                isTestCase
+            });
+        } else {
+            // Fallback to local context menu
+            show({
+                event,
+                props: {
+                    nodeId,
+                    type,
+                    rowIndex,
+                    colKey,
+                    uiid,
+                    parentUiid,
+                    isTestCase
+                }
+            });
+        }
     };
 
     const handleAddColumn = () => {

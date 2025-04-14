@@ -1,5 +1,5 @@
 // app-ui/src/components/canvas/CanvasViewer.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactFlow, {
     Controls,
     Background,
@@ -156,6 +156,39 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
     
     // Track which tables are minimized (initially all tables are minimized)
     const [minimizedTables, setMinimizedTables] = useState<Record<string, boolean>>({});
+    
+    // Track the current right-clicked node type
+    const [clickedNodeType, setClickedNodeType] = useState<string | null>(null);
+    
+    // Context menu setup
+    const { show } = useContextMenu({
+        id: "tableNodeMenu"
+    });
+    
+    // Handle context menu show
+    const handleContextMenu = useCallback((event: React.MouseEvent, props: any) => {
+        // Save the node type to determine what menu items to show
+        if (props?.nodeId) {
+            const isTestCase = props.nodeId.startsWith('testcase_') || props.isTestCase === true;
+            setClickedNodeType(isTestCase ? 'testcase' : 'other');
+        } else {
+            setClickedNodeType(null);
+        }
+        
+        // Show the context menu
+        show({
+            event,
+            props
+        });
+    }, [show]);
+    
+    // Track context menu reference to pass to TableNode
+    const contextMenuHandlerRef = useRef(handleContextMenu);
+    
+    // Update ref when handler changes
+    useEffect(() => {
+        contextMenuHandlerRef.current = handleContextMenu;
+    }, [handleContextMenu]);
     
     // Toggle table minimize/maximize state
     const toggleTableSize = useCallback((nodeId: string) => {
@@ -497,6 +530,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             [nodeId]: true
         }));
         
+        // Determine if this is a test case table for context menu customization
+        const isTestCase = nodeId.startsWith('testcase_');
+        
         // Create the node with the organized data
         return {
             id: nodeId,
@@ -508,6 +544,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 rows: visibleRows,
                 allRows: tableRows,
                 isMinimized: isMinimized,
+                isTestCase: isTestCase, // Pass flag to determine table type
                 actions: {
                     onCellChange: handleCellChange,
                     onAddRow: handleAddRow,
@@ -515,7 +552,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                     onAddColumn: handleAddColumn,
                     onDeleteColumn: handleDeleteColumn,
                     onColumnHeaderChange: handleColumnHeaderChange,
-                    onToggleSize: toggleTableSize
+                    onToggleSize: toggleTableSize,
+                    onContextMenu: handleContextMenu // Pass the context menu handler
                 }
             },
             position: { x: 0, y: 0 }, // Position will be calculated later
@@ -1046,6 +1084,156 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         }
     };
 
+    // Build feature for test cases
+    const handleBuildFeature = async (nodeId: string, rowIndex: number): Promise<void> => {
+        if (!projectId) {
+            console.error("Cannot build feature: No project ID");
+            setError("Cannot build feature: No project ID");
+            return;
+        }
+        
+        console.log(`Building feature for nodeId=${nodeId}, rowIndex=${rowIndex}, projectId=${projectId}`);
+        setGenerateLoading(true);
+        setError(null);
+        
+        // Show loading state in the node
+        setNodes(nodes.map(node => 
+            node.id === nodeId 
+                ? { 
+                    ...node, 
+                    data: { 
+                        ...node.data, 
+                        title: `${node.data.title} (Building Feature...)` 
+                    } 
+                } 
+                : node
+        ));
+        
+        try {
+            // Find the node and get its data
+            const node = nodes.find(n => n.id === nodeId);
+            if (!node) {
+                console.error(`Node with ID ${nodeId} not found`);
+                throw new Error(`Node with ID ${nodeId} not found`);
+            }
+            
+            const nodeData = node.data;
+            const componentId = nodeData.componentId;
+            
+            console.log(`Node found: ${nodeId}, componentId=${componentId}`);
+            
+            if (!componentId) {
+                console.error('Component ID not found for this table');
+                throw new Error('Component ID not found for this table');
+            }
+            
+            // Get the visible rows and allRows from node data
+            const visibleRows: TableRowData[] = nodeData.rows || [];
+            const allRows: TableRowData[] = nodeData.allRows || visibleRows;
+            const isMinimized = nodeData.isMinimized || false;
+            
+            console.log(`Table state: isMinimized=${isMinimized}, visibleRows=${visibleRows.length}, allRows=${allRows.length}`);
+            
+            // Validate row index
+            if (rowIndex < 0 || rowIndex >= visibleRows.length) {
+                console.error(`Row index ${rowIndex} is out of bounds (0-${visibleRows.length-1})`);
+                throw new Error(`Row index ${rowIndex} is out of bounds`);
+            }
+            
+            // Get the row data for the clicked row
+            const rowData = visibleRows[rowIndex];
+            console.log(`Found row at index ${rowIndex} in visible rows:`, rowData);
+            
+            // If minimized, find the actual index in allRows for reference
+            let effectiveRowIndex = rowIndex;
+            if (isMinimized) {
+                const foundIndex = allRows.findIndex(r => r.id === rowData.id);
+                if (foundIndex >= 0) {
+                    effectiveRowIndex = foundIndex;
+                    console.log(`Row's actual index in allRows: ${effectiveRowIndex}`);
+                }
+            }
+            
+            // Get the UIID from the row data
+            const rowUiid = rowData.uiid || rowData.id;
+            
+            // Verify which row we're processing
+            console.log(`BUILDING FEATURE FOR ROW ${rowIndex} (effective ${effectiveRowIndex}):`);
+            console.log(`Row name: ${rowData.name}`);
+            console.log(`Row UIID: ${rowUiid}`);
+            console.log(`Original data:`, rowData.originalData);
+            
+            // Prepare text to send to LLM
+            const text = `
+                Test Name: ${rowData.name}
+                Description: ${rowData.desc || ''}
+                Additional Context: This is a test case from the ${nodeData.title} table.
+                Row Index: ${effectiveRowIndex}
+                Row UIID: ${rowUiid}
+            `;
+            
+            console.log(`Calling LLM service with componentId=${componentId}, projectId=${projectId}, parent_uiid=${rowUiid}`);
+            const response = await LlmService.processWithLlm(
+                "buildFeature", // Use a specific component ID for building features
+                text,
+                projectId,
+                true, // Save to database
+                (update: string) => {
+                    console.log("LLM progress update:", update);
+                },
+                rowUiid // Pass the UIID as parent_uiid
+            );
+            
+            console.log("LLM response received:", response);
+            if (response.result) {
+                console.log("LLM result:", response.result.substring(0, 200) + "...");
+            }
+            console.log("Backend-generated UIIDs:", response.generated_uiids || []);
+            
+            // Show success feedback
+            const originalTitle = nodeData.title;
+            setNodes(nodes.map(node => 
+                node.id === nodeId 
+                    ? { 
+                        ...node, 
+                        data: { 
+                            ...node.data, 
+                            title: `${originalTitle} (Feature Built!)` 
+                        } 
+                    } 
+                    : node
+            ));
+            
+            // Re-fetch data to show updated requirements
+            console.log("Refreshing data to show new feature");
+            await fetchData();
+            
+            // Reset title after delay
+            setTimeout(() => {
+                setNodes(nodes => nodes.map(node => 
+                    node.id === nodeId 
+                        ? { 
+                            ...node, 
+                            data: { 
+                                ...node.data, 
+                                title: originalTitle
+                            } 
+                        } 
+                        : node
+                ));
+            }, 3000);
+            
+        } catch (error: any) {
+            console.error('Error building feature:', error);
+            setError(`Failed to build feature: ${error.message || 'Unknown error'}`);
+            
+            // Reset nodes to original state
+            await fetchData();
+        } finally {
+            setGenerateLoading(false);
+        }
+    };
+
     // Fetch data when component mounts or projectId changes
     useEffect(() => {
         fetchData();
@@ -1152,34 +1340,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 
                 {/* Context Menu */}
                 <Menu id="tableNodeMenu">
-                    {/* Show UIID information if available */}
-                    <Item onClick={({ props }) => {
-                        if (props?.uiid) {
-                            // Copy to clipboard
-                            navigator.clipboard.writeText(props.uiid);
-                            console.log(`Copied UIID to clipboard: ${props.uiid}`);
-                            // Optional: Show a toast or notification
-                            alert(`Copied UIID: ${props.uiid}`);
-                        }
-                    }}>
-                        Copy UIID
-                    </Item>
-                    
-                    {/* Show parent UIID information if available */}
-                    <Item onClick={({ props }) => {
-                        if (props?.parentUiid) {
-                            // Copy to clipboard
-                            navigator.clipboard.writeText(props.parentUiid);
-                            console.log(`Copied parent UIID to clipboard: ${props.parentUiid}`);
-                            // Optional: Show a toast or notification
-                            alert(`Copied Parent UIID: ${props.parentUiid}`);
-                        } else {
-                            alert('No parent UIID available');
-                        }
-                    }}>
-                        Copy Parent UIID
-                    </Item>
-                    
+                    {/* Table manipulation items */}
                     <Item onClick={({ props }) => {
                         if (props?.type === 'row' && props.rowIndex !== undefined) {
                             handleAddRow(props.nodeId, props.rowIndex);
@@ -1214,21 +1375,61 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                     }}>
                         Delete Column
                     </Item>
-                    <Item onClick={({ props }) => {
-                        if (props?.type === 'row' && props.rowIndex !== undefined) {
-                            console.log('Context menu: Generate Child Requirements clicked', {
-                                nodeId: props.nodeId,
-                                rowIndex: props.rowIndex,
-                                rowType: props.type
-                            });
-                            handleGenerateRequirements(props.nodeId, props.rowIndex);
-                        } else {
-                            console.warn('Cannot generate requirements: Missing nodeId or rowIndex', props);
-                        }
-                    }}>
-                        Generate Child Requirements
-                    </Item>
+                    
+                    {/* Generate Child Requirements - Only show for non-test case tables */}
+                    {clickedNodeType !== 'testcase' && (
+                        <Item 
+                            id="generate-child-req"
+                            onClick={({ props }) => {
+                                if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                    props.nodeId && !props.nodeId.startsWith('testcase_')) {
+                                    console.log('Context menu: Generate Child Requirements clicked', {
+                                        nodeId: props.nodeId,
+                                        rowIndex: props.rowIndex,
+                                        rowType: props.type
+                                    });
+                                    handleGenerateRequirements(props.nodeId, props.rowIndex);
+                                } else {
+                                    console.warn('Cannot generate requirements: Missing nodeId or rowIndex', props);
+                                }
+                            }}
+                        >
+                            Generate Child Requirements
+                        </Item>
+                    )}
+                    
+                    {/* Build the Feature - Only show for test case tables with highlighted styling */}
+                    {clickedNodeType === 'testcase' && (
+                        <Item 
+                            id="build-feature"
+                            onClick={({ props }) => {
+                                if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                    props.nodeId && props.nodeId.startsWith('testcase_')) {
+                                    console.log('Context menu: Build the Feature clicked', {
+                                        nodeId: props.nodeId,
+                                        rowIndex: props.rowIndex,
+                                        rowType: props.type
+                                    });
+                                    handleBuildFeature(props.nodeId, props.rowIndex);
+                                } else {
+                                    console.warn('Cannot build feature: Missing nodeId or rowIndex or not a test case', props);
+                                }
+                            }}
+                        >
+                            <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
+                        </Item>
+                    )}
                 </Menu>
+                
+                {/* Add custom styles for the Build Feature menu item */}
+                <style>
+                    {`
+                    /* Make the text white when the menu item is highlighted */
+                    .contexify_item:hover .build-feature-text { 
+                        color: white !important; 
+                    }
+                    `}
+                </style>
             </div>
         </div>
     );
