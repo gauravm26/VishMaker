@@ -57,3 +57,28 @@ export interface TestCase {
   created_at: string;
   uiid?: string;
 }
+
+// For code generation feature
+export interface BuildFeatureRequest {
+  project_id: number;
+  test_case_id: string;
+  test_name: string;
+  test_description: string;
+  parent_uiid?: string;
+  additional_context?: Record<string, any>;
+}
+
+export interface CodeFile {
+  filename: string;
+  content: string;
+  language?: string;
+}
+
+export interface BuildFeatureResponse {
+  success: boolean;
+  message: string;
+  code_files?: CodeFile[];
+  generated_uiids?: string[];
+  error?: string;
+  test_metadata?: Record<string, any>;
+}

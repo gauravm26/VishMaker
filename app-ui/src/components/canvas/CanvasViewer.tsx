@@ -29,7 +29,12 @@ import "react-contexify/dist/ReactContexify.css";
 
 import apiClient from '@/lib/apiClient';
 import LlmService from '@/lib/llmService';
-import { ProjectRequirementsResponse, UserFlow } from '@/types/project';
+import { 
+    ProjectRequirementsResponse, 
+    UserFlow, 
+    BuildFeatureRequest, 
+    BuildFeatureResponse 
+} from '@/types/project';
 import { CustomNode, TableNodeData, TableRowData, ColumnDef } from '@/types/canvas';
 import TableNode from './TableNode';
 
@@ -1163,32 +1168,29 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             console.log(`Row UIID: ${rowUiid}`);
             console.log(`Original data:`, rowData.originalData);
             
-            // Prepare text to send to LLM
-            const text = `
-                Test Name: ${rowData.name}
-                Description: ${rowData.desc || ''}
-                Additional Context: This is a test case from the ${nodeData.title} table.
-                Row Index: ${effectiveRowIndex}
-                Row UIID: ${rowUiid}
-            `;
+            // Prepare data for the API request
+            const requestData: BuildFeatureRequest = {
+                project_id: projectId,
+                test_case_id: rowUiid,
+                test_name: rowData.name,
+                test_description: rowData.desc || '',
+                parent_uiid: rowUiid,
+                additional_context: {
+                    table_title: nodeData.title,
+                    row_index: effectiveRowIndex,
+                    component_id: componentId
+                }
+            };
             
-            console.log(`Calling LLM service with componentId=${componentId}, projectId=${projectId}, parent_uiid=${rowUiid}`);
-            const response = await LlmService.processWithLlm(
-                "buildFeature", // Use a specific component ID for building features
-                text,
-                projectId,
-                true, // Save to database
-                (update: string) => {
-                    console.log("LLM progress update:", update);
-                },
-                rowUiid // Pass the UIID as parent_uiid
-            );
+            console.log('Calling code generation API with request:', requestData);
             
-            console.log("LLM response received:", response);
-            if (response.result) {
-                console.log("LLM result:", response.result.substring(0, 200) + "...");
-            }
-            console.log("Backend-generated UIIDs:", response.generated_uiids || []);
+            // Call the code generation API endpoint
+            const response = await apiClient<BuildFeatureResponse>('/code-generation/build-feature', {
+                method: 'POST',
+                body: requestData
+            });
+            
+            console.log("API response received:", response);
             
             // Show success feedback
             const originalTitle = nodeData.title;

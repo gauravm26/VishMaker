@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 #--Import Routers--
 from features.project_management.api import routes as project_routes
 from features.requirement_generation.api import routes as req_gen_routes
+from features.code_generation.api import routes as code_gen_routes
 from config.settings import settings
 
 # Import the LLM router from the LLM controller directly
@@ -47,6 +48,7 @@ async def api_root_redirect():
 # Include feature routers
 app.include_router(project_routes.router, prefix=settings.API_V1_STR)
 app.include_router(req_gen_routes.router, prefix=settings.API_V1_STR)
+app.include_router(code_gen_routes.router, prefix=settings.API_V1_STR)
 
 # Include LLM router with prefix
 app.include_router(
