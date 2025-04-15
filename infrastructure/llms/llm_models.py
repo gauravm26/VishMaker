@@ -106,12 +106,12 @@ class BedrockService:
     def _setup_client(self):
         """Set up the AWS Bedrock client using environment variables."""
         try:
-            aws_access_key = os.getenv('AWS_BEDROCK_ACCESS_KEY_ID')
-            aws_secret_key = os.getenv('AWS_BEDROCK_SECRET_ACCESS_KEY')
-            aws_region = os.getenv('AWS_BEDROCK_REGION', 'us-east-1') # Default region
+            aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+            aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+            aws_region = os.getenv('AWS_REGION', 'us-east-1') # Default region
 
             if not aws_access_key or not aws_secret_key:
-                llm_logger.error("AWS Bedrock credentials (AWS_BEDROCK_ACCESS_KEY_ID, AWS_BEDROCK_SECRET_ACCESS_KEY) not found in environment variables.")
+                llm_logger.error("AWS Bedrock credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) not found in environment variables.")
                 return False
 
             self.session = boto3.Session(
