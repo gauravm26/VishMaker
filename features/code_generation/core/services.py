@@ -164,12 +164,12 @@ class ManagerAgent(BaseAgent):
         
         if not intermediate_steps:
             # Initial step - check repository status and handle repository operations.
-            project_id = current_state.get("project_id")
+            project_name = current_state.get("project_name")
             
             # Check if repository exists in repository
             return AgentAction(
                 tool="check_repository_exists",
-                tool_input={"project_id": project_id},
+                tool_input={"project_name": project_name},
                 log="Manager: Checking if project repository exists in repository."
             )
         
@@ -183,11 +183,11 @@ class ManagerAgent(BaseAgent):
             
             if repo_exists:
                 # Repository exists, clone it
-                clone_folder = get_clone_folder_pattern().format(project_id=project_id)
+                clone_folder = get_clone_folder_pattern().format(project_name=project_name)
                 return AgentAction(
                     tool="clone_repository",
                     tool_input={
-                        "project_id": project_id,
+                        "project_name": project_name,
                         "clone_path": clone_folder
                     },
                     log=f"Manager: Repository exists. Cloning to {clone_folder}."
@@ -426,21 +426,21 @@ class CodeGenerationService:
         Check if repository exists in repository.
         
         Args:
-            input_data: Contains project_id
+            input_data: Contains project_name
             
         Returns:
             Dictionary indicating whether repository exists
         """
         try:
-            project_id = input_data.get("project_id")
-            if not project_id:
-                logger.error("Project ID not provided")
-                return {"exists": False, "error": "Project ID not provided"}
+            project_name = input_data.get("project_name")
+            if not project_name:
+                logger.error("Project name not provided")
+                return {"exists": False, "error": "Project name not provided"}
             
             # Call the actual implementation from our repository utilities
             # repo_path is None, so it will use the pattern from .env
             return check_repository_exists(
-                project_id=project_id,
+                project_name=project_name,
                 repo_path=None
             )
             
@@ -456,23 +456,23 @@ class CodeGenerationService:
         Clone repository from repository to local folder.
         
         Args:
-            input_data: Contains project_id and clone_path
+            input_data: Contains project_name and clone_path
             
         Returns:
             Dictionary with clone operation result
         """
         try:
-            project_id = input_data.get("project_id")
-            if not project_id:
-                logger.error("Project ID not provided")
-                return {"success": False, "error": "Project ID not provided"}
+            project_name = input_data.get("project_name")
+            if not project_name:
+                logger.error("Project name not provided")
+                return {"success": False, "error": "Project name not provided"}
             
             clone_path = input_data.get("clone_path")
             
             # Call the actual implementation from our repository utilities
             # Note: remote_url is None, so it will use the pattern from .env
             return clone_repository(
-                project_id=project_id, 
+                project_name=project_name, 
                 remote_url=None, 
                 clone_path=clone_path
             )
@@ -489,29 +489,23 @@ class CodeGenerationService:
         Create a new repository in repository.
         
         Args:
-            input_data: Contains project_id and optional description
+            input_data: Contains project_name and optional description
             
         Returns:
             Dictionary with repository creation result
         """
         try:
-            project_id = input_data.get("project_id")
-            if not project_id:
-                logger.error("Project ID not provided")
-                return {"success": False, "error": "Project ID not provided"}
+            project_name = input_data.get("project_name")
+            if not project_name:
+                logger.error("Project name not provided")
+                return {"success": False, "error": "Project name not provided"}
             
             description = input_data.get("description")
             
-            # Convert description to repo_name for create_repository function
-            repo_name = None
-            if description:
-                # Create a simple repo name from description
-                repo_name = f"project-{project_id}"
-            
             # Call the actual implementation from our repository utilities
             return create_repository(
-                project_id=project_id,
-                repo_name=repo_name
+                project_name=project_name,
+                remote_url=None
             )
             
         except Exception as e:
@@ -542,6 +536,10 @@ class CodeGenerationService:
             test_case_id = context.get("primary_test_case_id")
             if not test_case_id:
                 raise ValueError("Context must include a primary_test_case_id")
+
+            project_name = context.get("project_name")
+            if not project_name:
+                raise ValueError("Context must include a project_name")
             
             primary_test_case = next((tc for tc in context.get("test_cases", []) if tc.get("id") == test_case_id), None)
             if not primary_test_case:
@@ -550,6 +548,7 @@ class CodeGenerationService:
             # Create initial input data for agents including repository and project context.
             input_data = {
                 "project_id": project_id,
+                "project_name": project_name,
                 "context": context
             }
             
@@ -592,6 +591,7 @@ class CodeGenerationService:
                 "message": "Code successfully generated using LangChain agents",
                 "test_case_id": test_case_id,
                 "project_id": project_id,
+                "project_name": project_name,
                 "generated_uiids": [f"code_{test_case_id}_{project_id}"],
                 "test_metadata": {
                     "name": primary_test_case.get("name", "unknown_test"),
@@ -630,7 +630,7 @@ class CodeGenerationService:
         """
         try:
             logger.info(f"Saving generated code for test case: {test_case_id}")
-            code_dir = f"generated_code/project_{project_id}/test_{test_case_id}"
+            code_dir = f"generated_code/{project_name}/test_{test_case_id}"
             os.makedirs(code_dir, exist_ok=True)
             
             saved_files = []
@@ -658,3 +658,7 @@ class CodeGenerationService:
                 "message": f"Failed to save generated code: {str(e)}",
                 "error": str(e)
             }
+
+def get_clone_folder_pattern():
+    """Get the pattern for clone folder path."""
+    return "repos/{project_name}"

@@ -11,9 +11,6 @@ import re
 import tempfile
 from typing import Dict, Any, Optional, List, Tuple
 from dotenv import load_dotenv
-from infrastructure.db.requirement import ProjectEntity as Project
-from sqlalchemy.orm import Session
-from infrastructure.db.db_core import engine
 from github import Github, GithubException
 
 # Load environment variables from .env file
@@ -22,124 +19,46 @@ load_dotenv(dotenv_path="global/.env")
 # Setup logging
 logger = logging.getLogger(__name__)
 
-def get_clone_folder_pattern() -> str:
-    """Get clone folder pattern from environment variables."""
-    return os.environ.get("CLONE_FOLDER", "tmp/{project_id}/clone")
-
-def get_work_folder_pattern() -> str:
-    """Get work folder pattern from environment variables."""
-    return os.environ.get("WORK_FOLDER", "tmp/{project_id}/clone")
-
-def get_repo_url_pattern() -> str:
-    """Get repository URL pattern from environment variables."""
-    return os.environ.get("GIT_REPO_URL_PATTERN", "https://github.com/username/project-{project_id}.git")
-
-def get_project_name_from_db(project_id: int) -> Optional[str]:
-    """
-    Get project name from database.
+class GitContext:
+    """Manages Git repository context including project name sanitization and folder paths."""
     
-    Args:
-        project_id: The project ID
-    
-    Returns:
-        Project name if found, None otherwise
-    """
-    try:
-        # Get database connection details from environment variables
-        db_url = os.environ.get("DATABASE_URL")
+    def __init__(self, project_name: str):
+        self.raw_project_name = project_name
+        self.sanitized_name = self._sanitize_name(project_name)
+        self.clone_folder = self._get_clone_folder()
+        self.work_folder = self._get_work_folder()
         
-        if not db_url:
-            logger.warning("DATABASE_URL not set in environment variables")
-            return None
+    def _sanitize_name(self, name: str) -> str:
+        """Sanitize project name for Git repository use."""
+        # Replace spaces and special characters with dashes
+        sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '-', name)
+        # Remove consecutive dashes
+        sanitized = re.sub(r'-+', '-', sanitized)
+        # Convert to lowercase
+        sanitized = sanitized.lower()
+        # Trim dashes from start and end
+        sanitized = sanitized.strip('-')
         
-        # Connect to database
-        conn = psycopg2.connect(db_url)
-        cursor = conn.cursor()
+        # If empty after sanitization, use a default name
+        if not sanitized:
+            return "project-repository"
         
-        # Query for project name
-        query = sql.SQL("SELECT name FROM projects WHERE id = %s")
-        cursor.execute(query, (project_id,))
-        
-        result = cursor.fetchone()
-        
-        # Close database connection
-        cursor.close()
-        conn.close()
-        
-        if result:
-            return result[0]
-        else:
-            logger.warning(f"No project found with ID {project_id}")
-            return None
-            
-    except Exception as e:
-        logger.error(f"Error getting project name from database: {str(e)}")
-        return None
-
-def sanitize_repo_name(name: str) -> str:
-    """
-    Sanitize repository name to be valid for Git.
+        return sanitized
     
-    Args:
-        name: The raw project name
+    def _get_clone_folder(self) -> str:
+        """Get the clone folder path with sanitized project name."""
+        pattern = os.environ.get("CLONE_FOLDER", "tmp/{project_name}/clone")
+        return pattern.replace("{project_name}", self.sanitized_name)
     
-    Returns:
-        Sanitized repository name
-    """
-    # Replace spaces and special characters with dashes
-    sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '-', name)
-    # Remove consecutive dashes
-    sanitized = re.sub(r'-+', '-', sanitized)
-    # Convert to lowercase
-    sanitized = sanitized.lower()
-    # Trim dashes from start and end
-    sanitized = sanitized.strip('-')
+    def _get_work_folder(self) -> str:
+        """Get the work folder path with sanitized project name."""
+        pattern = os.environ.get("WORK_FOLDER", "tmp/{project_name}/work")
+        return pattern.replace("{project_name}", self.sanitized_name)
     
-    # If empty after sanitization, use a default name
-    if not sanitized:
-        return "project-repository"
-    
-    return sanitized
-
-def get_repo_name(project_id: int) -> str:
-    """
-    Generate repository name from project ID and name.
-    First tries to get project name from database, falls back to ID-based name if not found.
-    
-    Args:
-        project_id: The project ID
-    
-    Returns:
-        Repository name
-    """
-    try:
-        # Get project name using the Project model
-        with Session(engine) as session:
-            project = session.query(Project).filter(Project.id == project_id).first()
-            
-            if project and project.name:
-                # Sanitize project name for use as repository name
-                project_name = project.name
-                # Replace spaces and special characters with dashes
-                sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '-', project_name)
-                # Remove consecutive dashes
-                sanitized = re.sub(r'-+', '-', sanitized)
-                # Convert to lowercase
-                sanitized = sanitized.lower()
-                # Trim dashes from start and end
-                sanitized = sanitized.strip('-')
-                
-                # If empty after sanitization, use a default name
-                if not sanitized:
-                    return f"project-{project_id}"
-                    
-                return sanitized  # Return just the sanitized name without appending project_id
-            else:
-                logger.warning(f"No project found with ID {project_id}")
-                return f"project-{project_id}"
-    except Exception as e:
-        logger.error(f"Error getting project name from database: {str(e)}")
-        return f"project-{project_id}"
+    def get_repo_url(self) -> str:
+        """Get repository URL with sanitized project name."""
+        pattern = os.environ.get("GIT_REPO_URL_PATTERN", "https://github.com/username/{project_name}.git")
+        return pattern.replace("{project_name}", self.sanitized_name)
 
 def run_git_command(cmd: List[str], cwd: Optional[str] = None) -> Tuple[bool, str, str]:
     """
@@ -169,12 +88,12 @@ def run_git_command(cmd: List[str], cwd: Optional[str] = None) -> Tuple[bool, st
         logger.error(f"Error running Git command: {str(e)}")
         return False, "", str(e)
 
-def create_github_repository(name: str, description: Optional[str] = None, private: bool = False) -> Dict[str, Any]:
+def create_github_repository(git_context: GitContext, description: Optional[str] = None, private: bool = False) -> Dict[str, Any]:
     """
     Create a new repository on GitHub.
     
     Args:
-        name: Repository name
+        git_context: GitContext instance with project information
         description: Repository description
         private: Whether repository should be private
         
@@ -206,12 +125,12 @@ def create_github_repository(name: str, description: Optional[str] = None, priva
         
         # Check if repository already exists
         try:
-            repo = user.get_repo(name)
+            repo = user.get_repo(git_context.sanitized_name)
             # If we get here, repo exists
-            logger.info(f"Repository {name} already exists on GitHub")
+            logger.info(f"Repository {git_context.sanitized_name} already exists on GitHub")
             return {
                 "success": True,
-                "message": f"Repository {name} already exists on GitHub",
+                "message": f"Repository {git_context.sanitized_name} already exists on GitHub",
                 "repo_url": repo.clone_url,
                 "existing": True
             }
@@ -225,15 +144,15 @@ def create_github_repository(name: str, description: Optional[str] = None, priva
         
         # Create repository
         repo = user.create_repo(
-            name=name,
-            description=description or f"Repository for {name}",
+            name=git_context.sanitized_name,
+            description=description or f"Repository for {git_context.raw_project_name}",
             private=private
         )
         
-        logger.info(f"Repository {name} created on GitHub at {repo.clone_url}")
+        logger.info(f"Repository {git_context.sanitized_name} created on GitHub at {repo.clone_url}")
         return {
             "success": True,
-            "message": f"Repository {name} created on GitHub",
+            "message": f"Repository {git_context.sanitized_name} created on GitHub",
             "repo_url": repo.clone_url,
             "html_url": repo.html_url
         }
@@ -251,42 +170,37 @@ def create_github_repository(name: str, description: Optional[str] = None, priva
             "error": str(e)
         }
 
-def create_repository(project_id: int, path: Optional[str] = None, remote_url: Optional[str] = None, repo_name: Optional[str] = None) -> Dict[str, Any]:
+def create_repository(project_name: str, path: Optional[str] = None, remote_url: Optional[str] = None) -> Dict[str, Any]:
     """
     Create a new Git repository locally and on GitHub.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         path: Path where to create the repository (optional)
         remote_url: URL of the remote repository to add (optional)
-        repo_name: Custom repository name (optional, overrides database name)
         
     Returns:
         Dictionary with repository creation result
     """
     try:
-        # If path is not provided, use the pattern from .env
+        git_context = GitContext(project_name)
+        
+        # If path is not provided, use the work folder from context
         if not path:
-            work_folder_pattern = get_work_folder_pattern()
-            path = work_folder_pattern.format(project_id=project_id)
+            path = git_context.work_folder
         
-        # Use provided repo_name or get from database
-        if not repo_name:
-            repo_name = get_repo_name(project_id)
-        
-        logger.info(f"Creating Git repository {repo_name} for project {project_id} at {path}")
+        logger.info(f"Creating Git repository {git_context.sanitized_name} at {path}")
         
         # Create repository on GitHub first
         # Only if GITHUB_TOKEN is set
         if os.environ.get("GITHUB_TOKEN"):
-            github_result = create_github_repository(repo_name)
+            github_result = create_github_repository(git_context)
             if github_result.get("success"):
                 # Use the GitHub URL
                 remote_url = github_result.get("repo_url")
                 logger.info(f"GitHub repository created: {remote_url}")
             else:
                 logger.warning(f"Failed to create GitHub repository: {github_result.get('error')}")
-                # Continue with local creation, will set remote_url later if provided
         else:
             logger.warning("GITHUB_TOKEN not set, skipping GitHub repository creation")
         
@@ -298,21 +212,21 @@ def create_repository(project_id: int, path: Optional[str] = None, remote_url: O
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to initialize Git repository: {stderr}"
             }
         
         # Create initial README file
         readme_path = os.path.join(path, "README.md")
         with open(readme_path, "w") as f:
-            f.write(f"# {repo_name}\n\nRepository for project {project_id}\n")
+            f.write(f"# {git_context.sanitized_name}\n\nRepository for project {git_context.raw_project_name}\n")
         
         # Add README to repository
         success, _, stderr = run_git_command(["git", "add", "README.md"], cwd=path)
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to add README to repository: {stderr}"
             }
         
@@ -324,7 +238,7 @@ def create_repository(project_id: int, path: Optional[str] = None, remote_url: O
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to commit README: {stderr}"
             }
         
@@ -337,7 +251,7 @@ def create_repository(project_id: int, path: Optional[str] = None, remote_url: O
             if not success:
                 return {
                     "success": False,
-                    "project_id": project_id,
+                    "project_name": project_name,
                     "error": f"Failed to add remote: {stderr}"
                 }
                 
@@ -381,10 +295,11 @@ def create_repository(project_id: int, path: Optional[str] = None, remote_url: O
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": git_context.raw_project_name,
+            "sanitized_name": git_context.sanitized_name,
             "repository_path": path,
             "message": f"Git repository created successfully at {path}",
-            "work_path": path,
+            "work_path": git_context.work_folder,
             "remote_url": remote_url,
             "github_url": remote_url
         }
@@ -393,16 +308,16 @@ def create_repository(project_id: int, path: Optional[str] = None, remote_url: O
         logger.error(f"Error creating Git repository: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
-def clone_repository(project_id: int, remote_url: Optional[str] = None, clone_path: Optional[str] = None) -> Dict[str, Any]:
+def clone_repository(project_name: str, remote_url: Optional[str] = None, clone_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Clone a Git repository.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         remote_url: URL of the repository to clone (optional, will use pattern if not provided)
         clone_path: Path where to clone the repository (optional)
         
@@ -410,20 +325,17 @@ def clone_repository(project_id: int, remote_url: Optional[str] = None, clone_pa
         Dictionary with clone operation result
     """
     try:
-        # If clone_path is not provided, use the pattern from .env
+        git_context = GitContext(project_name)
+        
+        # If clone_path is not provided, use the clone folder from context
         if not clone_path:
-            clone_folder_pattern = get_clone_folder_pattern()
-            clone_path = clone_folder_pattern.format(project_id=project_id)
+            clone_path = git_context.clone_folder
         
-        # If remote_url is not provided, use the pattern from .env
+        # If remote_url is not provided, use the pattern from context
         if not remote_url:
-            url_pattern = get_repo_url_pattern()
-            # Get the project name to use in the URL
-            project_name = get_repo_name(project_id)
-            # Format URL with project_name instead of project_id
-            remote_url = url_pattern.format(project_name=project_name)
+            remote_url = git_context.get_repo_url()
         
-        logger.info(f"Cloning Git repository for project {project_id} from {remote_url} to {clone_path}")
+        logger.info(f"Cloning Git repository for project {git_context.sanitized_name} from {remote_url} to {clone_path}")
         
         # Create parent directory if it doesn't exist
         os.makedirs(os.path.dirname(clone_path), exist_ok=True)
@@ -438,43 +350,45 @@ def clone_repository(project_id: int, remote_url: Optional[str] = None, clone_pa
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Git clone failed: {stderr}"
             }
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": git_context.raw_project_name,
+            "sanitized_name": git_context.sanitized_name,
             "clone_path": clone_path,
             "remote_url": remote_url,
             "message": f"Repository cloned successfully to {clone_path}",
-            "work_path": clone_path
+            "work_path": git_context.work_folder
         }
         
     except Exception as e:
         logger.error(f"Error cloning repository: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
-def check_repository_exists(project_id: int, repo_path: Optional[str] = None) -> Dict[str, Any]:
+def check_repository_exists(project_name: str, repo_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Check if a Git repository exists and is valid.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         repo_path: Path to the repository (optional)
         
     Returns:
         Dictionary indicating whether the repository exists
     """
     try:
-        # If repo_path is not provided, use the pattern from .env
+        git_context = GitContext(project_name)
+        
+        # If repo_path is not provided, use the work folder from context
         if not repo_path:
-            work_folder_pattern = get_work_folder_pattern()
-            repo_path = work_folder_pattern.format(project_id=project_id)
+            repo_path = git_context.work_folder
         
         logger.info(f"Checking if Git repository exists at {repo_path}")
         
@@ -483,7 +397,8 @@ def check_repository_exists(project_id: int, repo_path: Optional[str] = None) ->
             logger.info(f"Repository path {repo_path} does not exist")
             return {
                 "exists": False,
-                "project_id": project_id,
+                "project_name": git_context.raw_project_name,
+                "sanitized_name": git_context.sanitized_name,
                 "message": f"Repository path {repo_path} does not exist"
             }
         
@@ -493,7 +408,8 @@ def check_repository_exists(project_id: int, repo_path: Optional[str] = None) ->
             logger.info(f"Path {repo_path} is not a Git repository")
             return {
                 "exists": False,
-                "project_id": project_id,
+                "project_name": git_context.raw_project_name,
+                "sanitized_name": git_context.sanitized_name,
                 "message": f"Path {repo_path} is not a Git repository"
             }
         
@@ -514,7 +430,8 @@ def check_repository_exists(project_id: int, repo_path: Optional[str] = None) ->
         
         return {
             "exists": True,
-            "project_id": project_id,
+            "project_name": git_context.raw_project_name,
+            "sanitized_name": git_context.sanitized_name,
             "repository_path": repo_path,
             "current_branch": current_branch,
             "remotes": remotes
@@ -524,12 +441,12 @@ def check_repository_exists(project_id: int, repo_path: Optional[str] = None) ->
         logger.error(f"Error checking repository existence: {str(e)}")
         return {
             "exists": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
 def commit_changes(
-    project_id: int, 
+    project_name: str, 
     repo_path: Optional[str] = None, 
     message: str = "Updated files", 
     files: Optional[List[str]] = None
@@ -538,7 +455,7 @@ def commit_changes(
     Commit changes to a Git repository.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         repo_path: Path to the repository (optional)
         message: Commit message
         files: List of files to commit (if None, commits all changes)
@@ -550,16 +467,16 @@ def commit_changes(
         # If repo_path is not provided, use the pattern from .env
         if not repo_path:
             work_folder_pattern = get_work_folder_pattern()
-            repo_path = work_folder_pattern.format(project_id=project_id)
+            repo_path = work_folder_pattern.format(project_name=project_name)
         
         logger.info(f"Committing changes to repository at {repo_path}")
         
         # Check if it's a Git repository
-        repo_check = check_repository_exists(project_id, repo_path)
+        repo_check = check_repository_exists(project_name, repo_path)
         if not repo_check.get("exists", False):
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"No valid Git repository found at {repo_path}"
             }
         
@@ -571,7 +488,7 @@ def commit_changes(
                 if not success:
                     return {
                         "success": False,
-                        "project_id": project_id,
+                        "project_name": project_name,
                         "error": f"Failed to add file {file}: {stderr}"
                     }
         else:
@@ -580,7 +497,7 @@ def commit_changes(
             if not success:
                 return {
                     "success": False,
-                    "project_id": project_id,
+                    "project_name": project_name,
                     "error": f"Failed to add changes: {stderr}"
                 }
         
@@ -595,13 +512,13 @@ def commit_changes(
             if "nothing to commit" in stderr:
                 return {
                     "success": True,
-                    "project_id": project_id,
+                    "project_name": project_name,
                     "message": "No changes to commit",
                     "commit_hash": None
                 }
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to commit changes: {stderr}"
             }
         
@@ -613,7 +530,7 @@ def commit_changes(
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": project_name,
             "message": f"Changes committed successfully: {commit_output}",
             "commit_hash": commit_hash.strip() if success else None
         }
@@ -622,12 +539,12 @@ def commit_changes(
         logger.error(f"Error committing changes: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
 def push_changes(
-    project_id: int, 
+    project_name: str, 
     repo_path: Optional[str] = None, 
     remote: str = "origin", 
     branch: Optional[str] = None
@@ -636,7 +553,7 @@ def push_changes(
     Push changes to a remote Git repository.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         repo_path: Path to the repository (optional)
         remote: Name of the remote (default: origin)
         branch: Branch to push (if None, pushes current branch)
@@ -648,16 +565,16 @@ def push_changes(
         # If repo_path is not provided, use the pattern from .env
         if not repo_path:
             work_folder_pattern = get_work_folder_pattern()
-            repo_path = work_folder_pattern.format(project_id=project_id)
+            repo_path = work_folder_pattern.format(project_name=project_name)
         
         logger.info(f"Pushing changes from repository at {repo_path} to {remote}")
         
         # Check if it's a Git repository
-        repo_check = check_repository_exists(project_id, repo_path)
+        repo_check = check_repository_exists(project_name, repo_path)
         if not repo_check.get("exists", False):
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"No valid Git repository found at {repo_path}"
             }
         
@@ -674,13 +591,13 @@ def push_changes(
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to push changes: {stderr}"
             }
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": project_name,
             "message": f"Changes pushed successfully to {remote}/{branch}",
             "output": push_output
         }
@@ -689,12 +606,12 @@ def push_changes(
         logger.error(f"Error pushing changes: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
 def pull_changes(
-    project_id: int, 
+    project_name: str, 
     repo_path: Optional[str] = None, 
     remote: str = "origin", 
     branch: Optional[str] = None
@@ -703,7 +620,7 @@ def pull_changes(
     Pull changes from a remote Git repository.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         repo_path: Path to the repository (optional)
         remote: Name of the remote (default: origin)
         branch: Branch to pull (if None, pulls current branch)
@@ -715,16 +632,16 @@ def pull_changes(
         # If repo_path is not provided, use the pattern from .env
         if not repo_path:
             work_folder_pattern = get_work_folder_pattern()
-            repo_path = work_folder_pattern.format(project_id=project_id)
+            repo_path = work_folder_pattern.format(project_name=project_name)
         
         logger.info(f"Pulling changes to repository at {repo_path} from {remote}")
         
         # Check if it's a Git repository
-        repo_check = check_repository_exists(project_id, repo_path)
+        repo_check = check_repository_exists(project_name, repo_path)
         if not repo_check.get("exists", False):
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"No valid Git repository found at {repo_path}"
             }
         
@@ -741,13 +658,13 @@ def pull_changes(
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to pull changes: {stderr}"
             }
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": project_name,
             "message": f"Changes pulled successfully from {remote}/{branch}",
             "output": pull_output
         }
@@ -756,12 +673,12 @@ def pull_changes(
         logger.error(f"Error pulling changes: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
 def merge_branch(
-    project_id: int, 
+    project_name: str, 
     source_branch: str, 
     target_branch: Optional[str] = None, 
     repo_path: Optional[str] = None,
@@ -771,7 +688,7 @@ def merge_branch(
     Merge a branch into another branch.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         source_branch: Branch to merge from
         target_branch: Branch to merge into (if None, merges into current branch)
         repo_path: Path to the repository (optional)
@@ -784,16 +701,16 @@ def merge_branch(
         # If repo_path is not provided, use the pattern from .env
         if not repo_path:
             work_folder_pattern = get_work_folder_pattern()
-            repo_path = work_folder_pattern.format(project_id=project_id)
+            repo_path = work_folder_pattern.format(project_name=project_name)
         
         logger.info(f"Merging branch {source_branch} into {target_branch or 'current branch'} in repository at {repo_path}")
         
         # Check if it's a Git repository
-        repo_check = check_repository_exists(project_id, repo_path)
+        repo_check = check_repository_exists(project_name, repo_path)
         if not repo_check.get("exists", False):
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"No valid Git repository found at {repo_path}"
             }
         
@@ -807,7 +724,7 @@ def merge_branch(
             if not success:
                 return {
                     "success": False,
-                    "project_id": project_id,
+                    "project_name": project_name,
                     "error": f"Failed to checkout branch {target_branch}: {stderr}"
                 }
         
@@ -822,14 +739,14 @@ def merge_branch(
         if not success:
             return {
                 "success": False,
-                "project_id": project_id,
+                "project_name": project_name,
                 "error": f"Failed to merge branch {source_branch}: {stderr}",
                 "needs_resolution": "CONFLICT" in stderr
             }
         
         return {
             "success": True,
-            "project_id": project_id,
+            "project_name": project_name,
             "message": f"Branch {source_branch} merged successfully",
             "output": merge_output
         }
@@ -838,7 +755,7 @@ def merge_branch(
         logger.error(f"Error merging branch: {str(e)}")
         return {
             "success": False,
-            "project_id": project_id,
+            "project_name": project_name,
             "error": str(e)
         }
 
@@ -912,12 +829,12 @@ def delete_github_repository(repo_name: str) -> Dict[str, Any]:
             "error": str(e)
         }
 
-def remove_local_repository(project_id: int, path: Optional[str] = None) -> Dict[str, Any]:
+def remove_local_repository(project_name: str, path: Optional[str] = None) -> Dict[str, Any]:
     """
     Remove a local Git repository.
     
     Args:
-        project_id: The project ID
+        project_name: The project name
         path: Path to the repository (optional)
         
     Returns:
@@ -927,7 +844,7 @@ def remove_local_repository(project_id: int, path: Optional[str] = None) -> Dict
         # If path is not provided, use the pattern from .env
         if not path:
             work_folder_pattern = get_work_folder_pattern()
-            path = work_folder_pattern.format(project_id=project_id)
+            path = work_folder_pattern.format(project_name=project_name)
         
         logger.info(f"Removing local Git repository at {path}")
         
@@ -954,13 +871,12 @@ def remove_local_repository(project_id: int, path: Optional[str] = None) -> Dict
             "error": str(e)
         }
 
-def remove_repository(project_id: int, repo_name: Optional[str] = None, local_only: bool = False) -> Dict[str, Any]:
+def remove_repository(project_name: str, local_only: bool = False) -> Dict[str, Any]:
     """
     Remove a repository both locally and from GitHub.
     
     Args:
-        project_id: The project ID
-        repo_name: Repository name on GitHub (optional)
+        project_name: The project name
         local_only: If True, only remove local repository (default: False)
         
     Returns:
@@ -973,19 +889,14 @@ def remove_repository(project_id: int, repo_name: Optional[str] = None, local_on
     }
     
     # Remove local repository
-    local_result = remove_local_repository(project_id)
+    local_result = remove_local_repository(project_name)
     results["local_result"] = local_result
     results["local_removed"] = local_result.get("success", False)
     
     # Also remove from GitHub if requested
-    if not local_only and repo_name:
-        github_result = delete_github_repository(repo_name)
-        results["github_result"] = github_result
-        results["github_removed"] = github_result.get("success", False)
-    elif not local_only:
-        # Try to determine repo name if not provided
-        if not repo_name:
-            repo_name = get_repo_name(project_id)
+    if not local_only:
+        # Use sanitized project name for GitHub
+        repo_name = sanitize_repo_name(project_name)
         github_result = delete_github_repository(repo_name)
         results["github_result"] = github_result
         results["github_removed"] = github_result.get("success", False)

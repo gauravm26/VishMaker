@@ -9,10 +9,7 @@ from sqlalchemy.orm import Session
 from features.code_generation.core.services import CodeGenerationService
 from features.code_generation.api.schemas import (
     BuildFeatureRequest,
-    BuildFeatureResponse,
-    CodeFile,
-    SaveCodeRequest,
-    SaveCodeResponse
+    BuildFeatureResponse
 )
 
 # Import database models and connection from infrastructure/db
@@ -21,6 +18,7 @@ from infrastructure.db.requirement import TestCaseEntity as TestCase
 from infrastructure.db.requirement import LowLevelRequirementEntity as LowLevelRequirement
 from infrastructure.db.requirement import HighLevelRequirementEntity as HighLevelRequirement
 from infrastructure.db.requirement import UserFlowEntity as UserFlow
+from infrastructure.db.requirement import ProjectEntity as Project
 
 # Create API router for code generation
 router = APIRouter(
@@ -64,13 +62,20 @@ async def get_full_context(db: Session, test_case_id: str) -> Dict[str, Any]:
     user_flow = db.query(UserFlow).filter(UserFlow.id == high_level_req.parent_uiid).first()
     if not user_flow:
         raise HTTPException(status_code=404, detail=f"User flow {high_level_req.parent_uiid} not found")
-    
+
+    #Get the Project Name
+    project = db.query(Project).filter(Project.id == user_flow.parent_uiid).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project {user_flow.parent_uiid} not found")
+
+
     # Create the context package
     context = {
         "test_cases": [tc.to_dict() for tc in related_test_cases],
         "low_level_requirement": low_level_req.to_dict(),
         "high_level_requirement": high_level_req.to_dict(),
-        "user_flow": user_flow.to_dict()    
+        "user_flow": user_flow.to_dict(),
+        "project_name": project.name
     }
     
     return context
@@ -134,75 +139,3 @@ async def build_feature(
             "test_metadata": None
         }
 
-@router.get("/project/{project_id}/code", response_model=Dict[str, Any])
-async def get_project_code(
-    project_id: int,
-    test_case_id: Optional[str] = Query(None, description="Optional filter by test case ID")
-) -> Dict[str, Any]:
-    """
-    Get generated code for a project or specific test case.
-    
-    Args:
-        project_id: The ID of the project
-        test_case_id: Optional test case ID to filter results
-        
-    Returns:
-        JSON response with the generated code files
-    """
-    try:
-        # Here you would implement retrieving the generated code from wherever it's stored
-        # This is a placeholder response
-        return {
-            "success": True,
-            "message": "Retrieved project code",
-            "project_id": project_id,
-            "test_case_id": test_case_id,
-            "code_files": []  # Would contain actual code files in a real implementation
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error retrieving code: {str(e)}",
-            "error": str(e)
-        }
-
-@router.post("/save-code", response_model=SaveCodeResponse)
-async def save_code(
-    request: SaveCodeRequest,
-    db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Save generated code files.
-    
-    Args:
-        request: The save code request containing project_id, test_case_id, and code_files
-        db: Database session
-        
-    Returns:
-        JSON response with the result of the save operation
-    """
-    try:
-        # Initialize the CodeGenerationService
-        code_gen_service = CodeGenerationService()
-        
-        result = await code_gen_service.save_generated_code(
-            project_id=request.project_id,
-            test_case_id=request.test_case_id,
-            code_files=request.code_files,
-            metadata=request.metadata
-        )
-        
-        return {
-            "success": result.get("success", False),
-            "message": result.get("message", ""),
-            "saved_files": result.get("saved_files", []),
-            "error": result.get("error")
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error saving code: {str(e)}",
-            "error": str(e),
-            "saved_files": None
-        } 
