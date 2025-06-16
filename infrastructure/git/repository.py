@@ -908,3 +908,28 @@ def remove_repository(project_name: str, local_only: bool = False) -> Dict[str, 
     results["success"] = results["local_removed"]
     
     return results 
+
+def get_clone_folder_pattern() -> str:
+    """Get the pattern for clone folder path."""
+    return os.environ.get("CLONE_FOLDER", "tmp/{project_name}/clone")
+
+def get_work_folder_pattern() -> str:
+    """Get the pattern for work folder path."""
+    return os.environ.get("WORK_FOLDER", "tmp/{project_name}/work")
+
+def sanitize_repo_name(project_name: str) -> str:
+    """Sanitize project name for Git repository use."""
+    # Replace spaces and special characters with dashes
+    sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '-', project_name)
+    # Remove consecutive dashes
+    sanitized = re.sub(r'-+', '-', sanitized)
+    # Convert to lowercase
+    sanitized = sanitized.lower()
+    # Trim dashes from start and end
+    sanitized = sanitized.strip('-')
+    
+    # If empty after sanitization, use a default name
+    if not sanitized:
+        return "project-repository"
+    
+    return sanitized 

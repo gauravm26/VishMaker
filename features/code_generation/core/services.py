@@ -36,8 +36,11 @@ logger = logging.getLogger(__name__)
 llm_logger = logging.getLogger('llmagents')
 llm_logger.setLevel(logging.DEBUG)
 
-# Create handlers
-file_handler = logging.FileHandler('logs/llmagents.log')
+# Create handlers - use absolute path to project root logs directory
+import os
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+log_file_path = os.path.join(project_root, 'logs', 'llmagents.log')
+file_handler = logging.FileHandler(log_file_path)
 file_handler.setLevel(logging.DEBUG)
 
 # Create formatters and add it to handlers

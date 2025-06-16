@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any, Union
 
 
+class CodeFile(BaseModel):
+    """Model representing a generated code file."""
+    filename: str
+    content: str
+    language: Optional[str] = None
+    description: Optional[str] = None
+
+
 class BuildFeatureRequest(BaseModel):
     """Request model for the build feature endpoint."""
     project_id: int
