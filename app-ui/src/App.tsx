@@ -1,14 +1,15 @@
 // src/App.tsx
 import React from 'react';
+import LandingPage from './pages/LandingPage';
 import ProjectDashboard from './pages/ProjectDashboard';
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-50">
-       <ProjectDashboard />
+       <LandingPage />
        {/* Add routing here later */}
-    </div>  
-    );
+    </div>
+  );
 }
 
 export default App;
