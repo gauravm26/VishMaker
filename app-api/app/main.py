@@ -17,6 +17,13 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json" # Standard OpenAPI endpoint
 )
 
+# Support running in AWS Lambda via Mangum
+try:
+    from mangum import Mangum
+    handler = Mangum(app)
+except Exception:
+    handler = None
+
 # Configure CORS (Cross-Origin Resource Sharing)
 # Adjust origins as needed for your frontend URL in development/production
 

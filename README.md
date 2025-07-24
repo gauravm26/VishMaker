@@ -107,3 +107,9 @@ feature_name/
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Serverless Deployment
+
+A Terraform configuration is provided in `infrastructure/aws/terraform` to deploy the FastAPI app to AWS Lambda behind an API Gateway. It also creates a DynamoDB table for storing requirements in on-demand (serverless) mode.
+
+Run `scripts/build_serverless.sh` to build the frontend and execute `terraform plan`. Set `APPLY=true` to automatically apply the plan. Optionally set `SYNC_STATIC=true` and `FRONTEND_BUCKET` to upload the compiled React app to S3.

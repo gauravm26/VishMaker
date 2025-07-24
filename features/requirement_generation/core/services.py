@@ -15,6 +15,7 @@ project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(project_root))
 
 from infrastructure.llms.llm_models import BedrockService, load_config
+from infrastructure.aws.dynamodb import save_requirement
 # --- END IMPORTS ---
 
 class RequirementGenerationService:
@@ -267,7 +268,7 @@ class RequirementGenerationService:
             # Generate a unique UIID for the new requirement
             # Don't reuse any existing UIIDs to avoid overwrites
             new_uiid = f"hlr-{hash(item['name'] + str(time.time())) & 0xffffffff}"
-            
+
             # Create new HLR
             db_hlr = HighLevelRequirement(
                 name=item["name"],
@@ -277,6 +278,13 @@ class RequirementGenerationService:
             )
             db.add(db_hlr)
             print(f"Created new HLR: {item['name']} with UIID: {new_uiid} for parent: {parent_uiid}")
+            save_requirement({
+                "pk": parent_uiid or "root",
+                "sk": new_uiid,
+                "name": item["name"],
+                "description": item.get("description", ""),
+                "type": "HLR"
+            })
             
         db.commit()
         return True
@@ -289,7 +297,7 @@ class RequirementGenerationService:
         for item in parsed_data:
             # Check if an LLR with this UIID already exists
             new_uiid = f"llr-{hash(item['name'] + str(time.time())) & 0xffffffff}"
-                # Create new LLR
+            # Create new LLR
             db_llr = LowLevelRequirement(
                 name=item["name"],
                 description=item.get("description", ""),
@@ -297,6 +305,13 @@ class RequirementGenerationService:
                 parent_uiid=parent_uiid
             )
             db.add(db_llr)
+            save_requirement({
+                "pk": parent_uiid or "root",
+                "sk": new_uiid,
+                "name": item["name"],
+                "description": item.get("description", ""),
+                "type": "LLR"
+            })
             
         db.commit()
         return True
