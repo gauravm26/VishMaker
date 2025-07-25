@@ -124,3 +124,14 @@ yarn.lock
 
 # TypeScript
 *.tsbuildinfo
+
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+terraform.tfvars.backup
+terraform.tfvars.local
+terraform.tfvars.production

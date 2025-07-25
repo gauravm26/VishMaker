@@ -1,8 +1,24 @@
 {
+  "app": {
+    "project_name": "VishMaker",
+    "api_v1_str": "/api/v1",
+    "backend_port": 8000,
+    "frontend_port": 3000,
+    "backend_cors_origins": ["*"]
+  },
+
+  "infrastructure": {
+    "project_name": "vishmaker",
+    "environment": "prod",
+    "aws_region": "us-east-1",
+    "domain_name": "vishmaker.com",
+    "cloudfront_distribution_id": "E27ZJ7GYC7E0HU"
+  },
+
   "llm": {
     "models": {
       "model1": {
-        "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "modelId": "anthropic.claude-sonnet-4-20250514-v1:0",
         "contentType": "application/json",
         "accept": "application/json",
         "body": {
@@ -27,7 +43,7 @@
         }
       },
       "model2": {
-        "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
         "contentType": "application/json",
         "accept": "application/json",
         "body": {
@@ -422,7 +438,7 @@
       {
         "name": "EC2",
         "instanceType": "large"
-      }
+            }
     ]
   }
 }
