@@ -7,6 +7,7 @@ npm install
 npm run build
 popd >/dev/null
 
+
 TERRAFORM_DIR="infrastructure/aws/terraform"
 
 pushd "$TERRAFORM_DIR" >/dev/null
@@ -28,3 +29,4 @@ if [[ "${SYNC_STATIC:-false}" == "true" ]]; then
 fi
 
 echo "Serverless build complete"
+
