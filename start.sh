@@ -8,7 +8,8 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Change Directory to the root directory
-cd /Users/gauravmishra/Documents/Idea/VishGoogle
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 #Clear the logs directory
 rm -rf logs/*
@@ -19,12 +20,12 @@ source global/.env
 set +a
 
 # Create logs directory if it doesn't exist
-LOG_DIR="/Users/gauravmishra/Documents/Idea/VishGoogle/logs"
+LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p $LOG_DIR
 
 # Initialize log file
 LOG_FILE="$LOG_DIR/startup.log"
-echo "VishGoogle Application Startup Log" > $LOG_FILE
+echo "VishMaker Application Startup Log" > $LOG_FILE
 date >> $LOG_FILE
 echo "" >> $LOG_FILE
 
@@ -129,8 +130,8 @@ echo "4. Alembic Migration: Done" | tee -a $LOG_FILE
 
 # 5. Check LLM models and their connectivity
 # Use the existing test_aws_connection method but process its output into a simplified format
-cd /Users/gauravmishra/Documents/Idea/VishGoogle
-export PYTHONPATH=$PYTHONPATH:/Users/gauravmishra/Documents/Idea/VishGoogle
+cd "$SCRIPT_DIR"
+export PYTHONPATH=$PYTHONPATH:"$SCRIPT_DIR"
 
 # Get model statuses in a simpler format
 LLM_CONNECTION_RESULT=$(python3 -c "
@@ -186,17 +187,17 @@ echo "$LLM_CONNECTION_RESULT" | tee -a $LOG_FILE
 
 # 6. Start servers
 # Start backend server
-cd /Users/gauravmishra/Documents/Idea/VishGoogle
+cd "$SCRIPT_DIR"
 echo "Starting backend server on port $BACKEND_PORT..."
-export PYTHONPATH=$PYTHONPATH:/Users/gauravmishra/Documents/Idea/VishGoogle
+export PYTHONPATH=$PYTHONPATH:"$SCRIPT_DIR"
 cd app-api
 # Add PYTHONPATH to uvicorn command to ensure all modules can be found
-PYTHONPATH=/Users/gauravmishra/Documents/Idea/VishGoogle uvicorn app.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
+PYTHONPATH="$SCRIPT_DIR" uvicorn app.main:app --reload --host 0.0.0.0 --port $BACKEND_PORT > "$LOG_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 cd ..
 
 # Start frontend server
-cd /Users/gauravmishra/Documents/Idea/VishGoogle/app-ui
+cd "$SCRIPT_DIR/app-ui"
 echo "Starting frontend server on port $FRONTEND_PORT..."
 npm run dev -- --port $FRONTEND_PORT > "$LOG_DIR/frontend.log" 2>&1 &
 FRONTEND_PID=$!

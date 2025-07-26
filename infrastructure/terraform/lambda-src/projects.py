@@ -1,17 +1,44 @@
 import json
 import os
 import sys
+import boto3
 from pathlib import Path
+
+def get_secret(secret_arn):
+    """Get secret from AWS Secrets Manager"""
+    client = boto3.client('secretsmanager')
+    try:
+        response = client.get_secret_value(SecretId=secret_arn)
+        if 'SecretString' in response:
+            return json.loads(response['SecretString'])
+        return None
+    except Exception as e:
+        print(f"Error getting secret: {e}")
+        return None
+
+def get_database_url():
+    """Get database URL from Secrets Manager"""
+    secret_arn = os.environ.get('DATABASE_SECRET_ARN')
+    if not secret_arn:
+        raise ValueError("DATABASE_SECRET_ARN environment variable not set")
+    
+    secret = get_secret(secret_arn)
+    if not secret:
+        raise ValueError("Could not retrieve database secret")
+    
+    db_endpoint = os.environ.get('DB_ENDPOINT')
+    db_name = os.environ.get('DB_NAME')
+    db_username = os.environ.get('DB_USERNAME')
+    
+    return f"postgresql://{db_username}:{secret}@{db_endpoint}/{db_name}"
 
 def handler(event, context):
     print("Projects Lambda invoked!")
     print(f"Event: {json.dumps(event)}")
     
     try:
-        # Get database URL from environment variable
-        database_url = os.environ.get('DATABASE_URL')
-        if not database_url:
-            raise ValueError("DATABASE_URL environment variable not set")
+        # Get database URL from Secrets Manager
+        database_url = get_database_url()
         
         # Set up database connection and initialize tables
         setup_database(database_url)

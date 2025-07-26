@@ -1,3 +1,6 @@
+/* Import feature-specific styles */
+@import "./styles/animations.css";
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -87,6 +90,3 @@ body {
 #root { /* Ensure the root element takes full height too */
   @apply h-full;
 }
-
-/* Import feature-specific styles */
-@import "../../features/project_management/ui/styles/animations.css";

@@ -6,5 +6,5 @@ resource "aws_route53_record" "api" {
   name    = "api.${var.domain_name}"
   type    = "CNAME"
   ttl     = "300"
-  records = [aws_apigatewayv2_stage.default.invoke_url]
+  records = [aws_apigatewayv2_api.main.api_endpoint]
 } 

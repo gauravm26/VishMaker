@@ -1,0 +1,73 @@
+/* Custom animations for the project management UI */
+
+/* Glowing animation for AI icon */
+@keyframes glow {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(250, 202, 21, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(250, 202, 21, 0.8));
+  }
+  100% {
+    filter: drop-shadow(0 0 2px rgba(250, 202, 21, 0.5));
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Neural Network AI Icon Animations */
+.ai-icon-active {
+  filter: drop-shadow(0 0 4px #00FFF7);
+}
+
+.ai-icon-inactive {
+  opacity: 0.5;
+}
+
+.ai-icon-node {
+  animation: flicker 3s infinite ease-in-out alternate;
+}
+
+.ai-icon-line {
+  animation: glowLine 4s infinite ease-in-out alternate;
+}
+
+.ai-icon-text {
+  animation: pulseGlowBlue 2s infinite ease-in-out;
+}
+
+@keyframes pulseGlowBlue {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.7)) drop-shadow(0 0 4px rgba(59, 130, 246, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.9)) drop-shadow(0 0 8px rgba(59, 130, 246, 0.7));
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    fill: #00FFF7;
+    filter: drop-shadow(0 0 2px #00FFF7) drop-shadow(0 0 4px #00FFF7);
+  }
+  50% {
+    fill: #00FFF7;
+    filter: drop-shadow(0 0 3px #00FFF7) drop-shadow(0 0 6px #00FFF7);
+  }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  45% { opacity: 0.6; }
+  55% { opacity: 1; }
+  70% { opacity: 0.4; }
+  85% { opacity: 0.9; }
+}
+
+@keyframes glowLine {
+  0% { stroke: #00FFF7; stroke-width: 1.2; opacity: 0.6; }
+  50% { stroke: #00FFF7; stroke-width: 1.8; opacity: 1; }
+  100% { stroke: #00FFF7; stroke-width: 1.2; opacity: 0.6; }
+} 

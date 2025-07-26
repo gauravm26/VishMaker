@@ -38,6 +38,9 @@ def generate_tfvars(config):
 
     # Extract infrastructure config
     infra = config.get("infrastructure", {})
+    
+    # Extract LLM config
+    llm_config = config.get("llm", {})
 
     # Only require these essential values from user
     required_vars = {
@@ -45,7 +48,8 @@ def generate_tfvars(config):
         "environment": infra.get("environment", "dev"),
         "aws_region": infra.get("aws_region", "us-east-1"),
         "domain_name": infra.get("domain_name", ""),
-        "cloudfront_distribution_id": infra.get("cloudfront_distribution_id", "")
+        "cloudfront_distribution_id": infra.get("cloudfront_distribution_id", ""),
+        "openai_api_key": llm_config.get("openai_api_key", "")
     }
 
     # Validate required fields
@@ -67,6 +71,9 @@ aws_region                   = "{required_vars['aws_region']}"
 # Domain Configuration (from config.json)
 domain_name                  = "{required_vars['domain_name']}"
 cloudfront_distribution_id   = "{required_vars['cloudfront_distribution_id']}"
+
+# LLM Configuration (from config.json)
+openai_api_key              = "{required_vars['openai_api_key']}"
 
 # Infrastructure Defaults (automatically configured)
 cloudfront_price_class = "PriceClass_100"

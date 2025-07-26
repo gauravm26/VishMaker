@@ -35,12 +35,8 @@ resource "aws_apigatewayv2_route" "llm" {
   target    = "integrations/${aws_apigatewayv2_integration.llm.id}"
 }
 
-# API Gateway Stage
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.main.id
-  name        = "$default"
-  auto_deploy = true
-}
+# Use the auto-created $default stage (no need to create another)
+# The API Gateway automatically creates a $default stage
 
 # Lambda Permissions
 resource "aws_lambda_permission" "api_gateway_projects" {

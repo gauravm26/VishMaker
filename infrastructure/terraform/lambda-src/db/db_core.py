@@ -378,6 +378,7 @@ if __name__ == "__main__":
         # Explicitly import known models to ensure they're registered
         try:
             from infrastructure.db.requirement import ProjectEntity, UserFlowEntity, HighLevelRequirementEntity, LowLevelRequirementEntity, TestCaseEntity
+            from infrastructure.db.waitlist import WaitlistEntity
                       
             # Print model __tablename__ values to verify registration
             print(f"Table names: {ProjectEntity.__tablename__}, {UserFlowEntity.__tablename__}, {HighLevelRequirementEntity.__tablename__}, {LowLevelRequirementEntity.__tablename__}, {TestCaseEntity.__tablename__}")

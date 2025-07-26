@@ -16,6 +16,7 @@
   },
 
   "llm": {
+    "openai_api_key": "",
     "models": {
       "model1": {
         "modelId": "anthropic.claude-sonnet-4-20250514-v1:0",

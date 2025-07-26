@@ -1,7 +1,7 @@
 // app-ui/src/pages/ProjectDashboard.tsx
 import React, { useState, useCallback, useRef, useEffect } from 'react'; // Import useRef
-import CreateProjectForm from '@features/project_management/ui/components/CreateProjectForm';
-import ProjectList from '@features/project_management/ui/components/ProjectList';
+import CreateProjectForm from '../components/project/CreateProjectForm';
+import ProjectList from '../components/project/ProjectList';
 import CanvasViewer from '@/components/canvas/CanvasViewer';
 
 const ProjectDashboard: React.FC = () => {
@@ -93,11 +93,8 @@ const ProjectDashboard: React.FC = () => {
                     <ProjectList
                         onProjectSelect={handleProjectSelected}
                         refreshTrigger={listRefreshKey}
-                        onStartGeneration={handleStartGeneration}
-                        onGenerationComplete={handleGenerationComplete}
-                        generatingProjectId={generatingProjectId}
-                        selectedProjectId={selectedProjectId} // Still pass state for highlighting
-                        triggerRefresh={triggerListRefresh} // Add new prop for refreshing after deletion
+                        selectedProjectId={selectedProjectId}
+                        triggerRefresh={triggerListRefresh}
                     />
                 </div>
             </div>

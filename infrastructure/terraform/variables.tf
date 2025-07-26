@@ -87,5 +87,13 @@ variable "db_username" {
 variable "db_name" {
   description = "Database name"
   type        = string
-  default     = "vish_db"
+  default     = "vishmaker_db"
+}
+
+# LLM Configuration
+variable "openai_api_key" {
+  description = "OpenAI API key for LLM functionality"
+  type        = string
+  sensitive   = true
+  default     = ""
 } 

@@ -35,7 +35,7 @@ output "name_servers" {
 # Application URLs
 output "api_url" {
   description = "URL for the API Gateway"
-  value       = aws_apigatewayv2_stage.default.invoke_url
+  value       = aws_apigatewayv2_api.main.api_endpoint
 }
 
 output "api_domain" {

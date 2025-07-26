@@ -4,9 +4,31 @@ import sys
 import time
 import hashlib
 import logging
+import boto3
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+def get_secret(secret_arn):
+    """Get secret from AWS Secrets Manager"""
+    client = boto3.client('secretsmanager')
+    try:
+        response = client.get_secret_value(SecretId=secret_arn)
+        if 'SecretString' in response:
+            return json.loads(response['SecretString'])
+        return None
+    except Exception as e:
+        print(f"Error getting secret: {e}")
+        return None
+
+def get_llm_api_keys():
+    """Get LLM API keys from Secrets Manager"""
+    secret_arn = os.environ.get('LLM_SECRET_ARN')
+    if not secret_arn:
+        print("Warning: LLM_SECRET_ARN environment variable not set")
+        return {}
+    
+    return get_secret(secret_arn) or {}
 
 def handler(event, context):
     print("LLM Lambda invoked!")
@@ -127,10 +149,28 @@ def handle_process_llm(event):
             "body": json.dumps({"error": f"Failed to process LLM request: {str(e)}"})
         }
 
-def load_config():
-    """Load configuration from environment or default config"""
+def load_config_from_s3(bucket, key):
+    """Load configuration from S3"""
     try:
-        # Try to load from environment variable first
+        s3 = boto3.client('s3')
+        response = s3.get_object(Bucket=bucket, Key=key)
+        config_str = response['Body'].read().decode('utf-8')
+        return json.loads(config_str)
+    except Exception as e:
+        print(f"Error loading config from S3: {str(e)}")
+        return {}
+
+
+def load_config():
+    """Load configuration from S3 or default config"""
+    try:
+        # Load from S3
+        bucket = os.environ.get('CONFIG_BUCKET')
+        key = os.environ.get('CONFIG_KEY')
+        if bucket and key:
+            return load_config_from_s3(bucket, key)
+
+        # Fallback to environment variable if needed (for local testing)
         config_str = os.environ.get('LLM_CONFIG')
         if config_str:
             return json.loads(config_str)
@@ -338,6 +378,7 @@ class BedrockService:
     def __init__(self, config=None):
         self.config = config or {}
         self.client = None
+        self.api_keys = get_llm_api_keys()
         self._setup_client()
     
     def _setup_client(self):

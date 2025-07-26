@@ -6,6 +6,7 @@ from infrastructure.db.requirement import (
     LowLevelRequirementEntity,
     TestCaseEntity
 )
+from infrastructure.db.waitlist import WaitlistEntity
 
 __all__ = [
     'Base',
@@ -13,5 +14,6 @@ __all__ = [
     'UserFlowEntity',
     'HighLevelRequirementEntity',
     'LowLevelRequirementEntity',
-    'TestCaseEntity'
+    'TestCaseEntity',
+    'WaitlistEntity'
 ]

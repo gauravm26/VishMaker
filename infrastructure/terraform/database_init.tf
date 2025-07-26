@@ -10,7 +10,8 @@ resource "null_resource" "database_init" {
   provisioner "local-exec" {
     command = <<-EOT
       cd ${path.module}/../../infrastructure/db && \
-      python3 -c "
+      source ${path.module}/../../app-api/venv/bin/activate && \
+      python -c "
 import os
 import sys
 from pathlib import Path

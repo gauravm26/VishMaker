@@ -48,14 +48,14 @@ All other infrastructure settings use sensible defaults.
 
 OPTIONS:
     --skip-terraform     Skip Terraform deployment
-    --skip-docker        Skip Docker build and push
+    --skip-docker        Skip Lambda verification (legacy option)
     --skip-frontend      Skip frontend deployment
     -h, --help           Show this help message
 
 EXAMPLES:
     $0                           # Full deployment using global/config.json
     $0 --skip-terraform          # Only build and push containers
-    $0 --skip-docker             # Only run Terraform (containers must exist)
+    $0 --skip-docker             # Only run Terraform (skip verification)
     $0 --skip-frontend           # Deploy infrastructure and backend only
 
 CONFIGURATION:
@@ -139,9 +139,10 @@ check_dependencies() {
         missing_deps+=("terraform")
     fi
     
-    if ! command -v docker &> /dev/null; then
-        missing_deps+=("docker")
-    fi
+    # Docker no longer needed for serverless architecture
+    # if ! command -v docker &> /dev/null; then
+    #     missing_deps+=("docker")
+    # fi
     
     if ! command -v npm &> /dev/null; then
         missing_deps+=("npm")
@@ -182,7 +183,14 @@ init_terraform() {
     
     # Generate terraform.tfvars from global/config.json
     print_status "Generating terraform.tfvars from global/config.json..."
-    python3 generate_tfvars.py
+    # Activate virtual environment and generate tfvars
+    if [ -f "$SCRIPT_DIR/../app-api/venv/bin/activate" ]; then
+        source "$SCRIPT_DIR/../app-api/venv/bin/activate"
+        python generate_tfvars.py
+    else
+        echo "Virtual environment not found, using system Python"
+        python3 generate_tfvars.py
+    fi
     if [[ $? -ne 0 ]]; then
         print_error "Failed to generate terraform.tfvars from config.json"
         print_error "Please check your global/config.json file"
@@ -230,40 +238,37 @@ deploy_infrastructure() {
     cd - > /dev/null
 }
 
-# Build and push Docker image
-build_and_push_docker() {
-    print_status "Building and pushing Docker image..."
+# Verify Lambda deployment
+verify_lambda_deployment() {
+    print_status "Verifying Lambda deployment..."
     
-    # Get ECR repository URL from Terraform output
     cd infrastructure/terraform
-    local ecr_repo=$(terraform output -raw ecr_repository_url 2>/dev/null || echo "")
+    
+    # Get API Gateway URL
+    local api_url=$(terraform output -raw api_url 2>/dev/null || echo "")
+    local api_domain=$(terraform output -raw api_domain 2>/dev/null || echo "")
+    
     cd - > /dev/null
     
-    if [ -z "$ecr_repo" ]; then
-        print_error "Could not get ECR repository URL from Terraform output"
-        print_error "Make sure Terraform has been applied successfully"
-        exit 1
+    if [ -n "$api_url" ]; then
+        print_status "API Gateway URL: $api_url ✅"
     fi
     
-    print_status "ECR Repository: $ecr_repo"
+    if [ -n "$api_domain" ]; then
+        print_status "API Domain: $api_domain ✅"
+    fi
     
-    # Login to ECR
-    aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ecr_repo"
-    
-    # Build the image
-    print_status "Building Docker image..."
-    docker build -t vishmaker-backend .
-    
-    # Tag the image
-    docker tag vishmaker-backend:latest "$ecr_repo:latest"
-    docker tag vishmaker-backend:latest "$ecr_repo:$(date +%Y%m%d-%H%M%S)"
-    
-    # Push the image
-    print_status "Pushing Docker image to ECR..."
-    docker push "$ecr_repo:latest"
-    docker push "$ecr_repo:$(date +%Y%m%d-%H%M%S)"
-    
-    print_success "Docker image pushed successfully"
+    print_success "Serverless infrastructure deployed successfully"
+    echo ""
+    echo "🚀 Your VishMaker API is ready!"
+    echo "   API Gateway: $api_url"
+    if [ -n "$api_domain" ]; then
+        echo "   Custom Domain: https://$api_domain"
+    fi
+    echo ""
+    echo "📋 Available endpoints:"
+    echo "   - Projects API: $api_url/projects"
+    echo "   - LLM API: $api_url/llm"
 }
 
 # Build and deploy frontend
@@ -385,8 +390,7 @@ main() {
     fi
     
     if [ "$SKIP_DOCKER" = false ]; then
-        build_and_push_docker
-        update_ecs_service
+        verify_lambda_deployment
     fi
     
     if [ "$SKIP_FRONTEND" = false ]; then
