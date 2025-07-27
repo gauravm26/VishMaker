@@ -33,10 +33,10 @@ const FeatureCard = ({ icon, title, description, gradient, delay }: { icon: Reac
   return (
     <div
       ref={cardRef}
-      className="feature-card backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 text-center transform transition-all duration-1000"
+      className="feature-card group backdrop-blur-xl bg-white/5 rounded-3xl p-8 text-center transform transition-all duration-500 shadow-2xl hover:shadow-3xl hover:scale-105 hover:bg-white/10 hover:-translate-y-2 cursor-pointer"
       style={{ transitionDelay: delay }}
     >
-      <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-lg mb-6`}>
+      <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-lg mb-6 transform transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl`}>
         {icon}
       </div>
       <h3 className="text-2xl font-bold text-white mb-4">{title}</h3>
@@ -139,7 +139,7 @@ const LandingPage: React.FC = () => {
         {/* Glassmorphism Navigation */}
         <nav className="fixed top-0 left-0 right-0 z-50">
           <div className="container-responsive py-4">
-            <div className="flex justify-between items-center bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl px-6 py-3">
+            <div className="flex justify-between items-center bg-white/5 backdrop-blur-lg rounded-2xl px-6 py-3 shadow-2xl">
               <div className="text-2xl font-bold text-white">VishMaker</div>
               <div className="hidden sm:flex items-center space-x-6">
                 {isAuthenticated && (
@@ -196,7 +196,7 @@ const LandingPage: React.FC = () => {
                   <div className="bg-gradient-to-r from-blue-500 to-purple-600 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transform transition-transform duration-300 group-hover:scale-110">
                     <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                   </div>
-                  <p className="text-xl font-bold text-white">Product Demo Video</p>
+                  
                 </div>
               </div>
             </div>
@@ -238,11 +238,18 @@ const LandingPage: React.FC = () => {
                 delay="0.6s"
               />
               <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
                 title="Real-Time Cost & Performance Insight"
                 description="See token spend, model latency, and cloud costs in one dashboard—optimize budgets before they bite."
                 gradient="from-indigo-500 to-purple-500"
                 delay="0.8s"
+              />
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>}
+                title="Unified Docs & Project Hub"
+                description="Requirements, user stories, and progress live together—so business intent and code never drift apart."
+                gradient="from-green-500 to-emerald-500"
+                delay="1s"
               />
             </div>
           </div>
@@ -270,7 +277,7 @@ const LandingPage: React.FC = () => {
         {isMobileMenuOpen && (
           <div className="fixed inset-0 z-50 sm:hidden">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="absolute top-0 right-0 w-64 h-full bg-gray-900/95 backdrop-blur-lg border-l border-white/10 p-6">
+            <div className="absolute top-0 right-0 w-64 h-full bg-gray-900/95 backdrop-blur-lg p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-8">
                 <div className="text-xl font-bold text-white">Menu</div>
                 <button 
