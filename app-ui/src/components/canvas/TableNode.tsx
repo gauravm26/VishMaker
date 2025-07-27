@@ -1,5 +1,5 @@
 // app-ui/src/components/canvas/TableNode.tsx
-import React, { memo, useState, useCallback, ChangeEvent, KeyboardEvent, FocusEvent } from 'react';
+import React, { memo, useState, useCallback, ChangeEvent, KeyboardEvent, FocusEvent, useEffect } from 'react';
 import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 import { TableNodeData, TableRowData, ColumnDef } from '@/types/canvas'; // Add ColumnDef import
 import { useContextMenu } from "react-contexify";
@@ -26,6 +26,18 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
     { key: 'desc', label: 'Desc', width: 'w-[135px]', editable: true, order: 2 },
 ];
 
+// Responsive width mapping for mobile-first design
+const getResponsiveWidth = (width: string, isCompact: boolean = false): string => {
+    const widthMap: { [key: string]: string } = {
+        'w-[70px]': isCompact ? 'w-12 sm:w-16' : 'w-16 sm:w-20',
+        'w-[180px]': isCompact ? 'w-24 sm:w-32' : 'w-32 sm:w-40 lg:w-48',
+        'w-[135px]': isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-36 lg:w-44',
+        'w-[120px]': isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-32 lg:w-40',
+    };
+    
+    return widthMap[width] || (isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-32 lg:w-40');
+};
+
 const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions }>> = ({ data, id: nodeId, selected }) => {
     const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows, isTestCase = false } = data;
     
@@ -34,6 +46,23 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
     
     const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
     const reactFlowInstance = useReactFlow(); // Hook to interact with React Flow
+
+    // --- Responsive State ---
+    const [isMobile, setIsMobile] = useState(false);
+    const [isCompact, setIsCompact] = useState(false);
+
+    // Check screen size
+    useEffect(() => {
+        const checkScreenSize = () => {
+            const width = window.innerWidth;
+            setIsMobile(width < 768); // md breakpoint
+            setIsCompact(width < 1024); // lg breakpoint
+        };
+
+        checkScreenSize();
+        window.addEventListener('resize', checkScreenSize);
+        return () => window.removeEventListener('resize', checkScreenSize);
+    }, []);
 
     // --- State for Editing ---
     const [editingCell, setEditingCell] = useState<{ rowIndex: number; colKey: keyof TableRowData | string } | null>(null);
@@ -184,28 +213,45 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
         }
     };
 
+    // Calculate responsive container width
+    const getContainerWidth = () => {
+        if (isMobile) return 'w-80 max-w-[90vw]'; // Mobile: smaller, but responsive
+        if (isCompact) return 'w-96 max-w-[85vw]'; // Tablet: medium size
+        return 'w-[400px] max-w-[600px]'; // Desktop: larger, but with max constraint
+    };
+
     // --- Rendering ---
     return (
         // Add selection border using 'selected' prop from React Flow
         <div
-            className={`border-2 rounded shadow-lg text-sm bg-white dark:bg-gray-800 ${selected ? 'border-blue-500 dark:border-blue-400' : 'border-gray-500 dark:border-gray-600'}`}
-            style={{ width: '400px' }}
+            className={`
+                ${getContainerWidth()}
+                border-2 rounded-lg shadow-lg text-xs sm:text-sm bg-white dark:bg-gray-800
+                ${selected ? 'border-blue-500 dark:border-blue-400' : 'border-gray-300 dark:border-gray-600'}
+                overflow-hidden
+            `}
             onContextMenu={(e) => displayContextMenu(e, 'background')} // Context menu on whole node background
         >
             {/* Node Header */}
-            <div className="bg-gray-200 dark:bg-gray-700 p-2 border-b border-gray-400 dark:border-gray-600 font-bold text-center text-base relative text-gray-900 dark:text-gray-100 flex justify-between items-center">
-                <div className="flex-1 text-center">{title}</div>
+            <div className="bg-gray-200 dark:bg-gray-700 px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-300 dark:border-gray-600 font-bold text-center text-sm sm:text-base relative text-gray-900 dark:text-gray-100 flex justify-between items-center">
+                <div className="flex-1 text-center truncate pr-2">
+                    {title}
+                </div>
                 
                 {/* Minimize/Maximize Button */}
                 <button 
-                    className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 focus:outline-none transition-colors"
+                    className="touch-target flex-shrink-0 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 focus:outline-none transition-colors p-1"
                     onClick={handleToggleSize}
                     title={isMinimized ? "Show all rows" : "Show fewer rows"}
                 >
                     {isMinimized ? (
-                        <span className="text-xl">⤢</span> // Maximize icon
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 10l5 5 5-5" />
+                        </svg>
                     ) : (
-                        <span className="text-xl">⤡</span> // Minimize icon
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 14l5-5 5 5" />
+                        </svg>
                     )}
                 </button>
                 
@@ -218,94 +264,116 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 />
             </div>
 
-            {/* Node Body - Table Container with no padding to align borders */}
+            {/* Node Body - Table Container */}
             <div className="text-gray-900 dark:text-gray-200">
-                {/* Header Row */}
-                <div className="flex bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100">
-                    {sortedColumns.map(col => (
-                        <div 
-                            key={col.key} 
-                            className={`${col.width} py-1 px-2 font-semibold relative group cursor-pointer`}
-                            onDoubleClick={() => handleHeaderDoubleClick(col.key, col.label)}
-                            onContextMenu={(e) => displayContextMenu(e, 'header', undefined, col.key)}
-                        >
-                            {editingHeader === col.key ? (
-                                <input
-                                    type="text"
-                                    value={editValue}
-                                    onChange={handleInputChange}
-                                    onBlur={handleInputBlur}
-                                    onKeyDown={handleInputKeyDown}
-                                    autoFocus
-                                    className="w-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                                />
-                            ) : (
-                                <>
-                                    {col.label}
-                                </>
-                            )}
-                        </div>
-                    ))}
-                    {/* No extra element for handle space */}
-                </div>
+                {/* Responsive Table Wrapper */}
+                <div className="table-responsive max-w-full">
+                    {/* Header Row */}
+                    <div className="flex bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 min-w-max">
+                        {sortedColumns.map(col => (
+                            <div 
+                                key={col.key} 
+                                className={`
+                                    ${getResponsiveWidth(col.width, isCompact)}
+                                    py-1 px-2 sm:py-2 sm:px-3 font-semibold relative group cursor-pointer
+                                    border-r border-gray-300 dark:border-gray-600 last:border-r-0
+                                    flex-shrink-0
+                                `}
+                                onDoubleClick={() => handleHeaderDoubleClick(col.key, col.label)}
+                                onContextMenu={(e) => displayContextMenu(e, 'header', undefined, col.key)}
+                            >
+                                {editingHeader === col.key ? (
+                                    <input
+                                        type="text"
+                                        value={editValue}
+                                        onChange={handleInputChange}
+                                        onBlur={handleInputBlur}
+                                        onKeyDown={handleInputKeyDown}
+                                        autoFocus
+                                        className="w-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-xs sm:text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded"
+                                    />
+                                ) : (
+                                    <span className="truncate block" title={col.label}>
+                                        {col.label}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
 
-                <div>
-                    {rows.map((row, rowIndex) => (
-                        <div
-                            key={`row-${row.id}-${rowIndex}`}
-                            className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[35px] relative group"
-                            onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
-                            title={`UIID: ${row.uiid || row.id}`}
-                            data-row-id={row.id}
-                            data-row-index={rowIndex}
-                            data-row-sno={row.sno}
-                        >
-                            {sortedColumns.map((col, colIndex) => {
-                                const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colKey === col.key;
-                                const cellValue = row[col.key as keyof TableRowData] ?? '';
-                                const isLastCol = colIndex === sortedColumns.length - 1;
+                    {/* Table Body */}
+                    <div className="max-h-80 sm:max-h-96 overflow-y-auto scrollbar-hide">
+                        {rows.map((row, rowIndex) => (
+                            <div
+                                key={`row-${row.id}-${rowIndex}`}
+                                className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50 dark:hover:bg-gray-700/30 min-w-max"
+                                onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
+                                title={`UIID: ${row.uiid || row.id}`}
+                                data-row-id={row.id}
+                                data-row-index={rowIndex}
+                                data-row-sno={row.sno}
+                            >
+                                {sortedColumns.map((col, colIndex) => {
+                                    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colKey === col.key;
+                                    const cellValue = row[col.key as keyof TableRowData] ?? '';
+                                    const isLastCol = colIndex === sortedColumns.length - 1;
 
-                                return (
-                                    <div
-                                        key={`cell-${row.id}-${col.key}-${rowIndex}-${colIndex}`}
-                                        className={`${col.width} py-1 px-2 border-r dark:border-gray-600 ${isLastCol ? 'border-r-0 relative' : ''} ${col.editable ? 'cursor-text' : ''} ${isEditing ? 'p-0' : ''}`}
-                                        onDoubleClick={() => handleDoubleClick(rowIndex, col.key, cellValue)}
-                                    >
-                                        {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={editValue}
-                                                onChange={handleInputChange}
-                                                onBlur={handleInputBlur}
-                                                onKeyDown={handleInputKeyDown}
-                                                autoFocus
-                                                className="w-full h-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                                            />
-                                        ) : (
-                                            String(cellValue)
-                                        )}
-                                        
-                                        {/* Conditionally render the handle on the last column */}
-                                        {isLastCol && (
-                                            <Handle
-                                                type="source"
-                                                position={Position.Right}
-                                                id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
-                                                className="!bg-blue-500 !w-3 !h-3"
-                                                style={{ top: '50%', right: '-7px' }} // Adjust position as needed
-                                            />
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
+                                    return (
+                                        <div
+                                            key={`cell-${row.id}-${col.key}-${rowIndex}-${colIndex}`}
+                                            className={`
+                                                ${getResponsiveWidth(col.width, isCompact)}
+                                                py-1 px-2 sm:py-2 sm:px-3 border-r border-gray-200 dark:border-gray-600 
+                                                ${isLastCol ? 'border-r-0 relative' : ''} 
+                                                ${col.editable ? 'cursor-text' : ''} 
+                                                ${isEditing ? 'p-0' : ''}
+                                                flex-shrink-0 flex items-center
+                                            `}
+                                            onDoubleClick={() => handleDoubleClick(rowIndex, col.key, cellValue)}
+                                        >
+                                            {isEditing ? (
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={handleInputChange}
+                                                    onBlur={handleInputBlur}
+                                                    onKeyDown={handleInputKeyDown}
+                                                    autoFocus
+                                                    className="w-full h-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-xs sm:text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded"
+                                                />
+                                            ) : (
+                                                <span className="truncate block w-full" title={String(cellValue)}>
+                                                    {String(cellValue)}
+                                                </span>
+                                            )}
+                                            
+                                            {/* Conditionally render the handle on the last column */}
+                                            {isLastCol && (
+                                                <Handle
+                                                    type="source"
+                                                    position={Position.Right}
+                                                    id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
+                                                    className="!bg-blue-500 !w-3 !h-3"
+                                                    style={{ top: '50%', right: '-7px' }} // Adjust position as needed
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
                 </div>
                 
                 {/* Show count of hidden rows if minimized */}
                 {isMinimized && allRows.length > rows.length && (
-                    <div className="text-center py-2 text-gray-500 dark:text-gray-400 text-sm border-t border-gray-200 dark:border-gray-700">
-                        {allRows.length - rows.length} more rows hidden. Click ⤢ to show all.
+                    <div className="text-center py-2 sm:py-3 text-gray-500 dark:text-gray-400 text-xs sm:text-sm border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        <span className="inline-flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            {allRows.length - rows.length} more rows hidden
+                        </span>
                     </div>
                 )}
             </div>
@@ -318,8 +386,8 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     id="minimized-rows-handle"
                     className="!bg-purple-500 !w-4 !h-4"
                     style={{ 
-                        right: '-7px',
-                        bottom: '+10px'
+                        right: '20px',
+                        bottom: '-8px'
                     }}
                     title={`Connection point for ${allRows.length - rows.length} hidden rows`}
                 />

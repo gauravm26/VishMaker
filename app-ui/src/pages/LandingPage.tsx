@@ -1,164 +1,247 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
-const LandingPage: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMessage, setSubmitMessage] = useState('');
+// Helper component for animated feature cards
+const FeatureCard = ({ icon, title, description, gradient, delay }: { icon: React.ReactNode, title: string, description: string, gradient: string, delay: string }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            cardRef.current?.classList.add('is-in-view');
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
 
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'}/waitlist/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (response.ok) {
-        setSubmitMessage('Thanks! You\'ve been added to our waitlist.');
-        setEmail('');
-      } else {
-        setSubmitMessage('Something went wrong. Please try again.');
-      }
-    } catch (error) {
-      setSubmitMessage('Something went wrong. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
     }
-  };
+
+    return () => {
+      if (cardRef.current) {
+        observer.unobserve(cardRef.current);
+      }
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Navigation */}
-      <nav className="flex justify-between items-center px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-200">
-        <div className="text-2xl font-bold text-gray-900">VishMaker</div>
-        <div className="space-x-4">
-          <Link to="/dashboard" className="text-gray-600 hover:text-blue-600 transition-colors">
-            Dashboard
-          </Link>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
-            Sign In
-          </button>
-        </div>
-      </nav>
+    <div
+      ref={cardRef}
+      className="feature-card backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 text-center transform transition-all duration-1000"
+      style={{ transitionDelay: delay }}
+    >
+      <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-lg mb-6`}>
+        {icon}
+      </div>
+      <h3 className="text-2xl font-bold text-white mb-4">{title}</h3>
+      <p className="text-gray-300 leading-relaxed">{description}</p>
+    </div>
+  );
+};
 
-      {/* Hero Section */}
-      <section className="max-w-6xl mx-auto px-6 py-16">
-        <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            Where dream projects go live—<br />
-            <span className="text-blue-600">never stuck in prototype.</span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Transform your ideas into production-ready applications with intelligent code generation, 
-            visual development tools, and seamless deployment pipelines.
-          </p>
-        </div>
+const LandingPage: React.FC = () => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const parallaxRef = useRef<HTMLDivElement>(null);
+  const [isShootingStarsLoaded, setIsShootingStarsLoaded] = useState(false);
+  const [starKey, setStarKey] = useState(0);
 
-        {/* Video Placeholder */}
-        <div className="relative mb-16">
-          <div className="bg-gray-900 rounded-2xl shadow-2xl aspect-video flex items-center justify-center relative overflow-hidden">
-            {/* Video placeholder with play button */}
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20"></div>
-            <div className="text-center z-10">
-              <div className="bg-white/20 backdrop-blur-sm rounded-full p-4 mb-4 inline-flex">
-                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
+  // Create a new star every 5 seconds
+  useEffect(() => {
+    if (!isShootingStarsLoaded) return;
+
+    const interval = setInterval(() => {
+      setStarKey(prev => prev + 1);
+    }, 5000); // Every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [isShootingStarsLoaded]);
+
+  // Parallax effect for the background
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (parallaxRef.current) {
+        const { clientX, clientY } = e;
+        const { innerWidth, innerHeight } = window;
+        const x = (clientX / innerWidth - 0.5) * 30;
+        const y = (clientY / innerHeight - 0.5) * 30;
+        parallaxRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Memoize shooting stars so they don't re-render
+  const shootingStars = useMemo(() => {
+    if (!isShootingStarsLoaded) return null;
+    
+    return Array.from({ length: 1 }).map((_, i) => { // Just one star
+      const style: React.CSSProperties = {
+        top: `${Math.random() * 100}%`,
+        left: `${Math.random() * 100}%`,
+        animationDelay: '0s', // Start immediately
+        animationDuration: `${Math.random() * 1 + 2}s`, // duration between 2s and 3s
+      };
+      return <div key={`star-${starKey}-${i}`} className="shooting-star" style={style} />;
+    });
+  }, [isShootingStarsLoaded, starKey]);
+
+  // Load shooting stars after page load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsShootingStarsLoaded(true);
+    }, 2000); // Wait 2 seconds after page load
+
+    return () => clearTimeout(timer);
+  }, []);
+
+
+  return (
+    <div className="min-h-screen bg-[#0A071B] text-white overflow-x-hidden">
+      {/* Background Masterpiece */}
+      <div ref={parallaxRef} className="fixed inset-0 z-0 transition-transform duration-300 ease-out">
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-[#0A071B] via-[#1A103A] to-[#0A071B]"></div>
+        <div className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-gradient-to-br from-purple-900/80 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '15s' }}></div>
+        <div className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-gradient-to-tl from-teal-800/60 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '15s', animationDelay: '5s' }}></div>
+        {/* Shooting Stars */}
+        {shootingStars}
+        <div id="stardust-container" className="absolute inset-0">
+          {Array.from({ length: 100 }).map((_, i) => {
+            const size = Math.random() * 2 + 1;
+            const colors = ['bg-white/70', 'bg-blue-300/70', 'bg-purple-300/70', 'bg-teal-300/70'];
+            return (
+              <div
+                key={i}
+                className={`absolute rounded-full animate-pulse ${colors[Math.floor(Math.random() * colors.length)]}`}
+                style={{
+                  width: `${size}px`,
+                  height: `${size}px`,
+                  top: `${Math.random() * 100}%`,
+                  left: `${Math.random() * 100}%`,
+                  animationDuration: `${Math.random() * 8 + 8}s`,
+                  animationDelay: `${Math.random() * 8}s`,
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Main Content Wrapper */}
+      <div className="relative z-10">
+        {/* Glassmorphism Navigation */}
+        <nav className="fixed top-0 left-0 right-0 z-50">
+          <div className="container-responsive py-4">
+            <div className="flex justify-between items-center bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl px-6 py-3">
+              <div className="text-2xl font-bold text-white">VishMaker</div>
+              <div className="hidden sm:flex items-center space-x-6">
+                <Link to="/dashboard" className="text-gray-300 hover:text-white transition-colors font-medium">Dashboard</Link>
+                <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all duration-300 font-semibold shadow-lg hover:shadow-purple-500/20">Sign In</button>
               </div>
-              <p className="text-white text-lg font-medium">Watch VishMaker in Action</p>
-              <p className="text-white/80 text-sm mt-1">See how ideas become reality in minutes</p>
+              <button className="sm:hidden text-white" onClick={() => setIsMobileMenuOpen(true)}>
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+              </button>
             </div>
           </div>
-        </div>
+        </nav>
 
-        {/* Features Grid */}
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
-          <div className="text-center p-6">
-            <div className="bg-blue-100 rounded-xl p-3 w-12 h-12 mx-auto mb-4 flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Lightning Fast</h3>
-            <p className="text-gray-600">Generate production-ready code in minutes, not months. From concept to deployment at unprecedented speed.</p>
-          </div>
-          
-          <div className="text-center p-6">
-            <div className="bg-purple-100 rounded-xl p-3 w-12 h-12 mx-auto mb-4 flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">AI-Powered</h3>
-            <p className="text-gray-600">Advanced AI understands your requirements and generates clean, maintainable code following best practices.</p>
-          </div>
-          
-          <div className="text-center p-6">
-            <div className="bg-green-100 rounded-xl p-3 w-12 h-12 mx-auto mb-4 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Deploy Anywhere</h3>
-            <p className="text-gray-600">One-click deployment to AWS, Azure, or your preferred cloud platform. Scale from prototype to production seamlessly.</p>
-          </div>
-        </div>
-
-        {/* Waitlist Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12 text-center max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Join the Waitlist</h2>
-          <p className="text-gray-600 mb-8">
-            Be among the first to experience the future of development. Get early access and exclusive updates.
-          </p>
-          
-          <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              required
-            />
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              {isSubmitting ? 'Joining...' : 'Join Waitlist'}
-            </button>
-          </form>
-          
-          {submitMessage && (
-            <p className={`mt-4 ${submitMessage.includes('Thanks') ? 'text-green-600' : 'text-red-600'}`}>
-              {submitMessage}
+        {/* Hero Section: The Celebration */}
+        <section className="min-h-screen flex items-center justify-center text-center px-4 relative">
+          <div className="max-w-4xl">
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold leading-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-white animate-gradient-x">
+              Your wish, launched into reality.
+            </h1>
+            <p className="mt-6 text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up" style={{animationDelay: '0.5s'}}>
+              VishMaker is the celebration of creation, turning a single wish into a full-featured application with the power of intelligent AI. From idea to deployment, your vision is our command.
             </p>
-          )}
-        </div>
-      </section>
+            <div className="mt-12 flex flex-col sm:flex-row gap-6 justify-center items-center animate-fade-in-up" style={{animationDelay: '1s'}}>
+              <Link to="/dashboard" className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-purple-500/30 transform hover:scale-105">
+                Start Building
+              </Link>
+              <button className="w-full sm:w-auto bg-white/10 backdrop-blur-lg border border-white/20 text-white hover:bg-white/20 px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 transform hover:scale-105">
+                Watch Demo
+              </button>
+            </div>
+          </div>
+        </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 mt-16">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <div className="text-2xl font-bold mb-4">VishMaker</div>
-          <p className="text-gray-400 mb-6">Building the future of software development</p>
-          <div className="flex justify-center space-x-6">
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">Privacy</a>
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">Terms</a>
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">Contact</a>
+        {/* Video Section: Organic & Flowing */}
+        <section className="py-24">
+          <div className="container-responsive text-center">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">See VishMaker in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-teal-400">Action</span></h2>
+            <p className="text-lg text-gray-400 mb-12">Watch how ideas transform into reality in minutes.</p>
+            <div className="relative group cursor-pointer aspect-video max-w-4xl mx-auto">
+              <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-teal-600 rounded-3xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <div className="relative bg-black rounded-3xl flex items-center justify-center border-2 border-purple-500/30 shadow-2xl h-full">
+                <div className="text-center space-y-4">
+                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transform transition-transform duration-300 group-hover:scale-110">
+                    <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                  <p className="text-xl font-bold text-white">Product Demo Video</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-gray-800">
-            <p className="text-gray-400 text-sm">© 2024 VishMaker. All rights reserved.</p>
+        </section>
+
+        {/* Features Section: Full of Life */}
+        <section className="py-24">
+          <div className="container-responsive text-center">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Everything You Need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500">Ship Faster</span></h2>
+            <p className="text-lg text-gray-400 mb-16">From idea to deployment, VishMaker provides all the tools you need.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
+                title="AI Code Generation"
+                description="Generate production-ready code from natural language descriptions."
+                gradient="from-blue-500 to-cyan-500"
+                delay="0s"
+              />
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" /></svg>}
+                title="Visual Development"
+                description="Build and modify applications with intuitive drag-and-drop interfaces."
+                gradient="from-purple-500 to-pink-500"
+                delay="0.2s"
+              />
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
+                title="One-Click Deploy"
+                description="Deploy your applications to the cloud with a single click and automatic scaling."
+                gradient="from-emerald-500 to-teal-500"
+                delay="0.4s"
+              />
+            </div>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {/* CTA Section: The Grand Finale */}
+        <section className="py-32">
+          <div className="container-responsive">
+            <div className="relative bg-gradient-to-br from-purple-800 via-indigo-900 to-blue-900 rounded-3xl p-12 text-center overflow-hidden">
+              <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-teal-600 rounded-3xl blur opacity-20"></div>
+              <div className="relative z-10">
+                <h2 className="text-4xl md:text-6xl font-extrabold text-white mb-6">Ready to Build Your Dream?</h2>
+                <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-10">Join thousands of developers who are shipping faster with VishMaker.</p>
+                <Link to="/dashboard" className="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-10 py-5 rounded-2xl text-xl font-bold transition-all duration-300 shadow-2xl hover:shadow-rose-500/40 transform hover:scale-105">
+                  Start Your Free Trial
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-16 border-t border-white/10">
+          <div className="container-responsive text-center text-gray-400">
+            <p>&copy; 2024 VishMaker. All rights reserved.</p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };

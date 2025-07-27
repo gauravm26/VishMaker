@@ -175,10 +175,14 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
     };
 
     return (
-        <div className="p-4 border rounded shadow-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 mb-4">
-            <h2 className="text-xl font-semibold mb-3 dark:text-gray-100">Create New Project</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
+        <div className="card-responsive">
+            <h2 className="text-lg sm:text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                Create New Project
+            </h2>
+            
+            <form onSubmit={handleSubmit} className="form-mobile">
+                {/* Project Name Field */}
+                <div className="form-group">
                     <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Project Name <span className="text-red-500">*</span>
                     </label>
@@ -188,11 +192,14 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
+                        className="form-mobile input"
+                        placeholder="Enter project name"
                         disabled={isSubmitting || isLlmProcessing}
                     />
                 </div>
-                <div className="relative">
+
+                {/* Initial Prompt Field */}
+                <div className="form-group">
                     <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Initial Prompt <span className="text-red-500">*</span>
                     </label>
@@ -201,42 +208,103 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                             id="initialPrompt"
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            rows={15}
+                            rows={window.innerWidth < 640 ? 8 : 12} // Responsive rows
                             required
-                            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
+                            className="form-mobile textarea resize-none"
+                            placeholder="Describe your project idea in detail..."
                             disabled={isSubmitting || isLlmProcessing}
                         />
+                        
+                        {/* AI Refine Button */}
                         <button
                             type="button"
                             id="gen_initialPrompt"
                             onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
-                            disabled={isSubmitting || isLlmProcessing}
-                            className="absolute top-2 right-2 p-0.5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors border border-blue-500"
+                            disabled={isSubmitting || isLlmProcessing || !prompt.trim()}
+                            className={`
+                                absolute top-3 right-3 px-3 py-1.5 rounded-md text-xs font-bold
+                                transition-all duration-200 touch-target
+                                ${prompt.trim() 
+                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50' 
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-600 cursor-not-allowed'
+                                }
+                                ${isLlmProcessing ? 'animate-pulse' : ''}
+                            `}
                             title="Refine with AI"
                         >
-                            <span className={`text-xs font-bold ${isLlmProcessing ? 'animate-pulse' : ''} ${prompt ? 'ai-icon-text text-blue-500' : 'text-gray-400'}`}>
-                                AI
-                            </span>
+                            {isLlmProcessing ? '...' : 'AI'}
                         </button>
                     </div>
                 </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
-                {progressUpdate && <p className="text-sm text-blue-600">{progressUpdate}</p>}
+
+                {/* Status Messages */}
+                {error && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                    </div>
+                )}
                 
-                <div>
+                {successMessage && (
+                    <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                        <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+                    </div>
+                )}
+                
+                {progressUpdate && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                        <p className="text-sm text-blue-600 dark:text-blue-400 flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {progressUpdate}
+                        </p>
+                    </div>
+                )}
+
+                {/* Submit Button */}
+                <div className="pt-2">
                     <button
                         id="gen_userflow"
                         type="button"
                         onClick={(e) => handleBuildClick(e.currentTarget.id, prompt)}
-                        disabled={isSubmitting || isLlmProcessing}
-                        className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
-                            isSubmitting || isLlmProcessing
-                                ? 'bg-indigo-400 cursor-not-allowed'
-                                : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                        }`}
+                        disabled={isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim()}
+                        className={`
+                            w-full sm:w-auto touch-target
+                            inline-flex justify-center items-center px-6 py-3
+                            text-sm font-medium rounded-lg
+                            transition-all duration-200
+                            focus:outline-none focus:ring-2 focus:ring-offset-2
+                            ${(isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim())
+                                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md'
+                            }
+                        `}
                     >
-                        {isSubmitting ? 'Building...' : isLlmProcessing ? 'Processing...' : "Let's build it"}
+                        {isSubmitting ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Building...
+                            </>
+                        ) : isLlmProcessing ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Processing...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Let's build it
+                            </>
+                        )}
                     </button>
                 </div>
             </form>
