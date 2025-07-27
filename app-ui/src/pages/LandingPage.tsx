@@ -172,7 +172,7 @@ const LandingPage: React.FC = () => {
               Your wish, launched into reality.
             </h1>
             <p className="mt-6 text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up" style={{animationDelay: '0.5s'}}>
-              VishMaker is the celebration of creation, turning a single wish into a full-featured application with the power of intelligent AI. From idea to deployment, your vision is our command.
+              VishMaker is the celebration of creation, spinning every wish into a fully featured solution
             </p>
             <div className="mt-12 animate-fade-in-up" style={{animationDelay: '1s'}}>
               <WaitlistForm 
@@ -210,25 +210,39 @@ const LandingPage: React.FC = () => {
             <p className="text-lg text-gray-400 mb-16">From idea to deployment, VishMaker provides all the tools you need.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
-                title="AI Code Generation"
-                description="Generate production-ready code from natural language descriptions."
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                title="Crystal-Clear Requirements → Bullet-proof Code"
+                description="A visual canvas that chains User Flow → High-Level → Low-Level → Tests, so every feature ships with an audit-ready paper trail."
                 gradient="from-blue-500 to-cyan-500"
                 delay="0s"
               />
               <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" /></svg>}
-                title="Visual Development"
-                description="Build and modify applications with intuitive drag-and-drop interfaces."
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                title="Own Your Stack, Own Your Future"
+                description="One-click IaC deploys VishMaker into your AWS, Azure, or GCP—no vendor lock-in, no data leaving your VPC."
                 gradient="from-purple-500 to-pink-500"
                 delay="0.2s"
               />
               <FeatureCard 
                 icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-                title="One-Click Deploy"
-                description="Deploy your applications to the cloud with a single click and automatic scaling."
+                title="Best-of-Breed LLM Orchestration"
+                description="Routes planning to Gemini /OpenAI, coding to Codex (or any model you choose) for higher accuracy, lower cost, and zero single-point failure."
                 gradient="from-emerald-500 to-teal-500"
                 delay="0.4s"
+              />
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
+                title="Enterprise-Grade Governance & Audit"
+                description="Built-in policy engine, role-based controls, and tamper-proof logs that keep compliance teams smiling."
+                gradient="from-orange-500 to-red-500"
+                delay="0.6s"
+              />
+              <FeatureCard 
+                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+                title="Real-Time Cost & Performance Insight"
+                description="See token spend, model latency, and cloud costs in one dashboard—optimize budgets before they bite."
+                gradient="from-indigo-500 to-purple-500"
+                delay="0.8s"
               />
             </div>
           </div>

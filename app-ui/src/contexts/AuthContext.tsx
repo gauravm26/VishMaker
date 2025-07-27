@@ -2,10 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { IAuthService, User } from './IAuthService';
 import apiClient from '../lib/apiClient';
 
-interface AuthContextType extends IAuthService {
+interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<User>;
+  signOut: () => Promise<void>;
+  getCurrentAuthenticatedUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -68,22 +71,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('sessionToken');
   };
 
-  const signUp = async (email: string, password: string): Promise<{ userConfirmed: boolean; userId: string }> => {
-    return await apiClient('/auth/signup', { body: { email, password } });
-  };
-
-  const confirmSignUp = async (email: string, confirmationCode: string): Promise<void> => {
-    await apiClient('/auth/confirm-signup', { body: { email, confirmationCode } });
-  };
-
-  const forgotPassword = async (email: string): Promise<void> => {
-    await apiClient('/auth/forgot-password', { body: { email } });
-  };
-
-  const confirmForgotPassword = async (email: string, code: string, newPassword: string): Promise<void> => {
-    await apiClient('/auth/confirm-forgot-password', { body: { email, confirmationCode: code, newPassword } });
-  };
-
   const getCurrentAuthenticatedUser = async (): Promise<User | null> => {
     if (!sessionToken) {
       return null;
@@ -105,10 +92,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoading,
     signIn,
     signOut,
-    signUp,
-    confirmSignUp,
-    forgotPassword,
-    confirmForgotPassword,
     getCurrentAuthenticatedUser,
   };
 
