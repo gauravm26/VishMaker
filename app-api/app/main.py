@@ -71,6 +71,7 @@ from features.project_management.api import routes as project_routes
 from features.requirement_generation.api import routes as req_gen_routes
 from features.code_generation.api import routes as code_gen_routes
 from features.waitlist.api import routes as waitlist_routes
+from features.authentication.api import routes as auth_routes
 
 # Import the LLM router from the LLM controller directly
 from app.api.llm_controller import router as llm_router
@@ -113,6 +114,7 @@ app.include_router(project_routes.router, prefix=get_api_v1_str())
 app.include_router(req_gen_routes.router, prefix=get_api_v1_str())
 app.include_router(code_gen_routes.router, prefix=get_api_v1_str())
 app.include_router(waitlist_routes.router, prefix=get_api_v1_str())
+app.include_router(auth_routes.router, prefix=f"{get_api_v1_str()}/auth", tags=["Authentication"])
 
 # Include LLM router with prefix
 app.include_router(

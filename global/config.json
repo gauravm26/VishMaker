@@ -441,5 +441,12 @@
         "instanceType": "large"
             }
     ]
+  },
+  "cloud": {
+    "aws": {
+      "aws_region": "us-east-1",
+      "user_pool_id": "us-east-1_placeholder",
+      "client_id": "placeholderclientid"
+    }
   }
 }

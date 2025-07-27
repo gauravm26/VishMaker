@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import WaitlistForm from '../components/WaitlistForm';
 
 // Helper component for animated feature cards
 const FeatureCard = ({ icon, title, description, gradient, delay }: { icon: React.ReactNode, title: string, description: string, gradient: string, delay: string }) => {
@@ -44,6 +46,7 @@ const FeatureCard = ({ icon, title, description, gradient, delay }: { icon: Reac
 };
 
 const LandingPage: React.FC = () => {
+  const { isAuthenticated, signOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const parallaxRef = useRef<HTMLDivElement>(null);
   const [isShootingStarsLoaded, setIsShootingStarsLoaded] = useState(false);
@@ -139,8 +142,21 @@ const LandingPage: React.FC = () => {
             <div className="flex justify-between items-center bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl px-6 py-3">
               <div className="text-2xl font-bold text-white">VishMaker</div>
               <div className="hidden sm:flex items-center space-x-6">
-                <Link to="/dashboard" className="text-gray-300 hover:text-white transition-colors font-medium">Dashboard</Link>
-                <button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all duration-300 font-semibold shadow-lg hover:shadow-purple-500/20">Sign In</button>
+                {isAuthenticated && (
+                  <Link to="/dashboard" className="text-gray-300 hover:text-white transition-colors font-medium">Dashboard</Link>
+                )}
+                {isAuthenticated ? (
+                  <button 
+                    onClick={signOut}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all duration-300 font-semibold shadow-lg hover:shadow-purple-500/20"
+                  >
+                    Sign Out
+                  </button>
+                ) : (
+                  <Link to="/login" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all duration-300 font-semibold shadow-lg hover:shadow-purple-500/20">
+                    Sign In
+                  </Link>
+                )}
               </div>
               <button className="sm:hidden text-white" onClick={() => setIsMobileMenuOpen(true)}>
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
@@ -150,7 +166,7 @@ const LandingPage: React.FC = () => {
         </nav>
 
         {/* Hero Section: The Celebration */}
-        <section className="min-h-screen flex items-center justify-center text-center px-4 relative">
+        <section className="min-h-[80vh] flex items-center justify-center text-center px-4 relative">
           <div className="max-w-4xl">
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold leading-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-white animate-gradient-x">
               Your wish, launched into reality.
@@ -158,19 +174,18 @@ const LandingPage: React.FC = () => {
             <p className="mt-6 text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up" style={{animationDelay: '0.5s'}}>
               VishMaker is the celebration of creation, turning a single wish into a full-featured application with the power of intelligent AI. From idea to deployment, your vision is our command.
             </p>
-            <div className="mt-12 flex flex-col sm:flex-row gap-6 justify-center items-center animate-fade-in-up" style={{animationDelay: '1s'}}>
-              <Link to="/dashboard" className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-purple-500/30 transform hover:scale-105">
-                Start Building
-              </Link>
-              <button className="w-full sm:w-auto bg-white/10 backdrop-blur-lg border border-white/20 text-white hover:bg-white/20 px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 transform hover:scale-105">
-                Watch Demo
-              </button>
+            <div className="mt-12 animate-fade-in-up" style={{animationDelay: '1s'}}>
+              <WaitlistForm 
+                className="mb-4"
+                buttonText="Join Waitlist"
+                placeholder="Enter your email to join the waitlist"
+              />
             </div>
           </div>
         </section>
 
         {/* Video Section: Organic & Flowing */}
-        <section className="py-24">
+        <section className="py-12">
           <div className="container-responsive text-center">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">See VishMaker in <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-teal-400">Action</span></h2>
             <p className="text-lg text-gray-400 mb-12">Watch how ideas transform into reality in minutes.</p>
@@ -189,9 +204,9 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* Features Section: Full of Life */}
-        <section className="py-24">
+        <section className="py-20">
           <div className="container-responsive text-center">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">Everything You Need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500">Ship Faster</span></h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500">Productionalize</span></h2>
             <p className="text-lg text-gray-400 mb-16">From idea to deployment, VishMaker provides all the tools you need.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <FeatureCard 
@@ -220,20 +235,72 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* CTA Section: The Grand Finale */}
-        <section className="py-32">
+        <section className="py-24">
           <div className="container-responsive">
             <div className="relative bg-gradient-to-br from-purple-800 via-indigo-900 to-blue-900 rounded-3xl p-12 text-center overflow-hidden">
               <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-teal-600 rounded-3xl blur opacity-20"></div>
               <div className="relative z-10">
-                <h2 className="text-4xl md:text-6xl font-extrabold text-white mb-6">Ready to Build Your Dream?</h2>
-                <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-10">Join thousands of developers who are shipping faster with VishMaker.</p>
-                <Link to="/dashboard" className="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-10 py-5 rounded-2xl text-xl font-bold transition-all duration-300 shadow-2xl hover:shadow-rose-500/40 transform hover:scale-105">
-                  Start Your Free Trial
-                </Link>
+                <h2 className="text-4xl md:text-6xl font-extrabold text-white mb-6">Ready to fulfill your Wish?</h2>
+                <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-8">Join thousands of developers who are shipping faster with VishMaker.</p>
+                <WaitlistForm 
+                  buttonText="Join Waitlist"
+                  placeholder="Enter your email"
+                  className="max-w-lg mx-auto"
+                />
               </div>
             </div>
           </div>
         </section>
+
+        {/* Mobile Menu Overlay */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 sm:hidden">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+            <div className="absolute top-0 right-0 w-64 h-full bg-gray-900/95 backdrop-blur-lg border-l border-white/10 p-6">
+              <div className="flex justify-between items-center mb-8">
+                <div className="text-xl font-bold text-white">Menu</div>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-white hover:text-gray-300"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="space-y-4">
+                {isAuthenticated && (
+                  <Link 
+                    to="/dashboard" 
+                    className="block text-gray-300 hover:text-white transition-colors font-medium py-2"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                )}
+                {isAuthenticated ? (
+                  <button 
+                    onClick={() => {
+                      signOut();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl transition-all duration-300 font-semibold"
+                  >
+                    Sign Out
+                  </button>
+                ) : (
+                  <Link 
+                    to="/login" 
+                    className="block w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-xl transition-all duration-300 font-semibold text-center"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="py-16 border-t border-white/10">
