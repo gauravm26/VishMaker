@@ -1,0 +1,180 @@
+#!/bin/bash
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+print_usage() {
+    echo "Usage: $0 [LAMBDA_NAME]"
+    echo ""
+    echo "Arguments:"
+    echo "  LAMBDA_NAME    Build specific lambda (auth, users, llm, or all)"
+    echo ""
+    echo "Examples:"
+    echo "  $0              # Build all available lambdas"
+    echo "  $0 auth         # Build only auth lambda"
+    echo "  $0 users        # Build only users lambda"
+    echo "  $0 llm          # Build only llm lambda"
+    echo "  $0 all          # Build all lambdas"
+    echo ""
+}
+
+# Parse command line arguments
+LAMBDA_TO_BUILD="${1:-all}"
+
+# Validate lambda selection
+case $LAMBDA_TO_BUILD in
+    auth|users|llm|all)
+        # Valid selection
+        ;;
+    *)
+        print_usage
+        echo -e "${RED}❌ Invalid lambda selection: $LAMBDA_TO_BUILD${NC}"
+        echo -e "${RED}Valid options: auth, users, llm, all${NC}"
+        exit 1
+        ;;
+esac
+
+echo -e "${GREEN}🚀 Building VishMaker Lambda deployment packages...${NC}"
+echo -e "${YELLOW}Target: $LAMBDA_TO_BUILD${NC}"
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+BACKEND_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$BACKEND_ROOT")"
+BUILD_DIR="$BACKEND_ROOT/scripts/.build"
+DIST_DIR="$BACKEND_ROOT/scripts/dist"
+
+echo -e "${YELLOW}📁 Backend root: $BACKEND_ROOT${NC}"
+echo -e "${YELLOW}📁 Project root: $PROJECT_ROOT${NC}"
+
+# Clean and create build directories
+echo -e "${YELLOW}🧹 Cleaning build directories...${NC}"
+rm -rf "$BUILD_DIR" "$DIST_DIR"
+mkdir -p "$BUILD_DIR" "$DIST_DIR"
+
+# Function to build a Lambda package
+build_lambda_package() {
+    local LAMBDA_NAME=$1
+    local LAMBDA_CODE_DIR="$BACKEND_ROOT/lambdas/$LAMBDA_NAME/code"
+    local LAMBDA_BUILD_DIR="$BUILD_DIR/$LAMBDA_NAME"
+    
+    echo -e "${GREEN}📦 Building $LAMBDA_NAME Lambda package...${NC}"
+    echo -e "${YELLOW}📁 Lambda code: $LAMBDA_CODE_DIR${NC}"
+    
+    # Create Lambda-specific build directory
+    mkdir -p "$LAMBDA_BUILD_DIR"
+
+    # Create a temporary virtual environment for building
+    echo -e "${YELLOW}🔧 Creating temporary build environment for $LAMBDA_NAME...${NC}"
+    python3.11 -m venv "$LAMBDA_BUILD_DIR/venv"
+    source "$LAMBDA_BUILD_DIR/venv/bin/activate"
+
+    # Install dependencies
+    echo -e "${YELLOW}📦 Installing $LAMBDA_NAME dependencies...${NC}"
+    pip install --upgrade pip
+    pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+
+    # Copy Lambda source code
+    echo -e "${YELLOW}📋 Copying $LAMBDA_NAME source code...${NC}"
+    cp -r "$LAMBDA_CODE_DIR"/* "$LAMBDA_BUILD_DIR/lambda_package/"
+
+    # Copy shared utilities
+    echo -e "${YELLOW}📋 Copying shared utilities...${NC}"
+    cp -r "$BACKEND_ROOT/lambdas/shared" "$LAMBDA_BUILD_DIR/lambda_package/"
+
+    # Copy project source code that Lambda needs (conditional based on lambda type)
+    echo -e "${YELLOW}📋 Copying project dependencies for $LAMBDA_NAME...${NC}"
+
+    case "$LAMBDA_NAME" in
+        "auth")
+            echo -e "${YELLOW}📋 Auth lambda is self-contained - no external project dependencies needed${NC}"
+            ;;
+        "users")
+            echo -e "${YELLOW}📋 Users lambda is self-contained with built-in features${NC}"
+            cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
+            ;;
+        "llm")
+            echo -e "${YELLOW}📋 LLM lambda is self-contained with built-in features${NC}"
+            cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/infrastructure" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
+            ;;
+        *)
+            echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"
+            cp -r "$PROJECT_ROOT/features" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/infrastructure" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
+            ;;
+    esac
+
+    # Remove unnecessary files from the package
+    echo -e "${YELLOW}🧹 Cleaning up unnecessary files...${NC}"
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*.pyc" -delete
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*.git*" -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "test_*" -delete 2>/dev/null || true
+
+    # Create the deployment ZIP
+    echo -e "${YELLOW}📦 Creating $LAMBDA_NAME deployment package...${NC}"
+    cd "$LAMBDA_BUILD_DIR/lambda_package"
+    zip -r "$DIST_DIR/$LAMBDA_NAME-deployment.zip" . -q
+
+    # Get package size
+    PACKAGE_SIZE=$(du -h "$DIST_DIR/$LAMBDA_NAME-deployment.zip" | cut -f1)
+
+    echo -e "${GREEN}✅ $LAMBDA_NAME deployment package created successfully!${NC}"
+    echo -e "${GREEN}📦 Package: $DIST_DIR/$LAMBDA_NAME-deployment.zip${NC}"
+    echo -e "${GREEN}📏 Size: $PACKAGE_SIZE${NC}"
+
+    # Deactivate virtual environment
+    deactivate 2>/dev/null || true
+}
+
+# Build Lambda packages based on selection
+case $LAMBDA_TO_BUILD in
+    auth)
+        build_lambda_package "auth"
+        ;;
+    users)
+        build_lambda_package "users"
+        ;;
+    llm)
+        build_lambda_package "llm"
+        ;;
+    all)
+        # Build all available lambdas
+        for lambda in auth users llm; do
+            if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
+                build_lambda_package "$lambda"
+            else
+                echo -e "${YELLOW}⚠️  Lambda directory for $lambda not found, skipping...${NC}"
+            fi
+        done
+        ;;
+esac
+
+# Cleanup
+echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
+rm -rf "$BUILD_DIR"
+
+# Show summary
+echo -e "${GREEN}🎉 Lambda packages built successfully!${NC}"
+echo -e "${GREEN}📦 Output directory: $DIST_DIR${NC}"
+
+# List built packages
+echo -e "${GREEN}📋 Built packages:${NC}"
+for zip_file in "$DIST_DIR"/*.zip; do
+    if [ -f "$zip_file" ]; then
+        filename=$(basename "$zip_file")
+        size=$(du -h "$zip_file" | cut -f1)
+        echo -e "${GREEN}  📦 $filename ($size)${NC}"
+    fi
+done 

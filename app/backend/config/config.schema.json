@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VishMaker AWS Infrastructure Configuration",
+  "type": "object",
+  "required": ["project", "aws", "cognito", "rds", "lambda", "api_gateway", "llm"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name", "environment"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Project name (lowercase, alphanumeric, hyphens only)"
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "staging", "prod"],
+          "description": "Environment name"
+        }
+      }
+    },
+    "aws": {
+      "type": "object",
+      "required": ["region", "vpc_cidr"],
+      "properties": {
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "AWS region"
+        },
+        "vpc_cidr": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+$",
+          "description": "VPC CIDR block"
+        }
+      }
+    },
+    "cognito": {
+      "type": "object",
+      "required": ["password_policy", "token_validity"],
+      "properties": {
+        "password_policy": {
+          "type": "object",
+          "required": ["minimum_length", "require_lowercase", "require_numbers", "require_symbols", "require_uppercase"],
+          "properties": {
+            "minimum_length": {"type": "integer", "minimum": 6, "maximum": 99},
+            "require_lowercase": {"type": "boolean"},
+            "require_numbers": {"type": "boolean"},
+            "require_symbols": {"type": "boolean"},
+            "require_uppercase": {"type": "boolean"}
+          }
+        },
+        "token_validity": {
+          "type": "object",
+          "required": ["access_token_minutes", "id_token_minutes", "refresh_token_days"],
+          "properties": {
+            "access_token_minutes": {"type": "integer", "minimum": 5, "maximum": 1440},
+            "id_token_minutes": {"type": "integer", "minimum": 5, "maximum": 1440},
+            "refresh_token_days": {"type": "integer", "minimum": 1, "maximum": 3650}
+          }
+        }
+      }
+    },
+    "rds": {
+      "type": "object",
+      "required": ["engine", "engine_version", "instance_class"],
+      "properties": {
+        "engine": {"type": "string", "enum": ["postgres", "mysql"]},
+        "engine_version": {"type": "string"},
+        "instance_class": {"type": "string", "pattern": "^db\\.[a-z0-9]+\\.[a-z]+$"},
+        "allocated_storage": {"type": "integer", "minimum": 20, "maximum": 65536},
+        "max_allocated_storage": {"type": "integer", "minimum": 20, "maximum": 65536},
+        "backup_retention_days": {"type": "integer", "minimum": 0, "maximum": 35},
+        "deletion_protection": {"type": "boolean"}
+      }
+    },
+    "lambda": {
+      "type": "object",
+      "required": ["runtime", "timeout_seconds", "memory_mb"],
+      "properties": {
+        "runtime": {"type": "string", "enum": ["python3.8", "python3.9", "python3.10", "python3.11"]},
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 900},
+        "memory_mb": {"type": "integer", "minimum": 128, "maximum": 10240},
+        "environment_variables": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "api_gateway": {
+      "type": "object",
+      "required": ["cors", "protected_routes", "public_routes"],
+      "properties": {
+        "cors": {
+          "type": "object",
+          "required": ["allow_credentials", "allow_headers", "allow_methods", "allow_origins"],
+          "properties": {
+            "allow_credentials": {"type": "boolean"},
+            "allow_headers": {"type": "array", "items": {"type": "string"}},
+            "allow_methods": {"type": "array", "items": {"type": "string"}},
+            "allow_origins": {"type": "array", "items": {"type": "string"}},
+            "max_age_seconds": {"type": "integer", "minimum": 0, "maximum": 86400}
+          }
+        },
+        "protected_routes": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "public_routes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "llm": {
+      "type": "object",
+      "required": ["bedrock", "component_model_mapping"],
+      "properties": {
+        "bedrock": {
+          "type": "object",
+          "required": ["models"],
+          "properties": {
+            "models": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["model_id", "max_tokens", "temperature"],
+                "properties": {
+                  "model_id": {"type": "string"},
+                  "max_tokens": {"type": "integer", "minimum": 1, "maximum": 100000},
+                  "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+                  "top_p": {"type": "number", "minimum": 0, "maximum": 1}
+                }
+              }
+            }
+          }
+        },
+        "component_model_mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["model", "target_table"],
+            "properties": {
+              "model": {"type": "string"},
+              "target_table": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+} 
