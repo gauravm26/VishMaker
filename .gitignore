@@ -80,6 +80,7 @@ Thumbs.db
 # Secrets !!IMPORTANT!!
 .env
 *.env.*.local
+local/test/test_credentials.json
 
 # Logs
 logs/
@@ -136,6 +137,11 @@ terraform.tfvars.backup
 terraform.tfvars.local
 terraform.tfvars.production
 
+# Local development files
+local/terraform/
+local/start_output.txt
+local/venv/
+
 
 
 #Docker
@@ -148,3 +154,4 @@ docker-compose.production.override.yml
 
 #KITS
 KITS/
+

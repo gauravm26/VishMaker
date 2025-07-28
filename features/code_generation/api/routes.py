@@ -13,12 +13,12 @@ from features.code_generation.api.schemas import (
 )
 
 # Import database models and connection from infrastructure/db
-from infrastructure.db.db_core import get_db
-from infrastructure.db.requirement import TestCaseEntity as TestCase
-from infrastructure.db.requirement import LowLevelRequirementEntity as LowLevelRequirement
-from infrastructure.db.requirement import HighLevelRequirementEntity as HighLevelRequirement
-from infrastructure.db.requirement import UserFlowEntity as UserFlow
-from infrastructure.db.requirement import ProjectEntity as Project
+from local.db.db_core import get_db
+from local.db.requirement import TestCaseEntity as TestCase
+from local.db.requirement import LowLevelRequirementEntity as LowLevelRequirement
+from local.db.requirement import HighLevelRequirementEntity as HighLevelRequirement
+from local.db.requirement import UserFlowEntity as UserFlow
+from local.db.requirement import ProjectEntity as Project
 
 # Create API router for code generation
 router = APIRouter(

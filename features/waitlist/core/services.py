@@ -1,7 +1,7 @@
 # features/waitlist/core/services.py
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from infrastructure.db.waitlist import WaitlistEntity
+from local.db.waitlist import WaitlistEntity
 from features.waitlist.api.schemas import WaitlistCreateRequest, WaitlistUpdateRequest
 from typing import List, Optional
 import logging

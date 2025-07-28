@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from infrastructure.db.db_core import get_db # DB session dependency
+from local.db.db_core import get_db # DB session dependency
 from features.requirement_generation.core.services import req_gen_service, RequirementGenerationService
 from features.requirement_generation.api import schemas # API Schemas
 

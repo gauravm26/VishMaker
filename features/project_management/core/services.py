@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from features.project_management.api import schemas
 from typing import List, Optional
-from infrastructure.db.requirement import ProjectEntity as ProjectModel
+from local.db.requirement import ProjectEntity as ProjectModel
 
 class ProjectService:
 

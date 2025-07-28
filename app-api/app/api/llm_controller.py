@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from infrastructure.db.db_core import get_db # DB session dependency
+from local.db.db_core import get_db # DB session dependency
 
 # Add infrastructure to path for BedrockService import
 project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -19,7 +19,7 @@ sys.path.append(str(project_root))
 from infrastructure.llms.llm_models import BedrockService, load_config, llm_logger
 # Import the requirement generation service directly
 from features.requirement_generation.core.services import req_gen_service as req_gen_service_instance
-from infrastructure.db.db_core import get_db
+from local.db.db_core import get_db
 
 router = APIRouter()
 

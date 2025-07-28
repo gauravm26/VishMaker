@@ -115,7 +115,12 @@ const CustomSmoothStepEdge: React.FC<EdgeProps> = (props) => {
     return (
         <path
             id={id}
-            style={style}
+            style={{
+                ...style,
+                stroke: '#8B5CF6',
+                strokeWidth: 2,
+                strokeDasharray: '5,5',
+            }}
             className="react-flow__edge-path"
             d={edgePath}
             markerEnd={MarkerType.ArrowClosed}
@@ -550,6 +555,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 allRows: tableRows,
                 isMinimized: isMinimized,
                 isTestCase: isTestCase, // Pass flag to determine table type
+                connectedRowUiids: [], // Will be populated with UIIDs of rows that have connections
                 actions: {
                     onCellChange: handleCellChange,
                     onAddRow: handleAddRow,
@@ -563,7 +569,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             },
             position: { x: 0, y: 0 }, // Position will be calculated later
             style: {
-                minWidth: '800px',
                 minHeight: `${estimateNodeHeight(visibleRows.length)}px`
             }
         };
@@ -598,6 +603,17 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         // All nodes and edges we'll return
         let allNodes: CustomNode[] = [];
         let allEdges: Edge[] = [];
+        
+        // Track which row UIIDs have outgoing connections
+        const connectedRowUiids = new Map<string, Set<string>>(); // nodeId -> Set of connected row UIIDs
+        
+        // Helper function to track a connection
+        const trackConnection = (sourceNodeId: string, rowUiid: string) => {
+            if (!connectedRowUiids.has(sourceNodeId)) {
+                connectedRowUiids.set(sourceNodeId, new Set());
+            }
+            connectedRowUiids.get(sourceNodeId)!.add(rowUiid);
+        };
 
         // Handle User Flows table (root level)
         if (level === 0) {
@@ -678,6 +694,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                             
                             console.log(`Creating edge with handle ID: ${sourceHandleToUse} (might be hidden: ${mightBeHiddenWhenMinimized})`);
                             
+                            // Track this connection
+                            trackConnection(nodeId, flow.uiid || flow.id);
+                            
                             const flowToHlrEdge: Edge = {
                                 id: `edge-${nodeId}-row${actualRowIndex}-to-${hlrNodeId}`,
                                 source: nodeId,
@@ -749,6 +768,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                             "minimized-rows-handle" : hlrRowHandleId;
                                         
                                         console.log(`Creating LLR edge with handle ID: ${hlrSourceHandleToUse} (might be hidden: ${hlrMightBeHiddenWhenMinimized})`);
+                                        
+                                        // Track this connection
+                                        trackConnection(hlrNodeId, hlr.uiid || hlr.id);
                                         
                                         const hlrToLlrEdge: Edge = {
                                             id: `edge-${hlrNodeId}-row${actualHlrRowIndex}-to-${llrNodeId}`,
@@ -824,6 +846,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                                                     
                                                     console.log(`Creating TC edge with handle ID: ${llrSourceHandleToUse} (might be hidden: ${llrMightBeHiddenWhenMinimized})`);
                                                     
+                                                    // Track this connection
+                                                    trackConnection(llrNodeId, llr.uiid || llr.id);
+                                                    
                                                     const llrToTcEdge: Edge = {
                                                         id: `edge-${llrNodeId}-row${actualLlrRowIndex}-to-${tcNodeId}`,
                                                         source: llrNodeId,
@@ -846,8 +871,20 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             }
         }
         
+        // Update all nodes with their connected row UIIDs
+        const updatedNodes = allNodes.map(node => {
+            const nodeConnectedRows = connectedRowUiids.get(node.id) || new Set();
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    connectedRowUiids: Array.from(nodeConnectedRows)
+                }
+            };
+        });
+        
         return {
-            nodes: allNodes,
+            nodes: updatedNodes,
             edges: allEdges
         };
     };
@@ -1244,41 +1281,45 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
     // Gets the canvas content based on state
     const getCanvasContent = () => {
         if (loading) {
-            return <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 dark:bg-gray-800 dark:bg-opacity-80 z-10">
+            return <div className="absolute inset-0 flex items-center justify-center bg-[#0A071B]/80 backdrop-blur-sm z-10">
                 <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
-                    <p className="mt-2 text-gray-700 dark:text-gray-300">Loading project data...</p>
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+                    <p className="mt-2 text-white">Loading project data...</p>
                 </div>
             </div>;
         }
 
         if (error) {
-            return <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 dark:bg-gray-800 dark:bg-opacity-90 z-10">
+            return <div className="absolute inset-0 flex items-center justify-center bg-[#0A071B]/90 backdrop-blur-sm z-10">
                 <div className="text-center max-w-md p-4">
-                    <div className="text-red-500 text-3xl mb-2">⚠️</div>
-                    <p className="text-red-600 font-semibold">Error</p>
-                    <p className="mt-2 text-gray-700 dark:text-gray-300">{error}</p>
+                    <div className="w-16 h-16 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <p className="text-red-300 font-semibold">Error</p>
+                    <p className="mt-2 text-gray-300">{error}</p>
                 </div>
             </div>;
         }
 
         if (!projectId) {
-            return <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 dark:bg-gray-800 dark:bg-opacity-90 z-10">
+            return <div className="absolute inset-0 flex items-center justify-center bg-[#0A071B]/90 backdrop-blur-sm z-10">
                 <div className="text-center">
-                    <p className="text-gray-500 dark:text-gray-400">Select a project to view requirements.</p>
+                    <p className="text-gray-300">Select a project to view requirements.</p>
                 </div>
             </div>;
         }
 
         if (nodes.length === 0) {
-            return <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 dark:bg-gray-800 dark:bg-opacity-90 z-10">
+            return <div className="absolute inset-0 flex items-center justify-center bg-[#0A071B]/90 backdrop-blur-sm z-10">
                 <div className="text-center">
-                    <p className="text-gray-500 dark:text-gray-400">No requirements found for this project.</p>
+                    <p className="text-gray-300">No requirements found for this project.</p>
                 </div>
             </div>;
         }
 
-        // Return the React Flow comfonent with just the user flow node
+        // Return the React Flow component with just the user flow node
         return (
             <ReactFlow
                 nodes={nodes}
@@ -1294,10 +1335,23 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 snapGrid={[15, 15]}
                 nodesConnectable={false}
                 edgesFocusable={false}
+                defaultEdgeOptions={{
+                    type: 'smoothstep',
+                    style: {
+                        stroke: '#8B5CF6',
+                        strokeWidth: 2,
+                        strokeDasharray: '5,5',
+                    },
+                }}
+                connectionLineStyle={{
+                    stroke: '#8B5CF6',
+                    strokeWidth: 2,
+                    strokeDasharray: '5,5',
+                }}
             >
                 <Controls />
                 <MiniMap pannable={true} />
-                <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+                <Background variant={BackgroundVariant.Dots} gap={12} size={1} color="#8B5CF6" />
             </ReactFlow>
         );
     };
@@ -1314,24 +1368,24 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 `}
             </style>
             
-            <div className="p-3 flex justify-between items-center border-b">
-                <h2 className="text-lg font-semibold">Requirements Canvas</h2>
+            <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
+                <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
             </div>
             
             {error && (
-                <div className="p-3 text-red-600 border-b">
+                <div className="p-4 text-red-300 border-b border-white/10 bg-red-500/10 backdrop-blur-sm">
                     {error}
                 </div>
             )}
             
             {loading && (
-                <div className="p-3 bg-blue-50 text-blue-700 border-b">
+                <div className="p-4 text-blue-300 border-b border-white/10 bg-blue-500/10 backdrop-blur-sm">
                     Loading project data...
                 </div>
             )}
             
             {generateLoading && (
-                <div className="p-3 bg-green-50 text-green-700 border-b">
+                <div className="p-4 text-green-300 border-b border-white/10 bg-green-500/10 backdrop-blur-sm">
                     Generating requirements... This may take a moment.
                 </div>
             )}

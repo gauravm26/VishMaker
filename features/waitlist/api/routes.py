@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from infrastructure.db.db_core import get_db
+from local.db.db_core import get_db
 from features.waitlist.api.schemas import WaitlistCreateRequest, WaitlistResponse, WaitlistUpdateRequest
 from features.waitlist.core.services import (
     add_to_waitlist, 

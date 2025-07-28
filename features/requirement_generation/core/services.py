@@ -4,8 +4,8 @@ from features.project_management.core.services import project_service as pj_serv
 from features.project_management.core.services import ProjectService as PjServiceClass
 # --- ADD IMPORTS ---
 from typing import List, Dict, Any, Optional
-from infrastructure.db.requirement import UserFlowEntity as UserFlow, HighLevelRequirementEntity as HighLevelRequirement, LowLevelRequirementEntity as LowLevelRequirement, TestCaseEntity as TestCase
-from infrastructure.db.requirement import ProjectEntity as Project # Need project for linking
+from local.db.requirement import UserFlowEntity as UserFlow, HighLevelRequirementEntity as HighLevelRequirement, LowLevelRequirementEntity as LowLevelRequirement, TestCaseEntity as TestCase
+from local.db.requirement import ProjectEntity as Project # Need project for linking
 import sys, os
 from pathlib import Path
 import time

@@ -21,18 +21,45 @@ class LocalAuthAdapter:
         self._create_test_user()
     
     def _create_test_user(self):
-        """Create a test user for development"""
-        test_email = "test@example.com"
-        test_password = "TestPassword123!"
-        
-        hashed_password = self._hash_password(test_password)
-        self.users[test_email] = {
-            "email": test_email,
-            "password_hash": hashed_password,
-            "confirmed": True,
-            "created_at": time.time()
-        }
-        print(f"Test user created: {test_email} / {test_password}")
+        """Create test users from test_credentials.json for development"""
+        try:
+            # Try to load test credentials from the local/test directory
+            import os
+            script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            credentials_path = os.path.join(script_dir, 'local', 'test', 'test_credentials.json')
+            
+            with open(credentials_path, 'r') as f:
+                import json
+                credentials = json.load(f)
+            
+            # Create all test users
+            for user_type, user_data in credentials['test_users'].items():
+                email = user_data['email']
+                password = user_data['password']
+                
+                hashed_password = self._hash_password(password)
+                self.users[email] = {
+                    "email": email,
+                    "password_hash": hashed_password,
+                    "confirmed": True,
+                    "created_at": time.time()
+                }
+                print(f"Test user created: {email} / {password} ({user_type})")
+                
+        except Exception as e:
+            # Fallback to original test user if file not found
+            test_email = "test@example.com"
+            test_password = "TestPassword123!"
+            
+            hashed_password = self._hash_password(test_password)
+            self.users[test_email] = {
+                "email": test_email,
+                "password_hash": hashed_password,
+                "confirmed": True,
+                "created_at": time.time()
+            }
+            print(f"Test user created: {test_email} / {test_password} (fallback)")
+            print(f"Note: Could not load test_credentials.json: {e}")
     
     def _hash_password(self, password: str) -> str:
         """Hash a password using SHA-256"""

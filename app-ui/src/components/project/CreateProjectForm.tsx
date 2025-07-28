@@ -16,6 +16,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
     const [isLlmProcessing, setIsLlmProcessing] = useState<boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [progressUpdate, setProgressUpdate] = useState<string | null>(null);
+    const [isExpanded, setIsExpanded] = useState<boolean>(false); // New state for expansion
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -151,6 +152,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                     setName('');
                     setPrompt('');
                     setProgressUpdate(null);
+                    setIsExpanded(false); // Collapse after success
                     onProjectCreated();
                 }, 2000);
                 
@@ -175,139 +177,205 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
     };
 
     return (
-        <div className="card-responsive">
-            <h2 className="text-lg sm:text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
-                Create New Project
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="form-mobile">
-                {/* Project Name Field */}
-                <div className="form-group">
-                    <label htmlFor="projectName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Project Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        id="projectName"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        className="form-mobile input"
-                        placeholder="Enter project name"
-                        disabled={isSubmitting || isLlmProcessing}
-                    />
-                </div>
-
-                {/* Initial Prompt Field */}
-                <div className="form-group">
-                    <label htmlFor="initialPrompt" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Initial Prompt <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                        <textarea
-                            id="initialPrompt"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            rows={window.innerWidth < 640 ? 8 : 12} // Responsive rows
-                            required
-                            className="form-mobile textarea resize-none"
-                            placeholder="Describe your project idea in detail..."
-                            disabled={isSubmitting || isLlmProcessing}
-                        />
-                        
-                        {/* AI Refine Button */}
-                        <button
-                            type="button"
-                            id="gen_initialPrompt"
-                            onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
-                            disabled={isSubmitting || isLlmProcessing || !prompt.trim()}
-                            className={`
-                                absolute top-3 right-3 px-3 py-1.5 rounded-md text-xs font-bold
-                                transition-all duration-200 touch-target
-                                ${prompt.trim() 
-                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50' 
-                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-600 cursor-not-allowed'
-                                }
-                                ${isLlmProcessing ? 'animate-pulse' : ''}
-                            `}
-                            title="Refine with AI"
+        <div className="w-full">
+            {!isExpanded ? (
+                // Collapsed state - just a line with +
+                <div 
+                    onClick={() => setIsExpanded(true)}
+                    className="flex items-center justify-center py-4 px-6 bg-white/10 border border-white/20 rounded-xl cursor-pointer hover:bg-white/15 transition-all duration-300 backdrop-blur-sm group"
+                >
+                    <div className="flex items-center space-x-3 text-white/70 group-hover:text-white">
+                        <svg 
+                            className="w-5 h-5 text-purple-400" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
                         >
-                            {isLlmProcessing ? '...' : 'AI'}
-                        </button>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span className="text-sm font-medium">Create new Project</span>
                     </div>
                 </div>
-
-                {/* Status Messages */}
-                {error && (
-                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                    </div>
-                )}
-                
-                {successMessage && (
-                    <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-                        <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
-                    </div>
-                )}
-                
-                {progressUpdate && (
-                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-                        <p className="text-sm text-blue-600 dark:text-blue-400 flex items-center">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            ) : (
+                // Expanded state - full form
+                <div className="space-y-6 bg-white/5 border border-white/20 rounded-xl p-6 backdrop-blur-sm">
+                    <div className="relative">
+                        <button
+                            onClick={() => {
+                                setIsExpanded(false);
+                                setError(null);
+                                setSuccessMessage(null);
+                                setProgressUpdate(null);
+                            }}
+                            className="absolute top-0 right-0 text-white/50 hover:text-white/80 transition-colors p-2 rounded-lg hover:bg-white/10"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                            {progressUpdate}
-                        </p>
+                        </button>
+                        <div className="text-center pr-12">
+                            <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">
+                                Create New Project
+                            </h2>
+                            <p className="text-sm text-gray-300">
+                                Start your creative journey with a new project
+                            </p>
+                        </div>
                     </div>
-                )}
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Project Name Field */}
+                        <div className="space-y-2">
+                            <label htmlFor="projectName" className="block text-sm font-medium text-white">
+                                Project Name <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="projectName"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                placeholder="Enter project name"
+                                disabled={isSubmitting || isLlmProcessing}
+                            />
+                        </div>
 
-                {/* Submit Button */}
-                <div className="pt-2">
-                    <button
-                        id="gen_userflow"
-                        type="button"
-                        onClick={(e) => handleBuildClick(e.currentTarget.id, prompt)}
-                        disabled={isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim()}
-                        className={`
-                            w-full sm:w-auto touch-target
-                            inline-flex justify-center items-center px-6 py-3
-                            text-sm font-medium rounded-lg
-                            transition-all duration-200
-                            focus:outline-none focus:ring-2 focus:ring-offset-2
-                            ${(isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim())
-                                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm hover:shadow-md'
-                            }
-                        `}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Building...
-                            </>
-                        ) : isLlmProcessing ? (
-                            <>
-                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Processing...
-                            </>
-                        ) : (
-                            <>
-                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                Let's build it
-                            </>
+                        {/* Initial Prompt Field */}
+                        <div className="space-y-2">
+                            <label htmlFor="initialPrompt" className="block text-sm font-medium text-white">
+                                Initial Prompt <span className="text-red-400">*</span>
+                            </label>
+                            <div className="relative">
+                                <textarea
+                                    id="initialPrompt"
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    rows={window.innerWidth < 640 ? 6 : 8} // Responsive rows
+                                    required
+                                    className="w-full px-4 py-3 pr-20 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm resize-none"
+                                    placeholder="Describe your project idea in detail..."
+                                    disabled={isSubmitting || isLlmProcessing}
+                                />
+                                
+                                {/* AI Refine Button */}
+                                <button
+                                    type="button"
+                                    id="gen_initialPrompt"
+                                    onClick={(e) => handleAiClick(e.currentTarget.id, prompt)}
+                                    disabled={isSubmitting || isLlmProcessing || !prompt.trim()}
+                                    className={`
+                                        absolute top-3 right-3 px-3 py-1.5 rounded-lg text-xs font-semibold
+                                        transition-all duration-300 transform
+                                        ${prompt.trim() 
+                                            ? 'bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 text-white shadow-lg hover:shadow-purple-500/40 hover:scale-110 hover:shadow-2xl hover:rotate-2 active:scale-95' 
+                                            : 'bg-purple-300/30 text-purple-200 border border-purple-400/30 cursor-not-allowed'
+                                        }
+                                        ${isLlmProcessing ? 'animate-bounce scale-105 shadow-purple-500/50' : ''}
+                                    `}
+                                    title="Refine with AI"
+                                >
+                                    {isLlmProcessing ? (
+                                        <div className="flex items-center space-x-1">
+                                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            <span className="animate-pulse">AI</span>
+                                        </div>
+                                    ) : (
+                                        <span className="flex items-center space-x-1">
+                                            <span className="animate-pulse text-yellow-300">✨</span>
+                                            <span>AI</span>
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Status Messages */}
+                        {error && (
+                            <div className="p-4 bg-red-500/10 border border-red-400/30 rounded-xl backdrop-blur-sm">
+                                <p className="text-sm text-red-300 flex items-center">
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {error}
+                                </p>
+                            </div>
                         )}
-                    </button>
+                        
+                        {successMessage && (
+                            <div className="p-4 bg-green-500/10 border border-green-400/30 rounded-xl backdrop-blur-sm">
+                                <p className="text-sm text-green-300 flex items-center">
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {successMessage}
+                                </p>
+                            </div>
+                        )}
+                        
+                        {progressUpdate && (
+                            <div className="p-4 bg-blue-500/10 border border-blue-400/30 rounded-xl backdrop-blur-sm">
+                                <p className="text-sm text-blue-300 flex items-center">
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    {progressUpdate}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Submit Button */}
+                        <div className="pt-2">
+                            <button
+                                id="gen_userflow"
+                                type="button"
+                                onClick={(e) => handleBuildClick(e.currentTarget.id, prompt)}
+                                disabled={isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim()}
+                                className={`
+                                    w-full touch-target
+                                    inline-flex justify-center items-center px-6 py-3
+                                    text-sm font-semibold rounded-xl
+                                    transition-all duration-300
+                                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0A071B]
+                                    ${(isSubmitting || isLlmProcessing || !name.trim() || !prompt.trim())
+                                        ? 'bg-white/10 text-gray-400 border border-white/20 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white focus:ring-purple-500 shadow-lg hover:shadow-purple-500/25 transform hover:scale-[1.02]'
+                                    }
+                                `}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Building...
+                                    </>
+                                ) : isLlmProcessing ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        Let's build it
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            )}
         </div>
     );
 };

@@ -38,4 +38,5 @@ export interface TableNodeData {
     visibleRows?: TableRowData[]; // Rows currently visible (for minimized state)
     actions?: any; // Actions to manipulate the table data
     isTestCase?: boolean; // Whether this table contains test cases
+    connectedRowUiids?: string[]; // UIIDs of rows that have outgoing connections
 }

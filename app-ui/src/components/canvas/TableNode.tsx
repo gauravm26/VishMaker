@@ -39,7 +39,7 @@ const getResponsiveWidth = (width: string, isCompact: boolean = false): string =
 };
 
 const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions }>> = ({ data, id: nodeId, selected }) => {
-    const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows, isTestCase = false } = data;
+    const { title, rows, columns = DEFAULT_COLUMNS, actions, isMinimized = false, allRows = rows, isTestCase = false, connectedRowUiids = [] } = data;
     
     // Debug: Log table data on render
     console.log(`Table ${nodeId} render: ${title}, Rows: ${rows.length}, All rows: ${allRows.length}, Minimized: ${isMinimized}, TestCase: ${isTestCase}`);
@@ -226,9 +226,10 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
         <div
             className={`
                 ${getContainerWidth()}
-                border-2 rounded-lg shadow-lg text-xs sm:text-sm bg-white dark:bg-gray-800
-                ${selected ? 'border-blue-500 dark:border-blue-400' : 'border-gray-300 dark:border-gray-600'}
+                border-2 rounded-xl shadow-lg text-xs sm:text-sm bg-transparent
+                ${selected ? 'border-purple-500' : 'border-gray-300 dark:border-gray-600'}
                 overflow-hidden
+                relative
             `}
             onContextMenu={(e) => displayContextMenu(e, 'background')} // Context menu on whole node background
         >
@@ -259,8 +260,17 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     type="target" 
                     position={Position.Left} 
                     id={`${nodeId}-target`} 
-                    className="!bg-red-500 !w-3 !h-3" 
-                    style={{ top: '50%', left: '-7px' }} 
+                    style={{
+                        top: '50%',
+                        right: 0,
+                        width: 10, // small hit area for connections
+                        height: 10,
+                        background: 'transparent',
+                        border: 'none',
+                        opacity: 0, // Completely invisible
+                        zIndex: 9999,
+                        position: 'absolute',
+                      }}
                 />
             </div>
 
@@ -269,7 +279,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 {/* Responsive Table Wrapper */}
                 <div className="table-responsive max-w-full">
                     {/* Header Row */}
-                    <div className="flex bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 min-w-max">
+                    <div className="flex bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100">
                         {sortedColumns.map(col => (
                             <div 
                                 key={col.key} 
@@ -306,7 +316,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                         {rows.map((row, rowIndex) => (
                             <div
                                 key={`row-${row.id}-${rowIndex}`}
-                                className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50 dark:hover:bg-gray-700/30 min-w-max"
+                                className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50 dark:hover:bg-gray-700/30"
                                 onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
                                 title={`UIID: ${row.uiid || row.id}`}
                                 data-row-id={row.id}
@@ -323,8 +333,8 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             key={`cell-${row.id}-${col.key}-${rowIndex}-${colIndex}`}
                                             className={`
                                                 ${getResponsiveWidth(col.width, isCompact)}
-                                                py-1 px-2 sm:py-2 sm:px-3 border-r border-gray-200 dark:border-gray-600 
-                                                ${isLastCol ? 'border-r-0 relative' : ''} 
+                                                py-1 px-2 sm:py-2 sm:px-3                                                 border-r border-gray-200 dark:border-gray-600 
+                                                ${isLastCol ? 'border-r-0' : ''} 
                                                 ${col.editable ? 'cursor-text' : ''} 
                                                 ${isEditing ? 'p-0' : ''}
                                                 flex-shrink-0 flex items-center
@@ -346,20 +356,28 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                     {String(cellValue)}
                                                 </span>
                                             )}
-                                            
-                                            {/* Conditionally render the handle on the last column */}
-                                            {isLastCol && (
-                                                <Handle
-                                                    type="source"
-                                                    position={Position.Right}
-                                                    id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
-                                                    className="!bg-blue-500 !w-3 !h-3"
-                                                    style={{ top: '50%', right: '-7px' }} // Adjust position as needed
-                                                />
-                                            )}
                                         </div>
                                     );
                                 })}
+
+                                {/* Only show handle if this row has connections */}
+                                {connectedRowUiids.includes(row.uiid || row.id) && (
+                                    <Handle
+                                        type="source"
+                                        position={Position.Right}
+                                        id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
+                                        style={{ 
+                                            top: '50%',
+                                            right: 0,
+                                            width: 10, // small hit area for connections
+                                            height: 10,
+                                            background: 'transparent',
+                                            border: 'none',
+                                            zIndex: 9999,
+                                            position: 'absolute',
+                                        }}
+                                    />
+                                )}
                             </div>
                         ))}
                     </div>
@@ -367,31 +385,47 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 
                 {/* Show count of hidden rows if minimized */}
                 {isMinimized && allRows.length > rows.length && (
-                    <div className="text-center py-2 sm:py-3 text-gray-500 dark:text-gray-400 text-xs sm:text-sm border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <button
+                        onClick={() => actions.onToggleSize(nodeId)}
+                        className="w-full text-center py-2 sm:py-3 text-gray-500 dark:text-gray-400 text-xs sm:text-sm border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                    >
                         <span className="inline-flex items-center">
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                            {allRows.length - rows.length} more rows hidden
+                            {allRows.length - rows.length} more rows hidden (click to expand)
                         </span>
-                    </div>
+                    </button>
                 )}
             </div>
             
             {/* Special handle for minimized tables that will serve as connection point for hidden rows */}
-            {isMinimized && allRows.length > rows.length && (
-                <Handle
-                    type="source"
-                    position={Position.Bottom}
-                    id="minimized-rows-handle"
-                    className="!bg-purple-500 !w-4 !h-4"
-                    style={{ 
-                        right: '20px',
-                        bottom: '-8px'
-                    }}
-                    title={`Connection point for ${allRows.length - rows.length} hidden rows`}
-                />
-            )}
+            {isMinimized && allRows.length > rows.length && (() => {
+                // Check if any hidden rows have connections
+                const hiddenRows = allRows.slice(rows.length);
+                const hasHiddenConnections = hiddenRows.some(row => 
+                    connectedRowUiids.includes(row.uiid || row.id)
+                );
+                
+                return hasHiddenConnections && (
+                    <Handle
+                        type="source"
+                        position={Position.Right}
+                        id="minimized-rows-handle"
+                        style={{
+                            bottom: '0',
+                            right: 0,
+                            width: 10, // small hit area for connections
+                            height: 10,
+                            background: 'transparent',
+                            border: 'none',
+                            zIndex: 9999,
+                            position: 'relative',
+                          }}
+                        title={`Connection point for ${allRows.length - rows.length} hidden rows`}
+                    />
+                );
+            })()}
         </div>
     );
 };

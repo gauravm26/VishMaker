@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from infrastructure.db.db_core import get_db # DB session dependency
+from local.db.db_core import get_db # DB session dependency
 from features.project_management.core.services import project_service, ProjectService # The service layer
 from features.project_management.api import schemas # API Schemas
 
