@@ -7,7 +7,7 @@ resource "aws_apigatewayv2_api" "main" {
     allow_credentials = true
     allow_headers     = ["*"]
     allow_methods     = ["*"]
-    allow_origins     = ["https://${var.common_config.domain_name}"]
+    allow_origins     = ["https://vishmaker.com"]
     expose_headers    = ["*"]
     max_age           = 86400
   }
@@ -50,13 +50,13 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 #   payload_format_version = "2.0"
 # }
 
-# LLM API Integration (commented out - not deployed yet)
-# resource "aws_apigatewayv2_integration" "llm_api" {
-#   api_id           = aws_apigatewayv2_api.main.id
-#   integration_type = "AWS_PROXY"
-#   integration_uri  = var.lambda_llm_api_invoke_arn
-#   payload_format_version = "2.0"
-# }
+# LLM API Integration
+resource "aws_apigatewayv2_integration" "llm_api" {
+  api_id           = aws_apigatewayv2_api.main.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = var.lambda_llm_api_invoke_arn
+  payload_format_version = "2.0"
+}
 
 # Auth API Integration
 resource "aws_apigatewayv2_integration" "auth_api" {
@@ -66,35 +66,37 @@ resource "aws_apigatewayv2_integration" "auth_api" {
   payload_format_version = "2.0"
 }
 
-# Project API Protected Routes (commented out - not deployed yet)
-# resource "aws_apigatewayv2_route" "user_protected_routes" {
-#   for_each = toset([
-#     "ANY /user/projects/{proxy+}",
-#     "ANY /user/requirements/{proxy+}"
-#   ])
-#   
-#   api_id    = aws_apigatewayv2_api.main.id
-#   route_key = each.value
-#   target    = "integrations/${aws_apigatewayv2_integration.user.id}"
-#   
-#   authorization_type = "JWT"
-#   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-# }
 
-# LLM API Protected Routes (commented out - not deployed yet)
-# resource "aws_apigatewayv2_route" "llm_api_protected_routes" {
-#   for_each = toset([
-#     "ANY /llm/{proxy+}",
-#     "ANY /code/{proxy+}"
-#   ])
-#   
-#   api_id    = aws_apigatewayv2_api.main.id
-#   route_key = each.value
-#   target    = "integrations/${aws_apigatewayv2_integration.llm_api.id}"
-#   
-#   authorization_type = "JWT"
-#   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-# }
+# LLM API CORS Preflight Routes (no authentication required)
+resource "aws_apigatewayv2_route" "llm_api_cors_routes" {
+  for_each = toset([
+    "OPTIONS /llm/{proxy+}"
+  ])
+  
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.llm_api.id}"
+  
+  # No authorization required for CORS preflight
+}
+
+# LLM API Protected Routes (require JWT authentication)
+resource "aws_apigatewayv2_route" "llm_api_protected_routes" {
+  for_each = toset([
+    "POST /llm/{proxy+}",
+    "GET /llm/{proxy+}",
+    "PUT /llm/{proxy+}",
+    "DELETE /llm/{proxy+}"
+  ])
+  
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.llm_api.id}"
+  
+  # Temporarily removed authentication for testing
+  # authorization_type = "JWT"
+  # authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
 
 # Auth API Public Routes (no authentication required)
 resource "aws_apigatewayv2_route" "auth_api_public_routes" {
@@ -161,14 +163,14 @@ resource "aws_apigatewayv2_route" "root" {
 #   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 # }
 
-# Lambda Permissions for LLM API (commented out - not deployed yet)
-# resource "aws_lambda_permission" "api_gateway_llm_api" {
-#   statement_id  = "AllowAPIGatewayInvokeLLMAPI"
-#   action        = "lambda:InvokeFunction"
-#   function_name = var.lambda_llm_api_function_name
-#   principal     = "apigateway.amazonaws.com"
-#   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-# }
+# Lambda Permissions for LLM API
+resource "aws_lambda_permission" "api_gateway_llm_api" {
+  statement_id  = "AllowAPIGatewayInvokeLLMAPI"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_llm_api_function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
 
 # Lambda Permissions for Auth API
 resource "aws_lambda_permission" "api_gateway_auth_api" {

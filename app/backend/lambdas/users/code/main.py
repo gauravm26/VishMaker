@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
         }
     
     # Include API routes
-    app.include_router(api_router, prefix=get_api_v1_str())
+    app.include_router(api_router, get_api_v1_str())
     
     # Middleware for request/response logging
     @app.middleware("http")
@@ -78,6 +78,17 @@ def create_app() -> FastAPI:
         # Log request
         log_api_request(logger, request.method, str(request.url.path))
         
+        logger.info("🔍 DEBUG: Incoming request")
+        logger.infot(f"🔍 METHOD: {request.method}")
+        logger.info(f"🔍 FULL PATH: {request.url.path}")
+        print(f"🔍 QUERY STRING: {request.url.query}")
+        print(f"🔍 HEADERS: {dict(request.headers)}")
+
+    # Log all registered routes in the app
+        print("🔍 DEBUG: Registered routes in FastAPI:")
+        for route in request.app.routes:
+            print(f"   ➤ PATH: {route.path} | METHODS: {route.methods}")
+
         # Process request
         response = call_next(request)
         
@@ -91,7 +102,7 @@ def create_app() -> FastAPI:
             process_time
         )
         
-                return response
+        return response
     
     logger.info("Users API application initialized")
     return app

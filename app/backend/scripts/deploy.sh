@@ -29,7 +29,7 @@ print_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -l, --lambda LAMBDA_NAME    Deploy specific lambda (auth, users, llm, or all)"
+    echo "  -l, --lambda LAMBDA_NAME    Deploy specific lambda (${AVAILABLE_LAMBDAS[*]}, all, or default)"
     echo "  -e, --environment ENV       Environment name (default: prod)"
     echo "  -y, --yes                   Auto-confirm deployment"
     echo "  -f, --force                 Force rebuild all components (ignore timestamps)"
@@ -37,6 +37,7 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  $0                          # Deploy all available lambdas"
+    echo "  $0 -l default               # Deploy default lambdas (${DEFAULT_LAMBDAS[*]})"
     echo "  $0 -l auth                  # Deploy only auth lambda"
     echo "  $0 -l users                 # Deploy only users lambda"
     echo "  $0 -l llm                   # Deploy only llm lambda"
@@ -51,6 +52,10 @@ LAMBDA_TO_DEPLOY="all"
 ENVIRONMENT="prod"
 AUTO_CONFIRM=true
 FORCE_REBUILD=false
+
+# Define available lambdas
+AVAILABLE_LAMBDAS=("auth" "users" "llm")
+DEFAULT_LAMBDAS=("auth" "llm")  # Default lambdas to deploy
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -85,12 +90,12 @@ done
 
 # Validate lambda selection
 case $LAMBDA_TO_DEPLOY in
-    auth|users|llm|all)
+    auth|users|llm|frontend|all|default)
         # Valid selection
         ;;
     *)
         print_error "Invalid lambda selection: $LAMBDA_TO_DEPLOY"
-        print_error "Valid options: auth, users, llm, all"
+        print_error "Valid options: ${AVAILABLE_LAMBDAS[*]}, frontend, all, default"
         exit 1
         ;;
 esac
@@ -206,24 +211,26 @@ build_lambda() {
 
 # Build lambdas based on selection
 case $LAMBDA_TO_DEPLOY in
-    auth)
-        if ! build_lambda "auth" "$FORCE_REBUILD"; then
+    auth|users|llm)
+        if ! build_lambda "$LAMBDA_TO_DEPLOY" "$FORCE_REBUILD"; then
             exit 1
         fi
         ;;
-    users)
-        if ! build_lambda "users" "$FORCE_REBUILD"; then
-            exit 1
-        fi
-        ;;
-    llm)
-        if ! build_lambda "llm" "$FORCE_REBUILD"; then
-            exit 1
-        fi
+    default)
+        # Build default lambdas (auth and llm)
+        for lambda in "${DEFAULT_LAMBDAS[@]}"; do
+            if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
+                if ! build_lambda "$lambda" "$FORCE_REBUILD"; then
+                    exit 1
+                fi
+            else
+                print_warning "Lambda directory for $lambda not found, skipping..."
+            fi
+        done
         ;;
     all)
         # Build all available lambdas
-        for lambda in auth users llm; do
+        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
             if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
                 if ! build_lambda "$lambda" "$FORCE_REBUILD"; then
                     exit 1
@@ -255,18 +262,18 @@ verify_lambda_package() {
 
 # Verify packages based on selection
 case $LAMBDA_TO_DEPLOY in
-    auth)
-        verify_lambda_package "auth"
+    auth|users|llm)
+        verify_lambda_package "$LAMBDA_TO_DEPLOY"
         ;;
-    users)
-        verify_lambda_package "users"
-        ;;
-    llm)
-        verify_lambda_package "llm"
+    default)
+        # Verify default packages
+        for lambda in "${DEFAULT_LAMBDAS[@]}"; do
+            verify_lambda_package "$lambda"
+        done
         ;;
     all)
         # Verify all available packages
-        for lambda in auth users llm; do
+        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
             verify_lambda_package "$lambda"
         done
         ;;
@@ -385,7 +392,7 @@ else
 fi
 
 # Step 10: Deploy Frontend (if requested or if deploying auth)
-if [ "$LAMBDA_TO_DEPLOY" = "all" ] || [ "$LAMBDA_TO_DEPLOY" = "frontend" ] || [ "$LAMBDA_TO_DEPLOY" = "auth" ]; then
+if [ "$LAMBDA_TO_DEPLOY" = "all" ] || [ "$LAMBDA_TO_DEPLOY" = "frontend" ] || [ "$LAMBDA_TO_DEPLOY" = "auth" ] || [ "$LAMBDA_TO_DEPLOY" = "default" ]; then
     print_status "Deploying frontend..."
     
     # Navigate to frontend directory

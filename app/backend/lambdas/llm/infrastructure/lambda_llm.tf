@@ -2,9 +2,10 @@
 # This creates the Lambda function for handling LLM operations and code generation
 
 locals {
-  function_name = "${var.project_name}-${var.environment}-llm-api"
+  function_name = "${var.environment}-${var.project_name}-api-llm"
   lambda_code_path = "${path.module}/../code"
-  deployment_package_path = "${path.module}/../../../dist/llm-deployment.zip"
+  deployment_package_path = "${path.module}/../../../scripts/dist/llm-deployment.zip"
+  
 }
 
 # Lambda IAM Role
@@ -33,13 +34,6 @@ resource "aws_iam_role_policy_attachment" "llm_lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# VPC execution policy (if needed)
-resource "aws_iam_role_policy_attachment" "llm_lambda_vpc_execution" {
-  count      = length(var.vpc_subnet_ids) > 0 ? 1 : 0
-  role       = aws_iam_role.llm_lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
 # IAM policy for Bedrock access
 resource "aws_iam_role_policy" "llm_lambda_bedrock_policy" {
   name = "${local.function_name}-bedrock-policy"
@@ -62,11 +56,10 @@ resource "aws_iam_role_policy" "llm_lambda_bedrock_policy" {
   })
 }
 
-# IAM policy for RDS access
-resource "aws_iam_role_policy" "llm_lambda_rds_policy" {
-  count = var.rds_secret_arn != "" ? 1 : 0
-  name  = "${local.function_name}-rds-policy"
-  role  = aws_iam_role.llm_lambda_role.id
+# IAM policy for S3 config access
+resource "aws_iam_role_policy" "llm_lambda_s3_policy" {
+  name = "${local.function_name}-s3-policy"
+  role = aws_iam_role.llm_lambda_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -74,35 +67,15 @@ resource "aws_iam_role_policy" "llm_lambda_rds_policy" {
       {
         Effect = "Allow"
         Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
+          "s3:GetObject",
+          "s3:GetObjectVersion"
         ]
-        Resource = var.rds_secret_arn
+        Resource = "${var.config_bucket_arn}/*"
       }
     ]
   })
 }
 
-# IAM policy for LLM secrets access
-resource "aws_iam_role_policy" "llm_lambda_secrets_policy" {
-  count = var.llm_secret_arn != "" ? 1 : 0
-  name  = "${local.function_name}-secrets-policy"
-  role  = aws_iam_role.llm_lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ]
-        Resource = var.llm_secret_arn
-      }
-    ]
-  })
-}
 
 # Lambda function
 resource "aws_lambda_function" "llm_api" {
@@ -115,29 +88,15 @@ resource "aws_lambda_function" "llm_api" {
   memory_size     = var.lambda_memory_mb
   source_code_hash = filebase64sha256(local.deployment_package_path)
 
-  # VPC configuration (optional)
-  dynamic "vpc_config" {
-    for_each = length(var.vpc_subnet_ids) > 0 ? [1] : []
-    content {
-      subnet_ids         = var.vpc_subnet_ids
-      security_group_ids = var.vpc_security_group_ids
-    }
-  }
 
   environment {
-    variables = merge(
-      var.lambda_environment_variables,
-      {
-        AWS_REGION     = var.aws_region
-        RDS_SECRET_ARN = var.rds_secret_arn
-        LLM_SECRET_ARN = var.llm_secret_arn
-      }
-    )
+    variables = var.lambda_environment_variables
   }
 
   depends_on = [
     aws_iam_role_policy_attachment.llm_lambda_basic_execution,
     aws_iam_role_policy.llm_lambda_bedrock_policy,
+    aws_iam_role_policy.llm_lambda_s3_policy,
     aws_cloudwatch_log_group.llm_lambda_logs
   ]
 
@@ -147,7 +106,7 @@ resource "aws_lambda_function" "llm_api" {
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "llm_lambda_logs" {
   name              = "/aws/lambda/${local.function_name}"
-  retention_in_days = 14
+  retention_in_days = 5
   tags              = var.common_tags
 }
 

@@ -143,21 +143,57 @@ module "auth_api_lambda" {
   ]
 }
 
+# LLM API Lambda Module
+module "llm_api_lambda" {
+  source = "../lambdas/llm/infrastructure"
+  
+  # Required variables
+  project_name = local.common_config.project_name
+  environment  = local.common_config.environment
+  aws_region   = local.common_config.aws_region
+  common_tags  = local.common_config.tags
+  
+  # Lambda-specific configuration
+  lambda_runtime            = local.lambda_config.runtime
+  lambda_timeout_seconds    = var.llm_api_timeout
+  lambda_memory_mb         = var.llm_api_memory
+  lambda_environment_variables = {
+    CONFIG_BUCKET = aws_s3_bucket.configs.id
+    CONFIG_KEY    = "config.json"
+    ENVIRONMENT   = local.common_config.environment
+    PROJECT_NAME  = local.common_config.project_name
+  }
+
+  # API Gateway integration (will be updated after API Gateway is created)
+  api_gateway_execution_arn = module.api_gateway.api_gateway_execution_arn
+  
+  # S3 Configuration
+  config_bucket_arn = aws_s3_bucket.configs.arn
+
+  depends_on = [
+    module.cognito,
+    aws_s3_bucket.configs,
+    aws_s3_object.app_config
+  ]
+}
+
 # API Gateway Module
 module "api_gateway" {
   source = "../api_gateway/infra"
   
   common_config = local.common_config
   
-  # Lambda integrations (only auth for now)
+  # Lambda integrations
   lambda_auth_api_invoke_arn       = module.auth_api_lambda.lambda_auth_function_invoke_arn
   lambda_auth_api_function_name    = module.auth_api_lambda.lambda_auth_function_name
+  
+  # LLM lambda integration
+  lambda_llm_api_invoke_arn        = module.llm_api_lambda.lambda_llm_function_invoke_arn
+  lambda_llm_api_function_name     = module.llm_api_lambda.lambda_llm_function_name
   
   # Empty values for other lambdas (not deployed yet)
   lambda_user_api_invoke_arn       = ""
   lambda_user_api_function_name    = ""
-  lambda_llm_api_invoke_arn        = ""
-  lambda_llm_api_function_name     = ""
   
   # Cognito integration
   cognito_user_pool_id = module.cognito.cognito_user_pool_id

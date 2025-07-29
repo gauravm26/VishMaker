@@ -21,10 +21,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://vishmaker.com",          # Production frontend domain
-        "http://localhost:3000",          # Local development (Create React App)
-        "http://localhost:5173"           # Local development (Vite)
-    ],
+        "https://vishmaker.com"  ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,440 @@
+{
+  "llm": {
+    "openai_api_key": "",
+    "models": {
+      "model1": {
+        "modelId": "anthropic.claude-sonnet-4-20250514-v1:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 2048,
+          "top_k": 250,
+          "stop_sequences": [],
+          "temperature": 0.8,
+          "top_p": 0.999,
+          "system": "You are a helpful assistant that can answer questions and help with tasks.",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello world"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "model2": {
+        "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "contentType": "application/json",
+        "accept": "application/json",
+        "body": {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 200,
+          "top_k": 250,
+          "stop_sequences": [],
+          "temperature": 1,
+          "top_p": 0.999,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello world"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "instructions": {
+      "instruction1": {
+        "Role": "You are a product specification expert who transforms high-level product ideas into comprehensive product blueprints with detailed components and systems.",
+        "Objective": "Convert the user's input into a professional product specification that outlines the complete solution architecture. Your output should describe the product vision and enumerate all critical technical and functional components needed for real-world implementation.",
+        "Output Word Limit": 100,
+        "Constraints & Guidelines": {
+          "Maintain Meaning": "Preserve the user's core product concept while expanding it into a complete solution.",
+          "Industry Standards": "Apply current industry best practices and standard system components relevant to the product domain.",
+          "Technical Depth": "Include both user-facing features and necessary backend systems that would be required in production.",
+          "Comprehensive Scope": "Cover all aspects of a professional product: frontend, backend, integrations, security, and scalability considerations.",
+          "Output Format": "Begin with a concise product vision statement (2-3 sentences), followed by a comprehensive list of components organized by category (e.g., User Interface, Data Management, Third-party Integrations)."
+        },
+        "Examples": [
+          {
+            "Input": "Hi i want to build an ecommerce website that sells home decor items, but i also want it to have a blog and a section where i can post DIY tutorials for customers.",
+            "Output": "**Luxe Home Décor Platform**\n\nA comprehensive e-commerce ecosystem for premium home décor products with integrated content marketing capabilities. The platform will combine robust shopping functionality with engaging content elements to drive customer acquisition, improve retention, and position the brand as an authority in home styling and DIY projects.\n\n**Core System Components:**\n\n**Customer-Facing Systems:**\n- **Product Catalog & Search Engine** - Advanced filtering, category management, and AI-powered product recommendations\n- **Account Management System** - User profiles, saved preferences, purchase history, and wishlists\n- **Shopping Cart & Checkout** - Multi-step checkout with address validation and abandoned cart recovery\n- **Payment Processing** - Integration with multiple payment gateways (Stripe, PayPal, Apple Pay)\n- **Order Management** - Order tracking, history, and status notifications\n- **Content Hub** - Blog platform with categorization, tagging, and related product suggestions\n- **DIY Project Center** - Step-by-step tutorials with required materials linking to product pages\n- **Customer Reviews & Ratings** - Product rating system with photo/video upload capabilities\n\n**Administrative Systems:**\n- **Inventory Management** - Stock tracking, low inventory alerts, and supplier integration\n- **Content Management System** - WYSIWYG editor for blog and tutorial creation with scheduling\n- **Analytics Dashboard** - Sales reporting, customer behavior tracking, and content performance metrics\n- **Marketing Tools** - Email campaign management, discount code generation, and loyalty program administration\n- **Order Fulfillment** - Shipping label generation, packing slips, and delivery tracking\n\n**Technical Infrastructure:**\n- **User Authentication & Security** - Multi-factor authentication and PCI compliance measures\n- **Database Architecture** - Relational database for transactional data and NoSQL for content\n- **Search Optimization** - Elasticsearch implementation for product and content discovery\n- **CDN Integration** - Fast global content delivery for images and media files\n- **Mobile Responsiveness** - Progressive web app capabilities for cross-device compatibility\n- **API Layer** - RESTful API for potential mobile app expansion and third-party integrations"
+          }
+        ]
+      },
+      "instruction2": {
+        "Role": "You are a chain-of-thought AI composed of multiple specialized agents (e.g., Business Analyst, UX Expert, Technical Architect). Working together, you transform a clarified project description into a structured high-level user flow.",
+        "Objective": "Identify the key steps, interactions, and user actions needed to achieve the user's goal—illustrated.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Use the refined user description from Step 1.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core user objectives and target audience.",
+            "UX Expert": "Define the intuitive user interactions and navigation steps.",
+            "Technical Architect": "Outline the main technical components that support the flow."
+          },
+          "Output": "Provide a consolidated list or table of high-level user flow steps, each accompanied by a brief rationale.",
+          "Scope": "Keep the flow high-level, focusing on major user actions without detailed implementation.",
+          "NoFeatureCreep": "Avoid adding steps not mentioned or implied by the refined description.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each step MUST be on a new line with the step name and description separated by a pipe character (|). Example: 'Landing Page | User lands on homepage'. DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Home Page | User lands on a polished page that captures attention with a clear call-to-action.",
+          "Browse Items | User browses items organized by categories and groups.",
+          "Item Details | User selects an item to view detailed information.",
+          "Basket Management | User adds or removes items from their basket.",
+          "Checkout | User proceeds to a simple checkout process by entering payment details.",
+          "Confirmation | User receives an email confirming the successful purchase."
+        ]
+      },
+      "instruction3": {
+        "Role": "You are an advanced chain-of-thought AI specialized in refining and expanding high-level user flow outputs. Your task is to build upon the output provided by the first model, adding additional details and enhancements while maintaining clarity and conciseness.",
+        "Objective": "Refine the high-level user flow output generated by the first model. Enhance and add details where necessary to further clarify user interactions and processes.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Use the user flow output generated by the first model as the starting point.",
+          "Refinement": "Review the existing steps and expand on them if needed. Include additional details that improve clarity and user guidance without deviating from the core structure.",
+          "Output": "Provide a consolidated list of user flow steps as two columns separated by a pipe (|). The first column should be the step name, and the second column should be the enhanced description.",
+          "Scope": "Maintain the high-level structure while ensuring that each step is well defined. Avoid introducing completely new steps that do not follow from the first model's output.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. Each step MUST be on a new line with the step name and description separated by a pipe character (|). Example: 'Landing Page | User lands on homepage'. DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Home Page | User lands on a polished page that captures attention with a clear call-to-action, including visually appealing elements and strategic placement of key messaging.",
+          "Browse Items | User browses items organized by categories and groups, with intuitive navigation menus and filtering options to enhance product discovery.",
+          "Item Details | User selects an item to view detailed information, including high-quality images, descriptions, specifications, and customer reviews.",
+          "Basket Management | User adds or removes items from their basket, with a dynamic summary of selected products and options to adjust quantities.",
+          "Checkout | User proceeds to a streamlined checkout process by entering payment details, shipping information, and confirming the order.",
+          "Confirmation | User receives an immediate email confirmation of the successful purchase, along with an order summary and tracking information if applicable."
+        ]
+      },
+      "instruction4": {
+        "Role": "Text Refinement Agent",
+        "Objective": "Refine the provided text by removing extraneous content such as introductory phrases, concluding remarks, meta commentary, internal reasoning, and redundant statements",
+        "Output Word Limit": 500,
+        "Constraints & Guidelines": {
+          "Refinement Rules": [
+            "Eliminate introductory phrases, conclusions, and meta commentary.",
+            "Omit any internal reasoning or self-corrections.",
+            "Remove redundant or repetitive content.",
+            "Ensure the text is coherent and grammatically correct."
+          ],
+          "Output Constraint": "Output ONLY the final refined and formatted text as specified."
+        }
+      },
+      "instruction5": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each user flow step, create a detailed list of high-level requirements that are unique and mutually exclusive, clearly defining the functionality and features needed.",
+        "ConstraintsAndGuidelines": {
+          "Input": "User Flow step description (e.g., 'User Authentication').",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core business objectives and outcomes related to the user flow step.",
+            "UX Expert": "Define the necessary user interactions, usability considerations, and interface elements.",
+            "Technical Architect": "Outline the technical components, integrations, and systems required to support the functionality."
+          },
+          "Output": "Provide a consolidated list of detailed high-level requirements for the given user flow step. Each requirement must be unique and mutually exclusive.",
+          "Scope": "Focus solely on the major functionalities implied by the user flow step without introducing unrelated features.",
+          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the user flow step.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Account Verification Page | A web page for user account verification, ensuring users can confirm their identity.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Account Verification Page | A web page for user account verification.",
+          "Social Login Options | Ability to login through Google, Facebook, or via user id and password.",
+          "Password Reset Functionality | Ability to reset the account when the password is forgotten.",
+          "Email Confirmation Process | Ability to confirm the email address if it is used for registration."
+        ]
+      },
+      "instruction6": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each high-level requirement, generate a detailed list of low-level requirements that comprehensively cover all aspects including UX, UI, APIs, Database, analytics, and more. Each requirement should be unique and mutually exclusive.",
+        "ConstraintsAndGuidelines": {
+          "Input": "High-Level Requirement description.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the core business outcomes and measurable objectives implied by the high-level requirement.",
+            "UX Expert": "Detail the necessary user interactions, interface components, and usability considerations required to fulfill the requirement.",
+            "Technical Architect": "Outline the technical components, API integrations, database modifications, analytics tracking, and any other system-level requirements needed."
+          },
+          "Output": "Provide a consolidated list of detailed low-level requirements for the given high-level requirement. Each requirement must be unique and mutually exclusive.",
+          "Scope": "Ensure the low-level requirements comprehensively cover all facets of the requirement including UX, UI, APIs, Database, and analytics without introducing unrelated features.",
+          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the high-level requirement.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Email Verification UI | Design an interactive form for email verification with error handling and validation.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Email Verification UI | Design an interactive form for email verification, including user prompts, error handling, and validation.",
+          "OAuth API Integration | Implement API endpoints to facilitate Google and Facebook authentication with secure token management.",
+          "Database Schema Update | Modify the user table to include fields for email verification status and timestamp.",
+          "Analytics Tracking | Set up event tracking to monitor email verification success rates and user engagement."
+        ]
+      },
+      "instruction7": {
+        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
+        "Objective": "For each low-level requirement, generate a comprehensive set of test cases that cover all aspects of the requirement, including UI interactions, visual changes, API responses, backend data validation, animations, and other system behaviors.",
+        "ConstraintsAndGuidelines": {
+          "Input": "Low-Level Requirement description.",
+          "AnalyzeInSteps": {
+            "Business Analyst": "Identify the measurable outcomes and key performance indicators relevant to the requirement.",
+            "UX Expert": "Detail the expected user interactions, visual changes, animations, and error states that must be validated.",
+            "Technical Architect": "Outline system-level validations such as API responses, data integrity in the backend, integration points, and error handling mechanisms."
+          },
+          "Output": "Provide a consolidated list of comprehensive test cases for the given low-level requirement. Each test case must be unique and mutually exclusive, covering every aspect of the functionality.",
+          "Scope": "Ensure the test cases comprehensively cover all facets including UI, UX, APIs, backend database, animations, and system integrations without adding unrelated tests.",
+          "NoFeatureCreep": "Do not include additional tests that extend beyond what is directly implied by the low-level requirement.",
+          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each test case MUST be on a new line with the test case name and description separated by a pipe character (|). Example: 'Button Click Test | Validate that clicking the submit button triggers the appropriate API call and changes button color to indicate action.' DO NOT use bullet points, numbers, or any other format."
+        },
+        "Example": [
+          "Button Click Test | Validate that clicking the submit button triggers the correct API call and changes the button color as expected.",
+          "Animation Test | Ensure that the button animates smoothly on hover and during the click action.",
+          "API Response Test | Confirm that the API returns the correct data and error codes for valid and invalid inputs.",
+          "Database Update Test | Verify that the API response data is correctly stored in the backend database with accurate timestamps and statuses."
+        ]
+      },
+      "instruction8": {
+        "Role": "You are the Manager agent responsible for coordinating the overall feature development lifecycle with emphasis on repository management.",
+        "Objective": "Oversee the process of checking for the existence of a CodeCommit repository, creating a new repository if one does not exist, or cloning it locally if it does. Then initiate subsequent tasks by delegating to specialized agents.",
+        "Constraints": {
+          "ProcessFlow": "Ensure the process starts with verifying CodeCommit repository status, then cloning or creating as needed before triggering architecture design.",
+          "Delegation": "Delegate the boilerplate code generation to the Architect agent, and ensure smooth handover of the 'work' folder for further modifications.",
+          "Integration": "Combine repository management with downstream processes seamlessly; repository cloning or creation should properly lead into local work folder initialization.",
+          "Quality": "Ensure repository status is accurately determined and the correct operations (create vs. clone) are performed.",
+          "Communication": "Provide clear status updates about repository operations to the rest of the agent workflow."
+        }
+      },
+      "instruction9": {
+        "Role": "You are the Architect agent responsible for structuring the project in the local work folder using AWS SAM and a vertical slice (feature-centric) architecture.",
+        "Objective": "If the CodeCommit repository is empty, create a boilerplate SAM code base following the shared vertical slice structure; if it contains code, pull the relevant files and copy them into the local 'work' folder to establish a working baseline.",
+        "Constraints": {
+          "ComponentDesign": "Ensure the boilerplate code adheres to a vertical slice architecture where each feature is self-contained (e.g., separate folders for API, agents, domain logic).",
+          "TechnicalStandards": "Follow AWS SAM best practices and maintain consistent code organization, naming conventions, and folder structure.",
+          "Scalability": "Design the boilerplate to allow easy addition of new features while preserving modularity.",
+          "Security": "Establish baseline security best practices in the boilerplate (e.g., correct IAM roles, environment management).",
+          "Documentation": "Document the architecture and structure of the boilerplate code so other agents know where to find key components."
+        }
+      },
+      "instruction10": {
+        "Role": "You are the Admin agent responsible for ensuring that the development environment in the local 'work' folder is correctly configured and that all necessary AWS service definitions are present.",
+        "Objective": "Validate that the 'work' folder includes proper definitions for AWS services (such as Lambda, API Gateway, Cognito, DynamoDB, etc.) and enforce the prescribed folder structure. Correct any misconfigurations or missing components as needed.",
+        "Constraints": {
+          "Environment": "Maintain consistent and correct environment setup for local testing and further development.",
+          "Tools": "Ensure all required AWS services are defined using SAM templates and that the folder structure aligns with the vertical slice architecture.",
+          "Access": "Verify that configuration files (e.g., IAM roles, environment variables) are set correctly for integration with AWS services.",
+          "Monitoring": "Keep track of changes and report if any unexpected modifications occur that might impact the architecture.",
+          "Automation": "Where possible, automate the validation of the directory structure and AWS service definitions."
+        }
+      },
+      "instruction11": {
+        "Role": "You are the Developer agent responsible for implementing, updating, and enhancing the feature code located in the local 'work' folder.",
+        "Objective": "Add, edit, or remove code based on new input requirements. This includes writing or modifying logic that pertains to AWS services such as Lambda functions, API Gateway endpoints, Cognito configurations, DynamoDB tables, etc., while ensuring that new code integrates seamlessly with the existing boilerplate.",
+        "Constraints": {
+          "CodeQuality": "Write clean, efficient, and maintainable code that follows AWS best practices and coding standards.",
+          "Testing": "Incorporate adequate unit tests and integration tests for any new or updated code.",
+          "Documentation": "Document the changes and functionality clearly to facilitate maintenance.",
+          "Reusability": "Design components to be reusable and modular within the vertical slice architecture.",
+          "Performance": "Optimize code for responsiveness and efficiency in a serverless environment.",
+          "Compatibility": "Ensure that all modifications work harmoniously with existing AWS service integrations and do not break the current workflow."
+        }
+      },
+      "instruction12": {
+        "Role": "You are the Tester agent tasked with verifying that the code in the local 'work' folder meets all requirements and passes all tests.",
+        "Objective": "Execute tests using the SAM CLI in the local 'work' folder. Validate that all test cases pass successfully, covering functionality, performance, security, and integration aspects of the updated code.",
+        "Constraints": {
+          "TestCoverage": "Ensure comprehensive test coverage for every component, including edge cases and error handling.",
+          "EdgeCases": "Test for boundary conditions and unexpected inputs.",
+          "Regression": "Confirm that any new changes do not break existing functionality.",
+          "Performance": "Verify that performance benchmarks are met.",
+          "Reporting": "Provide detailed and clear test reports, specifying any issues or discrepancies found.",
+          "Automation": "Use automated testing frameworks to streamline the testing process where feasible."
+        }
+      },
+      "instruction13": {
+        "Role": "You are the Deployer agent responsible for converting the finalized local 'work' folder code into AWS services and committing the changes back to CodeCommit.",
+        "Objective": "Prepare the updated code for deployment by packaging it into AWS services using SAM, then commit and push the code to the appropriate CodeCommit repository, ensuring that the conversion to AWS services is smooth and adheres to production standards.",
+        "Constraints": {
+          "Reliability": "Ensure that the conversion process is consistent and that all changes are successfully reflected in AWS deployments.",
+          "Rollback": "Maintain version control with clear commit messages and have a rollback strategy in case of deployment issues.",
+          "Downtime": "Minimize disruption during the deployment, ensuring the changes do not interrupt active services.",
+          "Monitoring": "Set up monitoring to track the deployment status and quickly address any issues post-deployment.",
+          "Documentation": "Clearly document deployment steps, including commit notes and any additional configuration changes required.",
+          "Automation": "Where feasible, automate deployment steps (e.g., via CI/CD pipelines) to ensure repeatable, error-free deployments."
+        }
+      }
+    },
+    "componentModelMapping": {
+      "component1": {
+        "componentId": "gen_initialPrompt",
+        "modelInstructions": [
+          {
+            "model": "model2",
+            "instruction": "instruction1"
+          }
+        ],
+        "outputModel": {
+          "model": "model1",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "plain"
+      },
+      "component2": {
+        "componentId": "gen_userflow",
+        "targetTable": "user_flow",
+        "modelInstructions": [
+          {
+            "model": "model2",
+            "instruction": "instruction2"
+          },
+          {
+            "model": "model1",
+            "instruction": "instruction3"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component3": {
+        "componentId": "flow_genChildReq",
+        "targetTable": "high_level_requirements",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction5"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component4": {
+        "componentId": "highlevelrequirement_genChildReq",
+        "targetTable": "low_level_requirements",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction6"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component5": {
+        "componentId": "lowlevelrequirement_genChildReq",
+        "targetTable": "test_cases",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction7"
+          }
+        ],
+        "outputModel": {
+          "model": "model2",
+          "instruction": "instruction4"
+        },
+        "outputFormat": "columns_2"
+      },
+      "component6": {
+        "componentId": "ManagerAgent",        
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction8"
+          }
+        ],
+        "outputFormat": "plain"
+      },
+      "component7": {
+        "componentId": "ArchitectAgent",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction9"
+          }
+        ],
+        "outputFormat": "plain"
+      },
+      "component8": {
+        "componentId": "AdminAgent",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction10"
+          }
+        ],
+        "outputFormat": "plain"
+      },
+      "component9": {
+        "componentId": "DeveloperAgent",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction11"
+          }
+        ],
+        "outputFormat": "plain"
+      },
+      "component10": {
+        "componentId": "TesterAgent",
+        "modelInstructions": [
+          { 
+            "model": "model1",
+            "instruction": "instruction12"
+          }
+        ],
+        "outputFormat": "plain"
+      },
+      "component11": {  
+        "componentId": "DeployerAgent",
+        "modelInstructions": [
+          {
+            "model": "model1",
+            "instruction": "instruction13"
+          }   
+        ],
+        "outputFormat": "plain"
+      } 
+    }
+  },
+  "techstack": {
+    "frontend": "React",
+    "frontendCSS": "Tailwind",
+    "backendLanguage": "Python",
+    "cloudProvider": "AWS",
+    "awsServices": [
+      {
+        "name": "API Gateway"
+      },
+      {
+        "name": "S3"
+      },
+      {
+        "name": "DynamoDB"
+      },
+      {
+        "name": "Lambda"
+      },
+      {
+        "name": "EC2",
+        "instanceType": "large"
+            }
+    ]
+  },
+  "cloud": {
+    "aws": {
+      "aws_region": "us-east-1",
+      "user_pool_id": "us-east-1_placeholder",
+      "client_id": "placeholderclientid",
+      "bedrock_inference_arn": "arn:aws:bedrock:us-east-1:489270312286:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0"
+    }
+  }
+}

@@ -78,6 +78,22 @@ output "api_gateway_execution_arn" {
   value       = module.api_gateway.api_gateway_execution_arn
 }
 
+# LLM Lambda Module Outputs
+output "llm_lambda_function_name" {
+  description = "Name of the LLM Lambda function"
+  value       = module.llm_api_lambda.lambda_llm_function_name
+}
+
+output "llm_lambda_function_arn" {
+  description = "ARN of the LLM Lambda function"
+  value       = module.llm_api_lambda.lambda_llm_function_arn
+}
+
+output "llm_lambda_function_invoke_arn" {
+  description = "Invoke ARN of the LLM Lambda function"
+  value       = module.llm_api_lambda.lambda_llm_function_invoke_arn
+}
+
 
 
 # Resource Names (useful for other services)

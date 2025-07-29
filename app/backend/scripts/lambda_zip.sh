@@ -12,10 +12,11 @@ print_usage() {
     echo "Usage: $0 [LAMBDA_NAME]"
     echo ""
     echo "Arguments:"
-    echo "  LAMBDA_NAME    Build specific lambda (auth, users, llm, or all)"
+    echo "  LAMBDA_NAME    Build specific lambda (auth, users, llm, all, or default)"
     echo ""
     echo "Examples:"
     echo "  $0              # Build all available lambdas"
+    echo "  $0 default      # Build default lambdas (auth, llm)"
     echo "  $0 auth         # Build only auth lambda"
     echo "  $0 users        # Build only users lambda"
     echo "  $0 llm          # Build only llm lambda"
@@ -26,15 +27,19 @@ print_usage() {
 # Parse command line arguments
 LAMBDA_TO_BUILD="${1:-all}"
 
+# Define available lambdas
+AVAILABLE_LAMBDAS=("auth" "users" "llm")
+DEFAULT_LAMBDAS=("auth" "llm")  # Default lambdas to build
+
 # Validate lambda selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|all)
+    auth|users|llm|all|default)
         # Valid selection
         ;;
     *)
         print_usage
         echo -e "${RED}❌ Invalid lambda selection: $LAMBDA_TO_BUILD${NC}"
-        echo -e "${RED}Valid options: auth, users, llm, all${NC}"
+        echo -e "${RED}Valid options: ${AVAILABLE_LAMBDAS[*]}, all, default${NC}"
         exit 1
         ;;
 esac
@@ -54,8 +59,18 @@ echo -e "${YELLOW}📁 Project root: $PROJECT_ROOT${NC}"
 
 # Clean and create build directories
 echo -e "${YELLOW}🧹 Cleaning build directories...${NC}"
-rm -rf "$BUILD_DIR" "$DIST_DIR"
-mkdir -p "$BUILD_DIR" "$DIST_DIR"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+# Only clean DIST_DIR if building all lambdas or if it doesn't exist
+if [ "$LAMBDA_TO_BUILD" = "all" ] || [ "$LAMBDA_TO_BUILD" = "default" ] || [ ! -d "$DIST_DIR" ]; then
+    rm -rf "$DIST_DIR"
+    mkdir -p "$DIST_DIR"
+    echo -e "${YELLOW}🧹 Cleaned dist directory${NC}"
+else
+    mkdir -p "$DIST_DIR"
+    echo -e "${YELLOW}📦 Preserving existing deployment packages in dist directory${NC}"
+fi
 
 # Function to build a Lambda package
 build_lambda_package() {
@@ -119,6 +134,7 @@ build_lambda_package() {
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "*.git*" -delete 2>/dev/null || true
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "test_*" -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "local_test" -type d -exec rm -rf {} + 2>/dev/null || true
 
     # Create the deployment ZIP
     echo -e "${YELLOW}📦 Creating $LAMBDA_NAME deployment package...${NC}"
@@ -138,18 +154,22 @@ build_lambda_package() {
 
 # Build Lambda packages based on selection
 case $LAMBDA_TO_BUILD in
-    auth)
-        build_lambda_package "auth"
+    auth|users|llm)
+        build_lambda_package "$LAMBDA_TO_BUILD"
         ;;
-    users)
-        build_lambda_package "users"
-        ;;
-    llm)
-        build_lambda_package "llm"
+    default)
+        # Build default lambdas (auth and llm)
+        for lambda in "${DEFAULT_LAMBDAS[@]}"; do
+            if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
+                build_lambda_package "$lambda"
+            else
+                echo -e "${YELLOW}⚠️  Lambda directory for $lambda not found, skipping...${NC}"
+            fi
+        done
         ;;
     all)
         # Build all available lambdas
-        for lambda in auth users llm; do
+        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
             if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
                 build_lambda_package "$lambda"
             else

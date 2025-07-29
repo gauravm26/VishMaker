@@ -47,35 +47,15 @@ variable "lambda_environment_variables" {
   default     = {}
 }
 
-# VPC Configuration (optional)
-variable "vpc_subnet_ids" {
-  description = "VPC subnet IDs for Lambda function"
-  type        = list(string)
-  default     = []
-}
-
-variable "vpc_security_group_ids" {
-  description = "VPC security group IDs for Lambda function"
-  type        = list(string)
-  default     = []
-}
-
-# RDS Integration
-variable "rds_secret_arn" {
-  description = "RDS secret ARN for database connection"
-  type        = string
-  default     = ""
-}
-
-# LLM Integration
-variable "llm_secret_arn" {
-  description = "LLM API keys secret ARN"
-  type        = string
-  default     = ""
-}
 
 # API Gateway Integration
 variable "api_gateway_execution_arn" {
   description = "API Gateway execution ARN"
+  type        = string
+}
+
+# S3 Configuration
+variable "config_bucket_arn" {
+  description = "ARN of the S3 bucket containing configuration files"
   type        = string
 } 

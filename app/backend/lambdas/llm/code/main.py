@@ -1,116 +1,146 @@
-import sys
-import os
-from pathlib import Path
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import json
+import logging
+from fastapi import FastAPI, Request, HTTPException
 from mangum import Mangum
+from services import llm_processing_service
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Dict, Any
 
-# Add shared utilities to path
-current_dir = Path(__file__).parent
-lambdas_dir = current_dir.parent.parent
-shared_dir = lambdas_dir / "shared"
-sys.path.append(str(shared_dir))
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Add project root to path for importing existing modules
-project_root = lambdas_dir.parent.parent
-sys.path.append(str(project_root))
+app = FastAPI(
+    title="VishMaker LLM API",
+    description="LLM processing service for VishMaker",
+    version="1.0.0"
+)
 
-from router import api_router
-from shared.logger import setup_logger, log_api_request, log_api_response
-from shared.config_loader import get_project_name, get_api_v1_str
-from shared.exceptions import EXCEPTION_HANDLERS
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://vishmaker.com"],  # Production domain
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
-# Initialize logger
-logger = setup_logger('llm_api')
+@app.get("/")
+def root():
+    """Health check endpoint"""
+    return {"message": "VishMaker LLM API is running", "status": "healthy"}
 
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+@app.get("/ping")
+def ping():
+    """Simple ping endpoint for health checks"""
+    return {"message": "pong", "status": "ok"}
+
+@app.post("/llm/process")
+async def process_llm(request: Request):
+    """
+    Process LLM request for a specific component.
     
-    app = FastAPI(
-        title=f"{get_project_name()} LLM API",
-        description="LLM API - Handle AI/ML operations, code generation, and LLM processing",
-        version="1.0.0",
-        openapi_url=f"{get_api_v1_str()}/openapi.json",
-        docs_url=f"{get_api_v1_str()}/docs",
-        redoc_url=f"{get_api_v1_str()}/redoc"
-    )
-    
-    # Configure CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["*"],
-        expose_headers=["Content-Type", "X-Content-Type-Options"],
-    )
-    
-    # Register exception handlers
-    for exception_type, handler in EXCEPTION_HANDLERS.items():
-        app.add_exception_handler(exception_type, handler)
-    
-    # Health check endpoint
-    @app.get("/ping")
-    async def ping():
-        """Health check endpoint."""
-        logger.info("Health check requested")
-        return {"message": "pong", "service": "llm_api"}
-    
-    @app.get("/")
-    async def root():
-        """Root endpoint."""
-        return {
-            "message": f"{get_project_name()} LLM API",
-            "version": "1.0.0",
-            "service": "llm_api"
-        }
-    
-    # Include API routes
-    app.include_router(api_router, prefix=get_api_v1_str())
-    
-    # Middleware for request/response logging
-    @app.middleware("http")
-    async def log_requests(request, call_next):
-        import time
+    Expected request body:
+    {
+        "componentId": "string",
+        "text": "string",
+        "project_id": "number" (optional),
+        "parent_uiid": "string" (optional),
+        "save_to_db": "boolean" (optional)
+    }
+    """
+    try:
+        logger.info("📥 LLM process request received")
         
-        start_time = time.time()
+        # Parse request body
+        body = await request.json()
+        logger.info(f"🔍 Request body: {body}")
         
-        # Log request
-        log_api_request(logger, request.method, str(request.url.path))
+        # Validate required fields
+        if not body.get("componentId"):
+            raise HTTPException(status_code=400, detail="componentId is required")
         
-        # Process request
-        response = await call_next(request)
+        if not body.get("text"):
+            raise HTTPException(status_code=400, detail="text is required")
         
-        # Log response
-        process_time = int((time.time() - start_time) * 1000)  # Convert to ms
-        log_api_response(
-            logger, 
-            request.method, 
-            str(request.url.path), 
-            response.status_code, 
-            process_time
+        # Extract parameters
+        component_id = body["componentId"]
+        text = body["text"]
+        project_id = body.get("project_id")
+        parent_uiid = body.get("parent_uiid")
+        save_to_db = body.get("save_to_db", False)
+        
+        logger.info(f"🔧 Processing component: {component_id}")
+        logger.info(f"📝 Text length: {len(text)}")
+        logger.info(f"🏗️ Project ID: {project_id}")
+        logger.info(f"🔗 Parent UIID: {parent_uiid}")
+        
+        # Process with LLM service
+        result = llm_processing_service.process_component(
+            component_id=component_id,
+            text=text,
+            project_id=project_id,
+            parent_uiid=parent_uiid
         )
         
-        return response
-    
-    logger.info("LLM API application initialized")
-    return app
+        logger.info("✅ LLM processing completed successfully")
+        logger.info(f"📊 Result success: {result.get('success', False)}")
+        
+        # Check if processing was successful
+        if not result.get("success"):
+            error_msg = result.get("error", "Unknown error occurred")
+            logger.error(f"❌ LLM processing failed: {error_msg}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"LLM processing failed: {error_msg}"
+            )
+        
+        # Return successful response
+        response_data = {
+            "success": True,
+            "result": result.get("result", ""),
+            "modelId": result.get("modelId", ""),
+            "instructionId": result.get("instructionId", ""),
+            "progressUpdates": result.get("progressUpdates", []),
+            "generated_uiids": result.get("generated_uiids", []),
+            "metadata": result.get("metadata", {})
+        }
+        
+        logger.info("🎉 Returning successful response")
+        return JSONResponse(
+            content=response_data,
+            headers={
+                "Access-Control-Allow-Origin": "https://vishmaker.com",
+                "Access-Control-Allow-Credentials": "true"
+            }
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Invalid JSON in request body: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON in request body")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in LLM processing: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal server error: {str(e)}"
+        )
 
-# Create the FastAPI app
-app = create_app()
+@app.options("/llm/process")
+async def options_llm_process():
+    """Handle CORS preflight requests"""
+    return JSONResponse(
+        content={"message": "CORS preflight successful"},
+        headers={
+            "Access-Control-Allow-Origin": "https://vishmaker.com",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
 
-# Lambda handler using Mangum
-handler = Mangum(app, lifespan="off")
-
-# For local development
-if __name__ == "__main__":
-    import uvicorn
-    
-    logger.info("Starting LLM API in development mode")
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0", 
-        port=8003,  # Different port from other APIs
-        reload=True,
-        log_level="info"
-    ) 
+# Lambda handler
+handler = Mangum(app)
