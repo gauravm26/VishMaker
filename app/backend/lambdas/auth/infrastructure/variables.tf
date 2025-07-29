@@ -83,4 +83,5 @@ variable "cognito_user_pool_arn" {
 variable "api_gateway_execution_arn" {
   description = "API Gateway execution ARN"
   type        = string
+  default     = ""
 } 

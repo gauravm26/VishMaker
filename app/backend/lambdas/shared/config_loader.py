@@ -191,4 +191,4 @@ def get_environment() -> str:
 
 def get_api_v1_str() -> str:
     """Get API version string."""
-    return os.environ.get('API_V1_STR', '/api/v1') 
+    return os.environ.get('API_V1_STR', '') 

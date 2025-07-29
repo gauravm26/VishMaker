@@ -1,14 +1,14 @@
 import logging
 from fastapi import APIRouter, HTTPException, status, Depends
-from . import schemas
-from .cognito import CognitoAdapter, get_cognito_adapter
+import schemas
+from cognito import CognitoAdapter, get_cognito_adapter
 
 logger = logging.getLogger(__name__)
 
 # ===============================
 # API ROUTER
 # ===============================
-api_router = APIRouter()
+api_router = APIRouter()  # ← ADD THIS BACK!
 
 # ===============================
 # AUTHENTICATION ROUTES
@@ -82,7 +82,7 @@ async def confirm_forgot_password(request: schemas.ConfirmForgotPassword):
 async def sign_out(request: schemas.SignOutRequest):
     """Sign out user and invalidate Cognito session."""
     try:
-        logger.info(f"Sign out request")
+        logger.info(f"Sign out request received")
         result = cognito_adapter.sign_out(request.session_token)
         logger.info(f"Successful sign out")
         return result

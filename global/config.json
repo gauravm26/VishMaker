@@ -1,7 +1,7 @@
 {
   "app": {
     "project_name": "VishMaker",
-    "api_v1_str": "/api/v1",
+    "api_v1_str": "",
     "backend_port": 8000,
     "frontend_port": 3000,
     "backend_cors_origins": ["*"]

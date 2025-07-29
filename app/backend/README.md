@@ -93,21 +93,21 @@ Each lambda is now a **complete microservice** with its own business logic:
 ```json
 {
   "auth_lambda": {
-    "routes": ["ANY /api/v1/auth/{proxy+}"],
+            "routes": ["ANY /auth/{proxy+}"],
     "description": "Pure authentication microservice"
   },
   "users_lambda": {
     "routes": [
-      "ANY /api/v1/projects/{proxy+}",
-      "ANY /api/v1/requirements/{proxy+}",
-      "ANY /api/v1/waitlist/{proxy+}"
+              "ANY /projects/{proxy+}",
+        "ANY /requirements/{proxy+}",
+        "ANY /waitlist/{proxy+}"
     ],
     "description": "User data and business logic"
   },
   "llm_lambda": {
     "routes": [
-      "ANY /api/v1/llm/{proxy+}",
-      "ANY /api/v1/code/{proxy+}"
+              "ANY /llm/{proxy+}",
+        "ANY /code/{proxy+}"
     ],
     "description": "AI/ML processing and code generation"
   }

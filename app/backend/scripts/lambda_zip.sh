@@ -96,14 +96,12 @@ build_lambda_package() {
             ;;
         "users")
             echo -e "${YELLOW}📋 Users lambda is self-contained with built-in features${NC}"
-            cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
-            cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
+            # Copy DynamoDB package for users lambda
+            cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
             ;;
         "llm")
             echo -e "${YELLOW}📋 LLM lambda is self-contained with built-in features${NC}"
-            cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
-            cp -r "$PROJECT_ROOT/infrastructure" "$LAMBDA_BUILD_DIR/lambda_package/"
-            cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
+            # LLM lambda doesn't need external dependencies
             ;;
         *)
             echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"

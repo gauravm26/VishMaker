@@ -1,14 +1,20 @@
 // app-ui/src/components/project/CreateProjectForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import apiClient from '../../lib/apiClient';
 import { ProjectCreatePayload, Project } from '../../types/project';
 import LlmService, { LlmResponse } from '../../lib/llmService';
 
 interface CreateProjectFormProps {
-    onProjectCreated: () => void; // Callback to trigger refresh in parent
+    onProjectCreated: () => void;
+    shouldExpand?: boolean;
+    onExpandChange?: (expanded: boolean) => void;
 }
 
-const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated }) => {
+const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ 
+    onProjectCreated, 
+    shouldExpand = false,
+    onExpandChange 
+}) => {
     const [name, setName] = useState('');
     const [prompt, setPrompt] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -16,7 +22,27 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
     const [isLlmProcessing, setIsLlmProcessing] = useState<boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [progressUpdate, setProgressUpdate] = useState<string | null>(null);
-    const [isExpanded, setIsExpanded] = useState<boolean>(false); // New state for expansion
+    const [isExpanded, setIsExpanded] = useState<boolean>(shouldExpand); // Use prop as initial value
+    
+    // Update isExpanded when shouldExpand prop changes
+    useEffect(() => {
+        if (shouldExpand !== undefined && shouldExpand !== isExpanded) {
+            setIsExpanded(shouldExpand);
+        }
+    }, [shouldExpand, isExpanded]);
+    
+    // Notify parent when expansion state changes
+    const handleExpandedChange = (expanded: boolean) => {
+        setIsExpanded(expanded);
+        onExpandChange?.(expanded);
+        
+        // Reset form state when closing
+        if (!expanded) {
+            setError(null);
+            setSuccessMessage(null);
+            setProgressUpdate(null);
+        }
+    };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -181,7 +207,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
             {!isExpanded ? (
                 // Collapsed state - just a line with +
                 <div 
-                    onClick={() => setIsExpanded(true)}
+                    onClick={() => handleExpandedChange(true)}
                     className="flex items-center justify-center py-4 px-6 bg-white/10 border border-white/20 rounded-xl cursor-pointer hover:bg-white/15 transition-all duration-300 backdrop-blur-sm group"
                 >
                     <div className="flex items-center space-x-3 text-white/70 group-hover:text-white">
@@ -201,12 +227,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({ onProjectCreated 
                 <div className="space-y-6 bg-white/5 border border-white/20 rounded-xl p-6 backdrop-blur-sm">
                     <div className="relative">
                         <button
-                            onClick={() => {
-                                setIsExpanded(false);
-                                setError(null);
-                                setSuccessMessage(null);
-                                setProgressUpdate(null);
-                            }}
+                            onClick={() => handleExpandedChange(false)}
                             className="absolute top-0 right-0 text-white/50 hover:text-white/80 transition-colors p-2 rounded-lg hover:bg-white/10"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

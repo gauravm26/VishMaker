@@ -1,10 +1,10 @@
 import json
 import logging
-from mangum import Adapter
+from mangum import Mangum
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from .router import api_router
+from router import api_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +20,11 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://vishmaker.com",          # Production frontend domain
+        "http://localhost:3000",          # Local development (Create React App)
+        "http://localhost:5173"           # Local development (Vite)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,7 +50,7 @@ def handler(event, context):
         logger.info(f"Lambda invoked with event: {json.dumps(event)}")
         
         # Create Mangum adapter for AWS Lambda
-        asgi_handler = Adapter(app)
+        asgi_handler = Mangum(app)
         
         # Process the event
         response = asgi_handler(event, context)

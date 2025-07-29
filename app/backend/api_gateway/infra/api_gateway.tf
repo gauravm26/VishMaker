@@ -7,13 +7,25 @@ resource "aws_apigatewayv2_api" "main" {
     allow_credentials = true
     allow_headers     = ["*"]
     allow_methods     = ["*"]
-    allow_origins     = ["*"]
+    allow_origins     = ["https://${var.common_config.domain_name}"]
     expose_headers    = ["*"]
     max_age           = 86400
   }
 
   tags = merge(var.common_config.tags, {
     Name = "${var.common_config.project_name}-${var.common_config.environment}-api-gateway"
+  })
+}
+
+# API Gateway Stage
+resource "aws_apigatewayv2_stage" "main" {
+  api_id = aws_apigatewayv2_api.main.id
+  name   = "$default"
+  
+  auto_deploy = true
+  
+  tags = merge(var.common_config.tags, {
+    Name = "${var.common_config.project_name}-${var.common_config.environment}-api-stage"
   })
 }
 
@@ -30,21 +42,21 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   }
 }
 
-# Project API Integration
-resource "aws_apigatewayv2_integration" "user" {
-  api_id           = aws_apigatewayv2_api.main.id
-  integration_type = "AWS_PROXY"
-  integration_uri  = var.lambda_user_api_invoke_arn
-  payload_format_version = "2.0"
-}
+# Project API Integration (commented out - not deployed yet)
+# resource "aws_apigatewayv2_integration" "user" {
+#   api_id           = aws_apigatewayv2_api.main.id
+#   integration_type = "AWS_PROXY"
+#   integration_uri  = var.lambda_user_api_invoke_arn
+#   payload_format_version = "2.0"
+# }
 
-# LLM API Integration
-resource "aws_apigatewayv2_integration" "llm_api" {
-  api_id           = aws_apigatewayv2_api.main.id
-  integration_type = "AWS_PROXY"
-  integration_uri  = var.lambda_llm_api_invoke_arn
-  payload_format_version = "2.0"
-}
+# LLM API Integration (commented out - not deployed yet)
+# resource "aws_apigatewayv2_integration" "llm_api" {
+#   api_id           = aws_apigatewayv2_api.main.id
+#   integration_type = "AWS_PROXY"
+#   integration_uri  = var.lambda_llm_api_invoke_arn
+#   payload_format_version = "2.0"
+# }
 
 # Auth API Integration
 resource "aws_apigatewayv2_integration" "auth_api" {
@@ -54,44 +66,44 @@ resource "aws_apigatewayv2_integration" "auth_api" {
   payload_format_version = "2.0"
 }
 
-# Project API Protected Routes (require authentication)
-resource "aws_apigatewayv2_route" "user_protected_routes" {
-  for_each = toset([
-    "ANY /api/v1/user/projects/{proxy+}",
-    "ANY /api/v1/user/requirements/{proxy+}"
-  ])
-  
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = each.value
-  target    = "integrations/${aws_apigatewayv2_integration.user.id}"
-  
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
+# Project API Protected Routes (commented out - not deployed yet)
+# resource "aws_apigatewayv2_route" "user_protected_routes" {
+#   for_each = toset([
+#     "ANY /user/projects/{proxy+}",
+#     "ANY /user/requirements/{proxy+}"
+#   ])
+#   
+#   api_id    = aws_apigatewayv2_api.main.id
+#   route_key = each.value
+#   target    = "integrations/${aws_apigatewayv2_integration.user.id}"
+#   
+#   authorization_type = "JWT"
+#   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+# }
 
-# LLM API Protected Routes (require authentication)
-resource "aws_apigatewayv2_route" "llm_api_protected_routes" {
-  for_each = toset([
-    "ANY /api/v1/llm/{proxy+}",
-    "ANY /api/v1/code/{proxy+}"
-  ])
-  
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = each.value
-  target    = "integrations/${aws_apigatewayv2_integration.llm_api.id}"
-  
-  authorization_type = "JWT"
-  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
-}
+# LLM API Protected Routes (commented out - not deployed yet)
+# resource "aws_apigatewayv2_route" "llm_api_protected_routes" {
+#   for_each = toset([
+#     "ANY /llm/{proxy+}",
+#     "ANY /code/{proxy+}"
+#   ])
+#   
+#   api_id    = aws_apigatewayv2_api.main.id
+#   route_key = each.value
+#   target    = "integrations/${aws_apigatewayv2_integration.llm_api.id}"
+#   
+#   authorization_type = "JWT"
+#   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+# }
 
 # Auth API Public Routes (no authentication required)
 resource "aws_apigatewayv2_route" "auth_api_public_routes" {
   for_each = toset([
-    "POST /api/v1/auth/signin",
-    "POST /api/v1/auth/signup", 
-    "POST /api/v1/auth/confirm-signup",
-    "POST /api/v1/auth/forgot-password",
-    "POST /api/v1/auth/confirm-forgot-password"
+    "POST /auth/signin",
+    "POST /auth/signup", 
+    "POST /auth/confirm-signup",
+    "POST /auth/forgot-password",
+    "POST /auth/confirm-forgot-password"
   ])
   
   api_id    = aws_apigatewayv2_api.main.id
@@ -102,9 +114,9 @@ resource "aws_apigatewayv2_route" "auth_api_public_routes" {
 # Auth API Protected Routes (require JWT authentication)
 resource "aws_apigatewayv2_route" "auth_api_protected_routes" {
   for_each = toset([
-    "GET /api/v1/auth/me",
-    "POST /api/v1/auth/signout",
-    "POST /api/v1/auth/refresh-token"
+    "GET /auth/me",
+    "POST /auth/signout",
+    "POST /auth/refresh-token"
   ])
   
   api_id    = aws_apigatewayv2_api.main.id
@@ -115,48 +127,48 @@ resource "aws_apigatewayv2_route" "auth_api_protected_routes" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Project API Public Routes (no authentication required)  
-resource "aws_apigatewayv2_route" "user_public_routes" {
-  for_each = toset([
-    "ANY /api/v1/waitlist/{proxy+}"
-  ])
-  
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = each.value
-  target    = "integrations/${aws_apigatewayv2_integration.user.id}"
-}
+# Project API Public Routes (commented out - not deployed yet)
+# resource "aws_apigatewayv2_route" "user_public_routes" {
+#   for_each = toset([
+#     "ANY /waitlist/{proxy+}"
+#   ])
+#   
+#   api_id    = aws_apigatewayv2_api.main.id
+#   route_key = each.value
+#   target    = "integrations/${aws_apigatewayv2_integration.user.id}"
+# }
 
-# Health check routes (both APIs)
+# Health check routes
 resource "aws_apigatewayv2_route" "health_check" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /ping"
-  target    = "integrations/${aws_apigatewayv2_integration.user.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_api.id}"
 }
 
 # Default route for root path
 resource "aws_apigatewayv2_route" "root" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /"
-  target    = "integrations/${aws_apigatewayv2_integration.user.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_api.id}"
 }
 
-# Lambda Permissions for Project API
-resource "aws_lambda_permission" "api_gateway_user" {
-  statement_id  = "AllowAPIGatewayInvokeProjectAPI"
-  action        = "lambda:InvokeFunction"
-  function_name = var.lambda_user_api_function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
+# Lambda Permissions for Project API (commented out - not deployed yet)
+# resource "aws_lambda_permission" "api_gateway_user" {
+#   statement_id  = "AllowAPIGatewayInvokeProjectAPI"
+#   action        = "lambda:InvokeFunction"
+#   function_name = var.lambda_user_api_function_name
+#   principal     = "apigateway.amazonaws.com"
+#   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+# }
 
-# Lambda Permissions for LLM API
-resource "aws_lambda_permission" "api_gateway_llm_api" {
-  statement_id  = "AllowAPIGatewayInvokeLLMAPI"
-  action        = "lambda:InvokeFunction"
-  function_name = var.lambda_llm_api_function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-}
+# Lambda Permissions for LLM API (commented out - not deployed yet)
+# resource "aws_lambda_permission" "api_gateway_llm_api" {
+#   statement_id  = "AllowAPIGatewayInvokeLLMAPI"
+#   action        = "lambda:InvokeFunction"
+#   function_name = var.lambda_llm_api_function_name
+#   principal     = "apigateway.amazonaws.com"
+#   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+# }
 
 # Lambda Permissions for Auth API
 resource "aws_lambda_permission" "api_gateway_auth_api" {

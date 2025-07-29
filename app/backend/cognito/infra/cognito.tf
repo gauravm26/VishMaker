@@ -96,6 +96,6 @@ resource "aws_cognito_user_pool_client" "main" {
 
 # Cognito User Pool Domain
 resource "aws_cognito_user_pool_domain" "main" {
-  domain       = "${var.common_config.domain_name}/auth"
+  domain       = "auth-vishmaker"
   user_pool_id = aws_cognito_user_pool.main.id
 } 

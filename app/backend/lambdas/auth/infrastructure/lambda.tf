@@ -96,7 +96,6 @@ resource "aws_lambda_function" "auth_api" {
       {
         COGNITO_USER_POOL_ID = var.cognito_user_pool_id
         COGNITO_CLIENT_ID    = var.cognito_client_id
-        AWS_REGION          = var.aws_region
       }
     )
   }
@@ -117,8 +116,10 @@ resource "aws_cloudwatch_log_group" "auth_lambda_logs" {
   tags              = var.common_tags
 }
 
-# Lambda permission for API Gateway
+# Lambda permission for API Gateway (only if ARN is provided)
 resource "aws_lambda_permission" "auth_api_gateway_invoke" {
+  count = var.api_gateway_execution_arn != "" ? 1 : 0
+  
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.auth_api.function_name

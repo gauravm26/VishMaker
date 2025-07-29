@@ -23,7 +23,7 @@ resource "aws_lambda_function" "project_api" {
       AWS_REGION = var.common_config.aws_region
       PROJECT_NAME = var.common_config.project_name
       ENVIRONMENT = var.common_config.environment
-      API_V1_STR = "/api/v1"
+      API_V1_STR = ""
     }
   }
 

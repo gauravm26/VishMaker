@@ -5,7 +5,7 @@ from functools import lru_cache
 from botocore.exceptions import ClientError
 from typing import Optional
 
-from . import schemas
+import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +34,39 @@ class CognitoAdapter:
                 ClientId=self.client_id
             )
             
-            auth_result = response['AuthenticationResult']
-            logger.info(f"Successful sign-in for user: {user_credentials.email}")
+            # Check if authentication was successful or if a challenge is required
+            if 'AuthenticationResult' in response:
+                auth_result = response['AuthenticationResult']
+                logger.info(f"Successful sign-in for user: {user_credentials.email}")
+                
+                return {
+                    "user": {
+                        "id": user_credentials.email,
+                        "email": user_credentials.email
+                    },
+                    "access_token": auth_result['AccessToken'],
+                    "refresh_token": auth_result.get('RefreshToken', ''),
+                    "id_token": auth_result.get('IdToken', '')
+                }
             
-            return {
-                "user": {
-                    "id": user_credentials.email,
-                    "email": user_credentials.email
-                },
-                "access_token": auth_result['AccessToken'],
-                "refresh_token": auth_result.get('RefreshToken', ''),
-                "id_token": auth_result.get('IdToken', '')
-            }
+            # Handle challenges
+            elif 'ChallengeName' in response:
+                challenge_name = response['ChallengeName']
+                logger.warning(f"Authentication challenge required for {user_credentials.email}: {challenge_name}")
+                
+                # Different challenges require different handling
+                if challenge_name == 'NEW_PASSWORD_REQUIRED':
+                    raise Exception("NEW_PASSWORD_REQUIRED: User must set a new password")
+                elif challenge_name == 'SMS_MFA':
+                    raise Exception("SMS_MFA: SMS verification required")
+                elif challenge_name == 'SOFTWARE_TOKEN_MFA':
+                    raise Exception("SOFTWARE_TOKEN_MFA: TOTP verification required")
+                else:
+                    raise Exception(f"Authentication challenge required: {challenge_name}")
+            
+            else:
+                logger.error(f"Unexpected response structure: {response}")
+                raise Exception("Unexpected authentication response format")
             
         except ClientError as e:
             error_code = e.response['Error']['Code']

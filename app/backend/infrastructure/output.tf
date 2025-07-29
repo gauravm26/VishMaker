@@ -18,52 +18,7 @@ output "aws_region" {
   value       = var.aws_region
 }
 
-# VPC and Networking
-output "vpc_id" {
-  description = "ID of the VPC"
-  value       = aws_vpc.main.id
-}
 
-output "vpc_cidr" {
-  description = "CIDR block of the VPC"
-  value       = aws_vpc.main.cidr_block
-}
-
-output "internet_gateway_id" {
-  description = "ID of the Internet Gateway"
-  value       = aws_internet_gateway.main.id
-}
-
-output "nat_gateway_id" {
-  description = "ID of the NAT Gateway"
-  value       = aws_nat_gateway.main.id
-}
-
-output "public_subnet_ids" {
-  description = "List of public subnet IDs"
-  value       = aws_subnet.public[*].id
-}
-
-output "private_subnet_ids" {
-  description = "List of private subnet IDs"
-  value       = aws_subnet.private[*].id
-}
-
-output "database_subnet_ids" {
-  description = "List of database subnet IDs"
-  value       = aws_subnet.database[*].id
-}
-
-# Security Groups
-output "lambda_security_group_id" {
-  description = "Security group ID for Lambda functions"
-  value       = aws_security_group.lambda.id
-}
-
-output "database_security_group_id" {
-  description = "Security group ID for database"
-  value       = aws_security_group.database.id
-}
 
 # S3 Configuration Bucket
 output "config_bucket_name" {
@@ -86,98 +41,25 @@ output "config_object_key" {
   value       = aws_s3_object.app_config.key
 }
 
-# Secrets Manager
-output "llm_secret_arn" {
-  description = "ARN of the LLM API keys secret"
-  value       = aws_secretsmanager_secret.llm_api_keys.arn
-}
-
-output "llm_secret_name" {
-  description = "Name of the LLM API keys secret"
-  value       = aws_secretsmanager_secret.llm_api_keys.name
-}
-
 # Cognito Module Outputs
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
-  value       = module.cognito.user_pool_id
+  value       = module.cognito.cognito_user_pool_id
 }
 
 output "cognito_user_pool_arn" {
   description = "Cognito User Pool ARN"
-  value       = module.cognito.user_pool_arn
+  value       = module.cognito.cognito_user_pool_arn
 }
 
 output "cognito_user_pool_client_id" {
   description = "Cognito User Pool Client ID"
-  value       = module.cognito.user_pool_client_id
+  value       = module.cognito.cognito_user_pool_client_id
 }
 
 output "cognito_user_pool_domain" {
   description = "Cognito User Pool Domain"
-  value       = module.cognito.user_pool_domain
-}
-
-# RDS Module Outputs
-output "db_instance_endpoint" {
-  description = "Database instance endpoint"
-  value       = module.rds.db_instance_endpoint
-}
-
-output "db_instance_arn" {
-  description = "Database instance ARN"
-  value       = module.rds.db_instance_arn
-}
-
-output "db_instance_id" {
-  description = "Database instance ID"
-  value       = module.rds.db_instance_id
-}
-
-output "db_secret_arn" {
-  description = "Database credentials secret ARN"
-  value       = module.rds.db_secret_arn
-}
-
-output "database_name" {
-  description = "Database name"
-  value       = module.rds.db_name
-}
-
-output "database_username" {
-  description = "Database username"
-  value       = module.rds.db_username
-}
-
-# Lambda Module Outputs
-output "project_api_function_name" {
-  description = "Project API Lambda function name"
-  value       = module.project_api_lambda.lambda_function_name
-}
-
-output "project_api_function_arn" {
-  description = "Project API Lambda function ARN"
-  value       = module.project_api_lambda.lambda_function_arn
-}
-
-output "project_api_invoke_arn" {
-  description = "Project API Lambda invoke ARN"
-  value       = module.project_api_lambda.lambda_invoke_arn
-}
-
-output "llm_api_function_name" {
-  description = "LLM API Lambda function name"
-  value       = module.llm_api_lambda.lambda_function_name
-}
-
-output "llm_api_function_arn" {
-  description = "LLM API Lambda function ARN"
-  value       = module.llm_api_lambda.lambda_function_arn
-}
-
-output "llm_api_invoke_arn" {
-  description = "LLM API Lambda invoke ARN"
-  value       = module.llm_api_lambda.lambda_invoke_arn
+  value       = module.cognito.cognito_user_pool_domain
 }
 
 # API Gateway Module Outputs
@@ -195,6 +77,8 @@ output "api_gateway_execution_arn" {
   description = "API Gateway execution ARN"
   value       = module.api_gateway.api_gateway_execution_arn
 }
+
+
 
 # Resource Names (useful for other services)
 output "resource_name_prefix" {

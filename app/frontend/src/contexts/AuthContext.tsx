@@ -88,16 +88,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async (): Promise<void> => {
     try {
-      await apiClient('/auth/signout', { 
-        method: 'POST',
-        requireAuth: true
-      });
+      // Only attempt API signout if we have a valid token
+      const token = TokenManager.getToken();
+      if (token && !TokenManager.isTokenExpired(token)) {
+        await apiClient('/auth/signout', { 
+          method: 'POST',
+          body: { session_token: token },
+          requireAuth: true
+        });
+      }
     } catch (error) {
-      console.error('Sign out error:', error);
+      // Log the error but don't throw it - local signout should always work
+      console.warn('Remote sign out failed, but local sign out will proceed:', error);
     } finally {
-      // Always clear tokens and user state
+      // Always clear tokens and user state regardless of API call result
       setUser(null);
       TokenManager.clearTokens();
+      
+      // Redirect to home page after signout
+      window.location.href = '/';
     }
   };
 
