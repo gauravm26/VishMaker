@@ -9,7 +9,7 @@ from features.requirement_generation.core.services import req_gen_service, Requi
 from features.requirement_generation.api import schemas # API Schemas
 
 router = APIRouter(
-    prefix="/requirements", # Endpoint group: /requirements/...
+    prefix="/requirements", # Endpoint group: /api/v1/requirements/...
     tags=["Requirement Generation"] # Tag for OpenAPI docs
 )
 

@@ -41,42 +41,51 @@ output "config_object_key" {
   value       = aws_s3_object.app_config.key
 }
 
-# Cognito Module Outputs
+# Cognito Outputs
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
-  value       = module.cognito.cognito_user_pool_id
+  value       = aws_cognito_user_pool.main.id
 }
 
 output "cognito_user_pool_arn" {
   description = "Cognito User Pool ARN"
-  value       = module.cognito.cognito_user_pool_arn
+  value       = aws_cognito_user_pool.main.arn
 }
 
 output "cognito_user_pool_client_id" {
   description = "Cognito User Pool Client ID"
-  value       = module.cognito.cognito_user_pool_client_id
+  value       = aws_cognito_user_pool_client.main.id
 }
 
 output "cognito_user_pool_domain" {
   description = "Cognito User Pool Domain"
-  value       = module.cognito.cognito_user_pool_domain
+  value       = aws_cognito_user_pool_domain.main.domain
 }
 
-# API Gateway Module Outputs
+# API Gateway Outputs
 output "api_gateway_id" {
   description = "API Gateway ID"
-  value       = module.api_gateway.api_gateway_id
+  value       = aws_apigatewayv2_api.main.id
 }
 
 output "api_gateway_endpoint" {
   description = "API Gateway endpoint URL"
-  value       = module.api_gateway.api_gateway_endpoint
+  value       = aws_apigatewayv2_api.main.api_endpoint
 }
 
 output "api_gateway_execution_arn" {
   description = "API Gateway execution ARN"
-  value       = module.api_gateway.api_gateway_execution_arn
+  value       = aws_apigatewayv2_api.main.execution_arn
 }
+
+output "flattened_routes" {
+  value = local.flattened_routes
+}
+
+output "api_routes" {
+  value = local.api_routes
+}
+
 
 # LLM Lambda Module Outputs
 output "llm_lambda_function_name" {

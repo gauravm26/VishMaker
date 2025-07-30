@@ -46,6 +46,16 @@ variable "lambda_auth_api_function_name" {
   type        = string
 }
 
+variable "lambda_projects_api_invoke_arn" {
+  description = "Projects API Lambda invoke ARN for API Gateway integration"
+  type        = string
+}
+
+variable "lambda_projects_api_function_name" {
+  description = "Projects API Lambda function name for permissions"
+  type        = string
+}
+
 # Cognito Integration Variables
 variable "cognito_user_pool_id" {
   description = "Cognito User Pool ID for JWT authorizer"

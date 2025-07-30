@@ -28,12 +28,12 @@ print_usage() {
 LAMBDA_TO_BUILD="${1:-all}"
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "users" "llm")
-DEFAULT_LAMBDAS=("auth" "llm")  # Default lambdas to build
+AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects")
+DEFAULT_LAMBDAS=("auth" "llm" "projects")  # Default lambdas to build
 
 # Validate lambda selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|all|default)
+    auth|users|llm|projects|all|default)
         # Valid selection
         ;;
     *)
@@ -117,6 +117,10 @@ build_lambda_package() {
         "llm")
             echo -e "${YELLOW}📋 LLM lambda is self-contained with built-in features${NC}"
             # LLM lambda doesn't need external dependencies
+            ;;
+        "projects")
+            echo -e "${YELLOW}📋 Projects lambda is self-contained with built-in features${NC}"
+            # Projects lambda doesn't need external dependencies
             ;;
         *)
             echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"

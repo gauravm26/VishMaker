@@ -54,8 +54,8 @@ AUTO_CONFIRM=true
 FORCE_REBUILD=false
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "users" "llm")
-DEFAULT_LAMBDAS=("auth" "llm")  # Default lambdas to deploy
+AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects")
+DEFAULT_LAMBDAS=("auth" "llm" "projects")  # Default lambdas to deploy
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -90,7 +90,7 @@ done
 
 # Validate lambda selection
 case $LAMBDA_TO_DEPLOY in
-    auth|users|llm|frontend|all|default)
+    auth|users|llm|projects|frontend|all|default)
         # Valid selection
         ;;
     *)
@@ -211,7 +211,7 @@ build_lambda() {
 
 # Build lambdas based on selection
 case $LAMBDA_TO_DEPLOY in
-    auth|users|llm)
+    auth|users|llm|projects)
         if ! build_lambda "$LAMBDA_TO_DEPLOY" "$FORCE_REBUILD"; then
             exit 1
         fi
@@ -262,7 +262,7 @@ verify_lambda_package() {
 
 # Verify packages based on selection
 case $LAMBDA_TO_DEPLOY in
-    auth|users|llm)
+    auth|users|llm|projects)
         verify_lambda_package "$LAMBDA_TO_DEPLOY"
         ;;
     default)

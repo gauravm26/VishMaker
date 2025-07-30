@@ -20,7 +20,7 @@ print("🔍 DEBUG: Starting to import modules in services.py")
 # Add shared utilities to path
 current_dir = Path(__file__).parent
 lambdas_dir = current_dir.parent.parent
-shared_dir = lambdas_dir / "shared"
+shared_dir = lambdas_dir / "shared" / "code"
 sys.path.append(str(shared_dir))
 
 print(f"🔍 DEBUG: Current directory: {current_dir}")

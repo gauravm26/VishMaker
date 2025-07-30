@@ -42,13 +42,13 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   }
 }
 
-# Project API Integration (commented out - not deployed yet)
-# resource "aws_apigatewayv2_integration" "user" {
-#   api_id           = aws_apigatewayv2_api.main.id
-#   integration_type = "AWS_PROXY"
-#   integration_uri  = var.lambda_user_api_invoke_arn
-#   payload_format_version = "2.0"
-# }
+# Projects API Integration
+resource "aws_apigatewayv2_integration" "projects_api" {
+  api_id           = aws_apigatewayv2_api.main.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = var.lambda_projects_api_invoke_arn
+  payload_format_version = "2.0"
+}
 
 # LLM API Integration
 resource "aws_apigatewayv2_integration" "llm_api" {
@@ -129,16 +129,23 @@ resource "aws_apigatewayv2_route" "auth_api_protected_routes" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-# Project API Public Routes (commented out - not deployed yet)
-# resource "aws_apigatewayv2_route" "user_public_routes" {
-#   for_each = toset([
-#     "ANY /waitlist/{proxy+}"
-#   ])
-#   
-#   api_id    = aws_apigatewayv2_api.main.id
-#   route_key = each.value
-#   target    = "integrations/${aws_apigatewayv2_integration.user.id}"
-# }
+# Projects API Protected Routes (require JWT authentication)
+resource "aws_apigatewayv2_route" "projects_api_protected_routes" {
+  for_each = toset([
+    "POST /projects",
+    "GET /projects",
+    "GET /projects/{proxy+}",
+    "PUT /projects/{proxy+}",
+    "DELETE /projects/{proxy+}"
+  ])
+  
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.projects_api.id}"
+  
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
 
 # Health check routes
 resource "aws_apigatewayv2_route" "health_check" {
@@ -154,14 +161,14 @@ resource "aws_apigatewayv2_route" "root" {
   target    = "integrations/${aws_apigatewayv2_integration.auth_api.id}"
 }
 
-# Lambda Permissions for Project API (commented out - not deployed yet)
-# resource "aws_lambda_permission" "api_gateway_user" {
-#   statement_id  = "AllowAPIGatewayInvokeProjectAPI"
-#   action        = "lambda:InvokeFunction"
-#   function_name = var.lambda_user_api_function_name
-#   principal     = "apigateway.amazonaws.com"
-#   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
-# }
+# Lambda Permissions for Projects API
+resource "aws_lambda_permission" "api_gateway_projects_api" {
+  statement_id  = "AllowAPIGatewayInvokeProjectsAPI"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_projects_api_function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
 
 # Lambda Permissions for LLM API
 resource "aws_lambda_permission" "api_gateway_llm_api" {
