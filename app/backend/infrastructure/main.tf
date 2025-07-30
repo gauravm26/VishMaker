@@ -127,6 +127,7 @@ locals {
         }
       ]
       lambda_arn = module.auth_api_lambda.lambda_auth_function_invoke_arn
+      function_name = module.auth_api_lambda.lambda_auth_function_name
     }
     project_api = {
       routes = [
@@ -136,7 +137,8 @@ locals {
           auth    = "JWT"
         }
       ]
-      lambda_arn = local.lambda_arns_by_key["projects_api"]
+      lambda_arn = aws_lambda_function.lambda["projects_api"].invoke_arn
+      function_name = aws_lambda_function.lambda["projects_api"].function_name
     }
     llm_api = {
       routes = [
@@ -147,6 +149,7 @@ locals {
         }
       ]
       lambda_arn = module.llm_api_lambda.lambda_llm_function_invoke_arn
+      function_name = module.llm_api_lambda.lambda_llm_function_name
     }
   }
   flattened_routes = {
@@ -199,7 +202,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   api_id           = aws_apigatewayv2_api.main.id
   authorizer_type  = "JWT"
   identity_sources = ["$request.header.Authorization"]
-  name             = "${var.common_config.project_name}-${var.common_config.environment}-cognito-authorizer"
+  name             = "${local.common_config.project_name}-${local.common_config.environment}-cognito-authorizer"
 
   jwt_configuration {
     audience = [aws_cognito_user_pool_client.main.id]
@@ -232,7 +235,7 @@ resource "aws_apigatewayv2_integration" "api" {
 
 resource "aws_lambda_permission" "apigw_permissions" {
   for_each = {
-    for key, val in local.api_routes : key => val.lambda_arn
+    for key, val in local.api_routes : key => val.function_name
   }
 
   statement_id  = "AllowAPIGatewayInvoke_${each.key}"
@@ -290,7 +293,7 @@ module "route53" {
   source = "../route53/infra"
 
   common_config        = local.common_config
-  api_gateway_endpoint = module.api_gateway.api_gateway_endpoint
+  api_gateway_endpoint = aws_apigatewayv2_stage.main.invoke_url
 }
 
 
@@ -300,7 +303,7 @@ module "route53" {
 
 # Cognito User Pool
 resource "aws_cognito_user_pool" "main" {
-  name = "${var.common_config.name_prefix}-user-pool"
+  name = "${local.common_config.name_prefix}-user-pool"
 
   # Password policy
   password_policy {
@@ -349,12 +352,12 @@ resource "aws_cognito_user_pool" "main" {
     advanced_security_mode = "OFF"
   }
 
-  tags = var.common_config.tags
+  tags = local.common_config.tags
 }
 
 # Cognito User Pool Client
 resource "aws_cognito_user_pool_client" "main" {
-  name         = "${var.common_config.name_prefix}-user-pool-client"
+  name         = "${local.common_config.name_prefix}-user-pool-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
   # Client settings
@@ -412,32 +415,32 @@ locals {
     runtime            = "python3.11"
     common_tags        = var.common_tags
     handler            = "main.handler"
-    root_path          = "${path.root}/scripts/dist"
+    root_path          = "${path.module}/../scripts/dist"
     log_retention_days = 1
   }
   lambdas = {
     projects_api = {
-      lambda_name = "projects-api"
+      lambda_name = "projects"
       environment_variables = {
         DYNAMODB_TABLE_NAME = aws_dynamodb_table.tables["projects"].name        
       }
       dynamo_access_all = true
     },
-    requirements_api = {
-      lambda_name = "requirements-api"
-      environment_variables = {
-        DYNAMODB_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name
+    #requirements_api = {
+    #  lambda_name = "requirements"
+    #  environment_variables = {
+    #    DYNAMODB_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name
         
-      }
-      dynamo_access_all = true
-    }
+    #  }
+    #  dynamo_access_all = true
+    #}
   }
   all_dynamo_tables_arns = [
     for table in aws_dynamodb_table.tables : table.arn
   ]
   lambda_arns_by_key = {
     for k, lambda in aws_lambda_function.lambda :
-    k => lambda.arn
+    k => lambda.invoke_arn
   }
   lambda_arns_by_function_name = {
     for k, lambda in aws_lambda_function.lambda :
@@ -461,13 +464,14 @@ module "auth_api_lambda" {
   lambda_environment_variables = {}
 
   # Integration dependencies
-  cognito_user_pool_id  = module.cognito.cognito_user_pool_id
-  cognito_client_id     = module.cognito.cognito_user_pool_client_id
-  cognito_user_pool_arn = module.cognito.cognito_user_pool_arn
+  cognito_user_pool_id  = aws_cognito_user_pool.main.id
+  cognito_client_id     = aws_cognito_user_pool_client.main.id
+  cognito_user_pool_arn = aws_cognito_user_pool.main.arn
   # api_gateway_execution_arn will be added after API Gateway is created to avoid circular dependency
 
   depends_on = [
-    module.cognito
+    aws_cognito_user_pool.main,
+    aws_cognito_user_pool_client.main
   ]
 }
 
@@ -493,13 +497,14 @@ module "llm_api_lambda" {
   }
 
   # API Gateway integration (will be updated after API Gateway is created)
-  api_gateway_execution_arn = module.api_gateway.api_gateway_execution_arn
+  api_gateway_execution_arn = aws_apigatewayv2_api.main.execution_arn
 
   # S3 Configuration
   config_bucket_arn = aws_s3_bucket.configs.arn
 
   depends_on = [
-    module.cognito,
+    aws_cognito_user_pool.main,
+    aws_cognito_user_pool_client.main,
     aws_s3_bucket.configs,
     aws_s3_object.app_config
   ]

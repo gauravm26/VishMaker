@@ -158,7 +158,7 @@ build_lambda_package() {
 
 # Build Lambda packages based on selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm)
+    auth|users|llm|projects)
         build_lambda_package "$LAMBDA_TO_BUILD"
         ;;
     default)

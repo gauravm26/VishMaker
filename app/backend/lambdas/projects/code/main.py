@@ -55,9 +55,9 @@ def get_table():
     """Get DynamoDB table instance"""
     global table_name
     if table_name is None:
-        table_name = boto3.client('lambda').get_function_configuration(
-            FunctionName='vishmaker-prod-projects-api'
-        )['Environment']['Variables']['DYNAMODB_TABLE_NAME']
+        # Get table name from environment variable
+        import os
+        table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'prod-vishmaker-projects')
     return dynamodb.Table(table_name)
 
 @app.get("/")
@@ -107,10 +107,11 @@ def get_projects(skip: int = 0, limit: int = 100, user_id: Optional[str] = None)
             )
         else:
             # Scan all projects
-            response = table.scan(
-                Limit=limit,
-                ExclusiveStartKey={'id': str(skip)} if skip > 0 else None
-            )
+            scan_params = {'Limit': limit}
+            if skip > 0:
+                scan_params['ExclusiveStartKey'] = {'id': str(skip)}
+            
+            response = table.scan(**scan_params)
         
         projects = [Project(**item) for item in response.get('Items', [])]
         logger.info(f"✅ Retrieved {len(projects)} projects")
@@ -199,14 +200,16 @@ def delete_project(project_id: str):
 def handler(event, context):
     """AWS Lambda handler"""
     try:
-        # Set table name from environment
-        global table_name
-        if table_name is None:
-            table_name = context.environment_variables.get('DYNAMODB_TABLE_NAME')
+        logger.info(f"Lambda invoked with event: {json.dumps(event)}")
         
-        # Create Mangum handler
+        # Create Mangum adapter for AWS Lambda
         asgi_handler = Mangum(app, lifespan="off")
-        return asgi_handler(event, context)
+        
+        # Process the event
+        response = asgi_handler(event, context)
+        
+        logger.info(f"Lambda response: {json.dumps(response)}")
+        return response
         
     except Exception as e:
         logger.error(f"❌ Lambda handler error: {str(e)}")
