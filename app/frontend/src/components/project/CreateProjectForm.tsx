@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../lib/apiClient';
 import { ProjectCreatePayload, Project } from '../../types/project';
 import LlmService, { LlmResponse } from '../../lib/llmService';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CreateProjectFormProps {
     onProjectCreated: () => void;
@@ -15,6 +16,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
     shouldExpand = false,
     onExpandChange 
 }) => {
+    const { user } = useAuth();
     const [name, setName] = useState('');
     const [prompt, setPrompt] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -134,9 +136,23 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
             return;
         }
 
+        // Get client IP address for user ID
+        const getClientIP = async () => {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip;
+            } catch (error) {
+                console.error('Failed to get IP address:', error);
+                return 'unknown-ip';
+            }
+        };
+        
+        const clientIP = await getClientIP();
+        const userId = `ip-${clientIP}`;
+        
         setIsSubmitting(true);
         setError(null);
-        setProgressUpdate("Creating project...");
         
         try {
             // First create the project
@@ -145,11 +161,10 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                 body: {
                     name: name.trim(),
                     initial_prompt: text.trim(),
+                    user_id: userId, // Use IP address as user ID
                 } as ProjectCreatePayload,
             });
 
-            setProgressUpdate("Project created. Generating user flow...");
-            
             // Process with LLM
             try {
                 console.log(`Processing with ${componentId}... for project ID: ${project.id}`);
@@ -337,17 +352,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                             </div>
                         )}
                         
-                        {progressUpdate && (
-                            <div className="p-4 bg-blue-500/10 border border-blue-400/30 rounded-xl backdrop-blur-sm">
-                                <p className="text-sm text-blue-300 flex items-center">
-                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    {progressUpdate}
-                                </p>
-                            </div>
-                        )}
+
 
                         {/* Submit Button */}
                         <div className="pt-2">

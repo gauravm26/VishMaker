@@ -281,15 +281,11 @@
       },
       "component2": {
         "componentId": "gen_userflow",
-        "targetTable": "user_flow",
+        "targetTable": "user_flows",
         "modelInstructions": [
           {
             "model": "model2",
             "instruction": "instruction2"
-          },
-          {
-            "model": "model1",
-            "instruction": "instruction3"
           }
         ],
         "outputModel": {

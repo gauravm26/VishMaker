@@ -76,6 +76,39 @@ resource "aws_iam_role_policy" "llm_lambda_s3_policy" {
   })
 }
 
+# IAM policy for DynamoDB access
+resource "aws_iam_role_policy" "llm_lambda_dynamodb_policy" {
+  name = "${local.function_name}-dynamodb-policy"
+  role = aws_iam_role.llm_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-user_flows",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-user_flows/index/*",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-high_level_requirements",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-high_level_requirements/index/*",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-low_level_requirements",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-low_level_requirements/index/*",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-test_cases",
+          "arn:aws:dynamodb:${var.aws_region}:*:table/prod-vishmaker-test_cases/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 
 # Lambda function
 resource "aws_lambda_function" "llm_api" {
@@ -97,6 +130,7 @@ resource "aws_lambda_function" "llm_api" {
     aws_iam_role_policy_attachment.llm_lambda_basic_execution,
     aws_iam_role_policy.llm_lambda_bedrock_policy,
     aws_iam_role_policy.llm_lambda_s3_policy,
+    aws_iam_role_policy.llm_lambda_dynamodb_policy,
     aws_cloudwatch_log_group.llm_lambda_logs
   ]
 

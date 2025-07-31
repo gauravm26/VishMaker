@@ -28,12 +28,12 @@ print_usage() {
 LAMBDA_TO_BUILD="${1:-all}"
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects")
-DEFAULT_LAMBDAS=("auth" "llm" "projects")  # Default lambdas to build
+AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects" "requirements")
+DEFAULT_LAMBDAS=("auth" "llm" "projects" "requirements")  # Default lambdas to build
 
 # Validate lambda selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|projects|all|default)
+    auth|users|llm|projects|requirements|all|default)
         # Valid selection
         ;;
     *)
@@ -119,8 +119,14 @@ build_lambda_package() {
             # LLM lambda doesn't need external dependencies
             ;;
         "projects")
-            echo -e "${YELLOW}📋 Projects lambda is self-contained with built-in features${NC}"
-            # Projects lambda doesn't need external dependencies
+            echo -e "${YELLOW}📋 Projects lambda needs DynamoDB module${NC}"
+            # Copy DynamoDB package for projects lambda
+            cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
+            ;;
+        "requirements")
+            echo -e "${YELLOW}📋 Requirements lambda needs DynamoDB module${NC}"
+            # Copy DynamoDB package for requirements lambda
+            cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
             ;;
         *)
             echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"
@@ -158,7 +164,7 @@ build_lambda_package() {
 
 # Build Lambda packages based on selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|projects)
+    auth|users|llm|projects|requirements)
         build_lambda_package "$LAMBDA_TO_BUILD"
         ;;
     default)

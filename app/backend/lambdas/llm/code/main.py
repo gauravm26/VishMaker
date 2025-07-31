@@ -70,6 +70,7 @@ async def process_llm(request: Request):
         project_id = body.get("project_id")
         parent_uiid = body.get("parent_uiid")
         save_to_db = body.get("save_to_db", False)
+        target_table = body.get("target_table")  # Optional, will be determined from config if not provided
         
         logger.info(f"🔧 Processing component: {component_id}")
         logger.info(f"📝 Text length: {len(text)}")
@@ -81,7 +82,9 @@ async def process_llm(request: Request):
             component_id=component_id,
             text=text,
             project_id=project_id,
-            parent_uiid=parent_uiid
+            parent_uiid=parent_uiid,
+            save_to_db=save_to_db,
+            target_table=target_table
         )
         
         logger.info("✅ LLM processing completed successfully")

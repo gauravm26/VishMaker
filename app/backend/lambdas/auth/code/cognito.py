@@ -39,9 +39,15 @@ class CognitoAdapter:
                 auth_result = response['AuthenticationResult']
                 logger.info(f"Successful sign-in for user: {user_credentials.email}")
                 
+                # Get the actual user ID from Cognito
+                user_info = self.cognito_client.get_user(
+                    AccessToken=auth_result['AccessToken']
+                )
+                user_id = user_info['Username']  # This is the actual Cognito user ID
+                
                 return {
                     "user": {
-                        "id": user_credentials.email,
+                        "id": user_id,  # Use the actual Cognito user ID
                         "email": user_credentials.email
                     },
                     "access_token": auth_result['AccessToken'],
@@ -257,10 +263,11 @@ class CognitoAdapter:
             # Extract user attributes
             user_attributes = {attr['Name']: attr['Value'] for attr in response['UserAttributes']}
             email = user_attributes.get('email', '')
+            user_id = response['Username']  # This is the actual Cognito user ID
             
-            logger.info(f"Successfully retrieved current user: {email}")
+            logger.info(f"Successfully retrieved current user: {email} (ID: {user_id})")
             return {
-                "id": email,
+                "id": user_id,  # Use the actual Cognito user ID
                 "email": email
             }
             

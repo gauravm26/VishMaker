@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
+from dynamodb.code.schemas import ProjectCreate, ProjectUpdate, Project
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,23 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic models for DynamoDB
-class ProjectCreate(BaseModel):
-    name: str
-    initial_prompt: Optional[str] = None
-    user_id: Optional[str] = None
-
-class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    initial_prompt: Optional[str] = None
-
-class Project(BaseModel):
-    id: str
-    name: str
-    initial_prompt: Optional[str] = None
-    user_id: Optional[str] = None
-    created_at: str
-    updated_at: Optional[str] = None
+# Pydantic models are now imported from dynamodb.code.schemas
 
 def get_table():
     """Get DynamoDB table instance"""
@@ -69,6 +54,9 @@ def root():
 def create_project(project: ProjectCreate):
     """Create a new project"""
     try:
+        # Debug logging
+        logger.info(f"🔍 Received project data: name={project.name}, user_id={project.user_id}, type(user_id)={type(project.user_id)}")
+        
         table = get_table()
         project_id = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
@@ -81,6 +69,8 @@ def create_project(project: ProjectCreate):
             'created_at': timestamp,
             'updated_at': timestamp
         }
+        
+        logger.info(f"🔍 Item to be inserted: {item}")
         
         table.put_item(Item=item)
         logger.info(f"✅ Project created: {project_id}")

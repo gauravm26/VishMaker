@@ -226,22 +226,22 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
         <div
             className={`
                 ${getContainerWidth()}
-                border-2 rounded-xl shadow-lg text-xs sm:text-sm bg-transparent
-                ${selected ? 'border-purple-500' : 'border-gray-300 dark:border-gray-600'}
+                border-2 rounded-xl shadow-lg text-xs sm:text-sm bg-white
+                ${selected ? 'border-purple-500' : 'border-gray-300'}
                 overflow-hidden
                 relative
             `}
             onContextMenu={(e) => displayContextMenu(e, 'background')} // Context menu on whole node background
         >
             {/* Node Header */}
-            <div className="bg-gray-200 dark:bg-gray-700 px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-300 dark:border-gray-600 font-bold text-center text-sm sm:text-base relative text-gray-900 dark:text-gray-100 flex justify-between items-center">
+            <div className="bg-gray-200 px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-300 font-bold text-center text-sm sm:text-base relative text-gray-900 flex justify-between items-center">
                 <div className="flex-1 text-center truncate pr-2">
                     {title}
                 </div>
                 
                 {/* Minimize/Maximize Button */}
                 <button 
-                    className="touch-target flex-shrink-0 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 focus:outline-none transition-colors p-1"
+                    className="touch-target flex-shrink-0 text-gray-700 hover:text-gray-900 focus:outline-none transition-colors p-1"
                     onClick={handleToggleSize}
                     title={isMinimized ? "Show all rows" : "Show fewer rows"}
                 >
@@ -275,48 +275,49 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
             </div>
 
             {/* Node Body - Table Container */}
-            <div className="text-gray-900 dark:text-gray-200">
-                {/* Responsive Table Wrapper */}
-                <div className="table-responsive max-w-full">
-                    {/* Header Row */}
-                    <div className="flex bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100">
-                        {sortedColumns.map(col => (
-                            <div 
-                                key={col.key} 
-                                className={`
-                                    ${getResponsiveWidth(col.width, isCompact)}
-                                    py-1 px-2 sm:py-2 sm:px-3 font-semibold relative group cursor-pointer
-                                    border-r border-gray-300 dark:border-gray-600 last:border-r-0
-                                    flex-shrink-0
-                                `}
-                                onDoubleClick={() => handleHeaderDoubleClick(col.key, col.label)}
-                                onContextMenu={(e) => displayContextMenu(e, 'header', undefined, col.key)}
-                            >
-                                {editingHeader === col.key ? (
-                                    <input
-                                        type="text"
-                                        value={editValue}
-                                        onChange={handleInputChange}
-                                        onBlur={handleInputBlur}
-                                        onKeyDown={handleInputKeyDown}
-                                        autoFocus
-                                        className="w-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-xs sm:text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded"
-                                    />
-                                ) : (
-                                    <span className="truncate block" title={col.label}>
-                                        {col.label}
-                                    </span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+            <div className="text-gray-900">
+                {/* Responsive Table Wrapper with horizontal scroll */}
+                <div className="overflow-x-auto max-w-full">
+                    <div className="min-w-full">
+                        {/* Header Row */}
+                        <div className="flex bg-gray-100 border-b border-gray-300 text-gray-800">
+                            {sortedColumns.map(col => (
+                                <div 
+                                    key={col.key} 
+                                    className={`
+                                        ${getResponsiveWidth(col.width, isCompact)}
+                                        py-1 px-2 sm:py-2 sm:px-3 font-semibold relative group cursor-pointer
+                                        border-r border-gray-300 last:border-r-0
+                                        flex-shrink-0
+                                    `}
+                                    onDoubleClick={() => handleHeaderDoubleClick(col.key, col.label)}
+                                    onContextMenu={(e) => displayContextMenu(e, 'header', undefined, col.key)}
+                                >
+                                    {editingHeader === col.key ? (
+                                        <input
+                                            type="text"
+                                            value={editValue}
+                                            onChange={handleInputChange}
+                                            onBlur={handleInputBlur}
+                                            onKeyDown={handleInputKeyDown}
+                                            autoFocus
+                                            className="w-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
+                                        />
+                                    ) : (
+                                        <span className="truncate block" title={col.label}>
+                                            {col.label}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
 
-                    {/* Table Body */}
-                    <div className="max-h-80 sm:max-h-96 overflow-y-auto scrollbar-hide">
+                        {/* Table Body */}
+                        <div className="scrollbar-hide">
                         {rows.map((row, rowIndex) => (
                             <div
                                 key={`row-${row.id}-${rowIndex}`}
-                                className="flex border-b border-gray-200 dark:border-gray-700 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                                className="flex border-b border-gray-200 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50"
                                 onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
                                 title={`UIID: ${row.uiid || row.id}`}
                                 data-row-id={row.id}
@@ -333,7 +334,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             key={`cell-${row.id}-${col.key}-${rowIndex}-${colIndex}`}
                                             className={`
                                                 ${getResponsiveWidth(col.width, isCompact)}
-                                                py-1 px-2 sm:py-2 sm:px-3                                                 border-r border-gray-200 dark:border-gray-600 
+                                                py-1 px-2 sm:py-2 sm:px-3                                                 border-r border-gray-200 
                                                 ${isLastCol ? 'border-r-0' : ''} 
                                                 ${col.editable ? 'cursor-text' : ''} 
                                                 ${isEditing ? 'p-0' : ''}
@@ -349,7 +350,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                     onBlur={handleInputBlur}
                                                     onKeyDown={handleInputKeyDown}
                                                     autoFocus
-                                                    className="w-full h-full outline-none border border-blue-400 dark:border-blue-500 px-1 py-0 m-0 text-xs sm:text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded"
+                                                    className="w-full h-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
                                                 />
                                             ) : (
                                                 <span className="truncate block w-full" title={String(cellValue)}>
@@ -382,12 +383,13 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                         ))}
                     </div>
                 </div>
+            </div>
                 
                 {/* Show count of hidden rows if minimized */}
                 {isMinimized && allRows.length > rows.length && (
                     <button
                         onClick={() => actions.onToggleSize(nodeId)}
-                        className="w-full text-center py-2 sm:py-3 text-gray-500 dark:text-gray-400 text-xs sm:text-sm border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                                                        className="w-full text-center py-2 sm:py-3 text-gray-500 text-xs sm:text-sm border-t border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
                     >
                         <span className="inline-flex items-center">
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

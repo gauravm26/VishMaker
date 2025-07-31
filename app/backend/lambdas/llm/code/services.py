@@ -14,6 +14,7 @@ from botocore.exceptions import ClientError
 from pathlib import Path
 import sys
 import os
+from datetime import datetime
 
 print("🔍 DEBUG: Starting to import modules in services.py")
 
@@ -256,7 +257,7 @@ class LLMProcessingService:
             # Return empty config on failure
             return {}
     
-    def process_component(self, component_id: str, text: str, project_id: Optional[int] = None, parent_uiid: Optional[str] = None) -> Dict[str, Any]:
+    def process_component(self, component_id: str, text: str, project_id: Optional[int] = None, parent_uiid: Optional[str] = None, save_to_db: bool = False, target_table: Optional[str] = None) -> Dict[str, Any]:
         """
         Process text with the specified component using LLM.
         
@@ -265,6 +266,8 @@ class LLMProcessingService:
             text: The input text to process
             project_id: Optional project ID for context
             parent_uiid: Optional parent UIID for hierarchical relationships
+            save_to_db: Whether to save the result to DynamoDB
+            target_table: The DynamoDB table to save to (optional, will be determined from config if not provided)
             
         Returns:
             Dictionary containing the processed result and metadata
@@ -293,6 +296,21 @@ class LLMProcessingService:
             print(f"✅ DEBUG: Found component config: {component_config}")
             logger.info(f"Found component config for {component_id}")
             
+            # Get target table from config if not provided
+            if not target_table:
+                target_table = component_config.get("targetTable")
+                print(f"🔍 DEBUG: Got target table from config: {target_table}")
+                logger.info(f"Got target table from config: {target_table}")
+            
+            # Normalize target_table to ensure consistency
+            # Keep the original table names as they are in DynamoDB
+            # if target_table == "high_level_requirements":
+            #     target_table = "high_level_requirement"
+            # elif target_table == "low_level_requirements":
+            #     target_table = "low_level_requirement"
+            # elif target_table == "test_cases":
+            #     target_table = "test_case"
+            
             # Get model instructions
             print(f"🔍 DEBUG: Getting model instructions from component config")
             model_instructions = component_config.get("modelInstructions", [])
@@ -304,6 +322,18 @@ class LLMProcessingService:
             
             print(f"✅ DEBUG: Found {len(model_instructions)} model instructions")
             logger.info(f"Found {len(model_instructions)} model instructions for {component_id}")
+            
+            # Get the output format
+            output_format = component_config.get('outputFormat', 'plain')
+            output_type = output_format.split('_')[0]
+            if output_type == 'columns':
+                noColumns = int(output_format.split('_')[1])
+                outputFormatValue = f"Format the refined text into exactly {noColumns} columns. Each row should be formatted into columns delimited by the pipe character |."
+            else:
+                outputFormatValue = "Output the refined text as a single, continuous block of natural language."
+            
+            print(f"🔍 DEBUG: Output format: {output_format}, Output type: {output_type}, Format value: {outputFormatValue}")
+            logger.info(f"Output format: {output_format}, Output type: {output_type}")
             
             # Process with each model instruction
             results = []
@@ -333,6 +363,9 @@ class LLMProcessingService:
                     print(f"⚠️ DEBUG: Model {model_key} or instruction {instruction_key} not found in config")
                     logger.warning(f"Model {model_key} or instruction {instruction_key} not found in config")
                     continue
+                
+                # Add output format to instruction config
+                instruction_config['output_format'] = outputFormatValue
                 
                 print(f"✅ DEBUG: Found model and instruction configs")
                 logger.info(f"Found model and instruction configs for {model_key}/{instruction_key}")
@@ -392,6 +425,65 @@ class LLMProcessingService:
             print(f"🔍 DEBUG: Final result length: {len(final_result)}")
             logger.info(f"Final result length: {len(final_result)}")
             
+            # Check if we have an output model and if refinement wasn't already handled
+            if component_config and 'outputModel' in component_config:
+                output_model = component_config['outputModel']
+                output_model_key = output_model.get('model')
+                output_instruction_key = output_model.get('instruction')
+                
+                if output_model_key and output_instruction_key:
+                    print(f"🔍 DEBUG: Processing output model: {output_model_key} with instruction: {output_instruction_key}")
+                    logger.info(f"Processing output model: {output_model_key} with instruction: {output_instruction_key}")
+                    
+                    # Get the instruction
+                    output_instruction = None
+                    for instr_key, instr_data in self.config.get("llm", {}).get("instructions", {}).items():
+                        if instr_key == output_instruction_key:
+                            output_instruction = instr_data
+                            output_instruction['output_format'] = outputFormatValue
+                            break
+                    
+                    if output_instruction:
+                        try:
+                            # Build prompt for output refinement
+                            refinement_prompt = self._build_prompt(output_instruction, final_result, project_id, parent_uiid)
+                            print(f"🔍 DEBUG: Refinement prompt: {refinement_prompt}")
+                            # Get output model configuration
+                            output_model_config = self.config.get("llm", {}).get("models", {}).get(output_model_key)
+                            if output_model_config:
+                                output_model_id = output_model_config.get("modelId")
+                                print(f"🔍 DEBUG: Invoking output model: {output_model_id}")
+                                logger.info(f"Invoking output model: {output_model_id}")
+                                
+                                # Get inference ARN for output model if configured
+                                output_inference_arn = self.config.get("cloud", {}).get("aws", {}).get("bedrock_inference_arn")
+                                if output_inference_arn:
+                                    print(f"🔍 DEBUG: Using inference profile ARN for output model: {output_inference_arn}")
+                                else:
+                                    print(f"🔍 DEBUG: No inference profile ARN configured for output model, using model ID directly")
+                                
+                                refined_result = self.bedrock_service.invoke_model(
+                                    model_id=output_model_id,
+                                    prompt=refinement_prompt,
+                                    max_tokens=output_model_config.get("body", {}).get("max_tokens", 2048),
+                                    temperature=output_model_config.get("body", {}).get("temperature", 0.8),
+                                    inference_arn=output_inference_arn
+                                )
+                                
+                                if refined_result:
+                                    final_result = refined_result
+                                    print(f"✅ DEBUG: Successfully processed output refinement")
+                                    logger.info(f"Successfully processed output refinement")
+                                else:
+                                    print(f"⚠️ DEBUG: Output refinement failed, using original result")
+                                    logger.warning(f"Output refinement failed, using original result")
+                            else:
+                                print(f"⚠️ DEBUG: Output model config not found, using original result")
+                                logger.warning(f"Output model config not found, using original result")
+                        except Exception as e:
+                            print(f"⚠️ DEBUG: Output refinement error: {str(e)}, using original result")
+                            logger.warning(f"Output refinement error: {str(e)}, using original result")
+            
             # Generate UIIDs if needed
             generated_uiids = []
             if project_id and parent_uiid:
@@ -414,6 +506,44 @@ class LLMProcessingService:
             
             print(f"✅ DEBUG: Processing completed successfully")
             logger.info(f"Processing completed successfully for {component_id}")
+            
+            # Generate UIIDs and process content if we have a target table
+            generated_uiids = []
+            if target_table and final_result:
+                # Extract items from content and generate UIIDs
+                print(f"🔍 DEBUG: Extracting items from content: {final_result[:200]}...")
+                items = self._extract_items_from_content(final_result)
+                print(f"🔍 DEBUG: Extracted {len(items)} items: {items}")
+                generated_uiids = []
+                
+                for i, item in enumerate(items):
+                    uiid = self._generate_uiid(target_table, i, item.get("name", "") + item.get("description", ""))
+                    generated_uiids.append(uiid)
+                
+                # Update response with generated UIIDs
+                response["generated_uiids"] = generated_uiids
+                print(f"🔍 DEBUG: Generated {len(generated_uiids)} UIIDs: {generated_uiids}")
+                logger.info(f"Generated {len(generated_uiids)} UIIDs for {target_table}")
+            
+            # Save to DynamoDB if requested
+            if save_to_db and project_id and final_result and target_table:
+                try:
+                    print(f"🔍 DEBUG: Saving result to DynamoDB for project {project_id} (type: {type(project_id)}) in table {target_table}")
+                    logger.info(f"Saving result to DynamoDB for project {project_id} (type: {type(project_id)}) in table {target_table}")
+                    
+                    # Save to DynamoDB with generic method
+                    self._save_to_database(project_id, component_id, final_result, target_table, parent_uiid)
+                    
+                    print(f"✅ DEBUG: Successfully saved to DynamoDB")
+                    logger.info(f"Successfully saved to DynamoDB for project {project_id}")
+                    
+                except Exception as e:
+                    error_msg = f"Failed to save to DynamoDB: {str(e)}"
+                    print(f"❌ DEBUG: {error_msg}")
+                    logger.error(error_msg)
+                    # Don't fail the entire request if saving fails
+                    response["save_error"] = error_msg
+            
             return response
             
         except Exception as e:
@@ -489,8 +619,323 @@ class LLMProcessingService:
         print(f"🔍 DEBUG: Built prompt with total length: {len(prompt)}")
         logger.info(f"Built prompt with total length: {len(prompt)}")
         return prompt
-
-# Create a singleton instance
+    
+    def _save_to_database(self, project_id: str, component_id: str, result: str, target_table: str, parent_uiid: Optional[str] = None):
+        """
+        Save LLM-generated data to DynamoDB table using generic logic.
+        
+        Args:
+            project_id: The project ID
+            component_id: The component ID
+            result: The generated result (pipe-delimited content)
+            target_table: The target DynamoDB table name
+            parent_uiid: Optional parent UIID for hierarchical relationships
+        """
+        try:
+            print(f"🔍 DEBUG: Saving to DynamoDB table: {target_table}")
+            print(f"🔍 DEBUG: Project ID: {project_id}")
+            print(f"🔍 DEBUG: Component ID: {component_id}")
+            print(f"🔍 DEBUG: Parent UIID: {parent_uiid}")
+            print(f"🔍 DEBUG: Raw result content (first 500 chars): {result[:500]}...")
+            logger.info(f"Saving to DynamoDB table {target_table} for project {project_id}")
+            
+            # Parse the pipe-delimited content
+            print(f"🔍 DEBUG: About to call _parse_pipe_delimited_content")
+            parsed_data = self._parse_pipe_delimited_content(result)
+            print(f"🔍 DEBUG: Parsed data: {parsed_data}")
+            
+            # Initialize DynamoDB client
+            dynamodb = boto3.resource('dynamodb')
+            
+            # Map table names to environment variables
+            table_env_mapping = {
+                'user_flows': 'USER_FLOWS_TABLE_NAME',
+                'high_level_requirements': 'HIGH_LEVEL_REQUIREMENTS_TABLE_NAME',
+                'low_level_requirements': 'LOW_LEVEL_REQUIREMENTS_TABLE_NAME',
+                'test_cases': 'TEST_CASES_TABLE_NAME'
+            }
+            
+            # Get table name from environment variable or use default
+            env_var = table_env_mapping.get(target_table, f'{target_table.upper()}_TABLE_NAME')
+            table_name = os.environ.get(env_var, f'prod-vishmaker-{target_table.replace("_", "-")}')
+            table = dynamodb.Table(table_name)
+            
+            print(f"🔍 DEBUG: Using table: {table_name}")
+            logger.info(f"Using table: {table_name}")
+            
+            # Save each parsed item to DynamoDB
+            for item in parsed_data:
+                # Generate UIID if not present
+                uiid = item.get("uiid") or f"{component_id}_{project_id}_{int(datetime.now().timestamp())}"
+                
+                # Create base item
+                db_item = {
+                    'uiid': uiid,
+                    'name': item.get("name", f"Generated {component_id}"),
+                    'description': item.get("description", ""),
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                }
+                
+                # Add table-specific fields
+                if target_table == 'user_flows':
+                    db_item['project_id'] = project_id
+                    print(f"🔍 DEBUG: Setting project_id for user_flows: {project_id} (type: {type(project_id)})")
+                elif target_table in ['high_level_requirement', 'high_level_requirements', 'low_level_requirement', 'low_level_requirements', 'test_cases']:
+                    if parent_uiid:
+                        db_item['parent_uiid'] = parent_uiid
+                        print(f"🔍 DEBUG: Setting parent_uiid: {parent_uiid} (type: {type(parent_uiid)})")
+                    else:
+                        # For top-level requirements, use project_id as parent
+                        db_item['parent_uiid'] = project_id
+                        print(f"🔍 DEBUG: Using project_id as parent_uiid: {project_id} (type: {type(project_id)})")
+                
+                print(f"🔍 DEBUG: Saving item: {db_item}")
+                logger.info(f"Saving item with UIID: {uiid}")
+                
+                # Save to DynamoDB
+                table.put_item(Item=db_item)
+                
+                print(f"✅ DEBUG: Successfully saved item to DynamoDB table {target_table}")
+                logger.info(f"Successfully saved item to DynamoDB table {target_table} with UIID: {uiid}")
+            
+        except Exception as e:
+            error_msg = f"Error saving to DynamoDB table {target_table}: {str(e)}"
+            print(f"❌ DEBUG: {error_msg}")
+            logger.error(error_msg)
+            raise
+    
+    def _parse_pipe_delimited_content(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Parse pipe-delimited LLM output into a standardized format.
+        
+        Expected format:
+        Name/Title | Description/Details | UIID (optional)
+        
+        Returns:
+        List of dictionaries with name, description, uiid, and order
+        """
+        print(f"🔍 DEBUG: _parse_pipe_delimited_content called with content length: {len(content)}")
+        print(f"🔍 DEBUG: Content type: {type(content)}")
+        print(f"🔍 DEBUG: Content preview: {content[:200]}...")
+        
+        if not content or not content.strip():
+            raise ValueError("Content is empty")
+        
+        # Check if content is in pipe-delimited format and fix if needed
+        print(f"🔍 DEBUG: Validating pipe-delimited format")
+        original_content = content  # Store original content for fallback
+        if not self._validate_pipe_delimited_format(content):
+            print(f"🔍 DEBUG: Content not in pipe-delimited format, fixing...")
+            content = self._fix_output_format(content)
+            print(f"🔍 DEBUG: Fixed content preview: {content[:200]}...")
+            
+            # Check if the fixed content is valid
+            if not content or not content.strip():
+                print(f"⚠️ DEBUG: Fixed content is empty, creating fallback items")
+                # Create fallback items from original content
+                original_lines = original_content.split('\n') if original_content else []
+                items = []
+                for i, line in enumerate(original_lines):
+                    if line.strip():
+                        items.append({
+                            "name": f"Item {i+1}",
+                            "description": line.strip(),
+                            "uiid": f"fallback-{i}-{hash(line.strip()) & 0xffffffff}",
+                            "order": i
+                        })
+                print(f"🔍 DEBUG: Created {len(items)} fallback items")
+                return items
+        
+        # Parse each line
+        lines = content.strip().split('\n')
+        print(f"🔍 DEBUG: Split into {len(lines)} lines")
+        items = []
+        
+        for i, line in enumerate(lines):
+            print(f"🔍 DEBUG: Processing line {i}: '{line}'")
+            line = line.strip()
+            if not line:
+                print(f"🔍 DEBUG: Line {i} is empty, skipping")
+                continue
+                
+            if '|' not in line:
+                print(f"🔍 DEBUG: Line {i} has no pipe, trying to fix")
+                # Try to fix lines without pipe delimiter
+                if ':' in line:
+                    parts = line.split(':', 1)
+                    print(f"🔍 DEBUG: Line {i} split by colon: {parts}")
+                    line = f"{parts[0].strip()} | {parts[1].strip()}"
+                elif '.' in line:
+                    parts = line.split('.', 1)
+                    print(f"🔍 DEBUG: Line {i} split by dot: {parts}")
+                    line = f"{parts[0].strip()} | {parts[1].strip()}"
+                else:
+                    line = f"Item {i+1} | {line}"
+                print(f"🔍 DEBUG: Line {i} after fixing: '{line}'")
+                
+            parts = line.split('|')
+            print(f"🔍 DEBUG: Line {i} split by pipe: {parts}")
+            
+            # Check for None values before calling strip()
+            part0 = parts[0] if parts[0] is not None else ""
+            part1 = parts[1] if len(parts) > 1 and parts[1] is not None else ""
+            part2 = parts[2] if len(parts) > 2 and parts[2] is not None else ""
+            
+            name = part0.strip() if part0 else f"Item {i+1}"
+            description = part1.strip() if part1 else ""
+            
+            # Extract UIID if present, or generate a unique one
+            uiid = part2.strip() if part2 and part2.strip() else f"auto-{i}-{hash(str(name) + str(description)) & 0xffffffff}"
+            
+            print(f"🔍 DEBUG: Line {i} parsed - name: '{name}', description: '{description}', uiid: '{uiid}'")
+            
+            items.append({
+                "name": name,
+                "description": description,
+                "uiid": uiid,
+                "order": i
+            })
+        
+        print(f"🔍 DEBUG: Parsed {len(items)} items total")
+        return items
+    
+    def _validate_pipe_delimited_format(self, text: str) -> bool:
+        """
+        Validate that the text is in pipe-delimited format.
+        Checks that most lines contain at least one pipe character.
+        """
+        lines = text.strip().split('\n')
+        valid_lines = [line for line in lines if line.strip()]
+        if not valid_lines:
+            return False
+            
+        # Check if at least 70% of lines have a pipe character
+        lines_with_pipe = sum(1 for line in valid_lines if '|' in line)
+        return lines_with_pipe / len(valid_lines) >= 0.7
+    
+    def _fix_output_format(self, text: str) -> str:
+        """
+        Attempt to fix the output format if it's not pipe-delimited.
+        Looks for patterns in the text that might indicate name/description pairs.
+        """
+        lines = text.strip().split('\n')
+        formatted_lines = []
+        
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+                
+            if '|' not in line:
+                # Try different splitting strategies
+                if ':' in line:
+                    # Split by colon (common in key-value pairs)
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        formatted_lines.append(f"{parts[0].strip()} | {parts[1].strip()}")
+                    else:
+                        formatted_lines.append(f"Item {i+1} | {line.strip()}")
+                elif '. ' in line and line[0].isdigit():
+                    # Split numbered items (e.g., "1. First item")
+                    parts = line.split('. ', 1)
+                    if len(parts) == 2:
+                        formatted_lines.append(f"Item {parts[0].strip()} | {parts[1].strip()}")
+                    else:
+                        formatted_lines.append(f"Item {i+1} | {line.strip()}")
+                elif line.strip().startswith('- '):
+                    # Handle bullet points
+                    content = line.strip()[2:]
+                    formatted_lines.append(f"Item {i+1} | {content}")
+                elif line.strip().startswith('**') and line.strip().endswith('**'):
+                    # Handle bold headers
+                    content = line.strip()[2:-2]  # Remove **
+                    formatted_lines.append(f"{content} | ")
+                elif line.strip().startswith('##'):
+                    # Handle markdown headers
+                    content = line.strip()[2:].strip()
+                    formatted_lines.append(f"{content} | ")
+                elif line.strip().startswith('#'):
+                    # Handle markdown headers
+                    content = line.strip()[1:].strip()
+                    formatted_lines.append(f"{content} | ")
+                else:
+                    # For any other line, treat as a description
+                    formatted_lines.append(f"Item {i+1} | {line.strip()}")
+            else:
+                formatted_lines.append(line)
+        
+        return '\n'.join(formatted_lines)
+    
+    def _generate_uiid(self, table_type: str, index: int, text: str) -> str:
+        """
+        Generate a unique identifier for an item.
+        
+        Args:
+            table_type: Type of table ("user_flow", "high_level_requirement", etc.)
+            index: The item's index/position
+            text: Text to use for additional uniqueness
+            
+        Returns:
+            A unique ID string
+        """
+        import time
+        
+        # Normalize table_type to ensure consistency
+        normalized_table_type = table_type
+        if table_type == "high_level_requirements":
+            normalized_table_type = "high_level_requirement"
+        elif table_type == "low_level_requirements":
+            normalized_table_type = "low_level_requirement"
+        elif table_type == "test_cases":
+            normalized_table_type = "test_case"
+        
+        # Create a short prefix based on table type
+        prefix = normalized_table_type.split('_')[0][:3]  # First 3 chars of first word
+        
+        # Get current timestamp as base36 string (compact representation)
+        timestamp = time.time()
+        timestamp_str = format(int(timestamp * 1000), 'x')[-6:]  # Last 6 hex chars
+        
+        # Format: prefix-index-timestamp
+        return f"{prefix}_{index+1}_{timestamp_str}"
+    
+    def _extract_items_from_content(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Extract items from content based on pipe-delimited format.
+        Args:
+            content: Raw content text
+        Returns:
+            List of dictionaries with name and description fields
+        """
+        items = []
+        lines = content.strip().split('\n')
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if it's a pipe-delimited line
+            if '|' in line:
+                parts = line.split('|')
+                name = parts[0].strip() if parts[0] else f"Item {i+1}"
+                description = parts[1].strip() if len(parts) > 1 and parts[1] else ""
+                
+                items.append({
+                    "name": name,
+                    "description": description
+                })
+            # If not pipe-delimited, try to extract structured data
+            elif ':' in line and not line.lower().startswith(('id:', 'item name:', 'description:')):
+                parts = line.split(':', 1)
+                items.append({
+                    "name": parts[0].strip() if parts[0] else f"Item {i+1}",
+                    "description": parts[1].strip() if parts[1] else ""
+                })
+        
+        return items
+    
+    # Create a singleton instance
 print("🔍 DEBUG: Creating LLMProcessingService singleton instance")
 logger.info("Creating LLMProcessingService singleton instance")
 try:

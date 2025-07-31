@@ -12,6 +12,7 @@ export interface Project {
 export interface ProjectCreatePayload {
   name: string;
   initial_prompt?: string | null;
+  user_id?: string; // User ID from Cognito authentication
 }
 
 // For use with the /requirements/{projectId} endpoint

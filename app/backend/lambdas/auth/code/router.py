@@ -107,9 +107,13 @@ async def get_current_user():
     """Get current authenticated user information."""
     try:
         logger.info(f"Getting current user info")
-        # The JWT token is validated by API Gateway, so we can trust the user is authenticated
-        # We'll return a placeholder for now - in a real implementation, you'd decode the JWT
-        # and return the user information from the token claims
+        # Get the current user from the session token
+        # In a real implementation, you'd extract the token from the request headers
+        # For now, we'll use the Cognito adapter to get user info
+        # This is a simplified version - in production you'd decode the JWT token
+        
+        # For now, return a placeholder - in production you'd decode the JWT and get real user info
+        # The frontend should handle this by calling the /me endpoint with the access token
         return {
             "user": {
                 "id": "current_user_id",  # This would come from JWT claims

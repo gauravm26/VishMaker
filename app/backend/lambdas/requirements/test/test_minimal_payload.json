@@ -1,0 +1,10 @@
+{
+  "httpMethod": "GET",
+  "path": "/requirements/7ed1f35b-844a-4f34-a812-16b83a010ce2",
+  "pathParameters": {
+    "project_id": "7ed1f35b-844a-4f34-a812-16b83a010ce2"
+  },
+  "headers": {},
+  "body": null,
+  "isBase64Encoded": false
+} 

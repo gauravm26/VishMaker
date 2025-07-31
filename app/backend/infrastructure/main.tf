@@ -129,7 +129,7 @@ locals {
       lambda_arn = module.auth_api_lambda.lambda_auth_function_invoke_arn
       function_name = module.auth_api_lambda.lambda_auth_function_name
     }
-    project_api = {
+    projects_api = {
       routes = [
         {
           path    = ["/projects", "/projects/{proxy+}"]
@@ -139,6 +139,17 @@ locals {
       ]
       lambda_arn = aws_lambda_function.lambda["projects_api"].invoke_arn
       function_name = aws_lambda_function.lambda["projects_api"].function_name
+    }
+    requirements_api = {
+      routes = [
+        {
+          path    = ["/requirements", "/requirements/{proxy+}"]
+          methods = ["GET", "POST", "PUT", "DELETE"]
+          auth    = "JWT"
+        }
+      ]
+      lambda_arn = aws_lambda_function.lambda["requirements_api"].invoke_arn
+      function_name = aws_lambda_function.lambda["requirements_api"].function_name
     }
     llm_api = {
       routes = [
@@ -231,6 +242,7 @@ resource "aws_apigatewayv2_integration" "api" {
   integration_type = "AWS_PROXY"
   integration_uri  = each.value
   payload_format_version = "2.0"
+  timeout_milliseconds = 30000  # 30 seconds (maximum allowed by API Gateway v2)
 }
 
 resource "aws_lambda_permission" "apigw_permissions" {
@@ -250,6 +262,7 @@ resource "aws_apigatewayv2_route" "cors_preflight_routes" {
   for_each = toset([
     "OPTIONS /auth/{proxy+}",
     "OPTIONS /projects/{proxy+}",
+    "OPTIONS /requirements/{proxy+}",
     "OPTIONS /llm/{proxy+}"
   ])
   
@@ -353,6 +366,10 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   tags = local.common_config.tags
+
+  lifecycle {
+    prevent_destroy = true  # 🔒 Protect existing users and prevent accidental deletion
+  }
 }
 
 # Cognito User Pool Client
@@ -395,12 +412,20 @@ resource "aws_cognito_user_pool_client" "main" {
     "email",
     "preferred_username"
   ]
+
+  lifecycle {
+    prevent_destroy = true  # 🔒 Protect existing client configuration and prevent accidental deletion
+  }
 }
 
 # Cognito User Pool Domain
 resource "aws_cognito_user_pool_domain" "main" {
   domain       = "auth-vishmaker"
   user_pool_id = aws_cognito_user_pool.main.id
+
+  lifecycle {
+    prevent_destroy = true  # 🔒 Protect existing domain configuration and prevent accidental deletion
+  }
 } 
 
 # ==================================================
@@ -426,14 +451,16 @@ locals {
       }
       dynamo_access_all = true
     },
-    #requirements_api = {
-    #  lambda_name = "requirements"
-    #  environment_variables = {
-    #    DYNAMODB_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name
-        
-    #  }
-    #  dynamo_access_all = true
-    #}
+    requirements_api = {
+      lambda_name = "requirements"
+      environment_variables = {
+        USER_FLOWS_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name,
+        HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high_level_requirements"].name,
+        LOW_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["low_level_requirements"].name,
+        TEST_CASES_TABLE_NAME = aws_dynamodb_table.tables["test_cases"].name
+      }
+      dynamo_access_all = true
+    }
   }
   all_dynamo_tables_arns = [
     for table in aws_dynamodb_table.tables : table.arn
@@ -494,6 +521,10 @@ module "llm_api_lambda" {
     CONFIG_KEY    = "config.json"
     ENVIRONMENT   = local.common_config.environment
     PROJECT_NAME  = local.common_config.project_name
+    USER_FLOWS_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name
+    HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high_level_requirements"].name
+    LOW_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["low_level_requirements"].name
+    TEST_CASES_TABLE_NAME = aws_dynamodb_table.tables["test_cases"].name
   }
 
   # API Gateway integration (will be updated after API Gateway is created)

@@ -1,0 +1,19 @@
+{
+  "httpMethod": "GET",
+  "path": "/requirements/7ed1f35b-844a-4f34-a812-16b83a010ce2",
+  "pathParameters": {
+    "project_id": "7ed1f35b-844a-4f34-a812-16b83a010ce2"
+  },
+  "queryStringParameters": null,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null,
+  "isBase64Encoded": false,
+  "requestContext": {
+    "httpMethod": "GET",
+    "path": "/requirements/7ed1f35b-844a-4f34-a812-16b83a010ce2",
+    "requestId": "test-request-id",
+    "stage": "prod"
+  }
+} 
