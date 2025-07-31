@@ -8,11 +8,19 @@ from mangum import Mangum
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, VERSION as PYD_VER
 from dynamodb.code.schemas import (
     UserFlowCreate, HighLevelRequirementCreate, LowLevelRequirementCreate, TestCaseCreate,
     UserFlow, HighLevelRequirement, LowLevelRequirement, TestCase, ProjectRequirementsResponse
 )
+from fastapi.encoders import jsonable_encoder
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
+import os
+from pprint import pprint
+
+import inspect, pkg_resources, dynamodb.code.schemas as sch
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,12 +48,57 @@ app.add_middleware(
 
 def get_table(table_name: str):
     """Get DynamoDB table instance"""
-    import os
+    
     # Use underscores in the table name to match the actual DynamoDB table names
     table_name_env = os.environ.get(f'{table_name.upper()}_TABLE_NAME', f'prod-vishmaker-{table_name}')
-    logger.info(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
+    print(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
     print(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
     return dynamodb.Table(table_name_env)
+
+def _safe_to_userflow(obj: dict) -> "UserFlow":
+    """Convert a Dynamo dict to UserFlow, tolerant to extra keys."""
+    try:
+        if PYD_VER.startswith("2"):
+            # Pydantic v2
+            return UserFlow.model_validate(obj, strict=False)
+        else:
+            # Pydantic v1
+            return UserFlow.parse_obj(obj)
+    except ValidationError as exc:
+        logger.error("❌ Failed to validate UserFlow: %s\nData: %s", exc, obj)
+        raise HTTPException(status_code=500, detail="Bad data in user_flows table")
+
+def _json_dump(model: BaseModel, limit: int = 10_240) -> str:
+    """Dump a Pydantic model → compact JSON suitable for CloudWatch."""
+    def default(o: Any):
+        if isinstance(o, Decimal):
+            return float(o)
+        if isinstance(o, BaseModel):
+            return o.model_dump() if PYD_VER.startswith("2") else o.dict()
+        raise TypeError(f"Unserialisable: {type(o)}")
+
+    raw = json.dumps(model, default=default)
+    return raw[:limit] + (" …[truncated]" if len(raw) > limit else "")
+
+def query_all(table, **kwargs) -> list[dict]:
+    """Paginate over Dynamo Query/Scan."""
+    items, cursor = [], None
+    while True:
+        if cursor:
+            kwargs["ExclusiveStartKey"] = cursor
+        page = table.query(**kwargs)
+        items.extend(page.get("Items", []))
+        cursor = page.get("LastEvaluatedKey")
+        if not cursor:
+            break
+    return items
+
+def _show_userflow_fields():
+    fld_map = (UserFlow.__fields__           # Pydantic v1
+               if hasattr(UserFlow, "__fields__")
+               else UserFlow.model_fields)   # Pydantic v2
+    print("🧩 UserFlow fields in runtime package:")
+    pprint(list(fld_map.keys()))
 
 
 @app.get("/")
@@ -57,6 +110,7 @@ def root():
 def create_user_flow(project_id: str, flow: UserFlowCreate):
     """Create a new user flow for a project"""
     try:
+        print("🛫 ENTER create_user_flow(project_id=%s, flow=%s)", project_id, flow)
         table = get_table('user_flows')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
@@ -71,7 +125,7 @@ def create_user_flow(project_id: str, flow: UserFlowCreate):
         }
         
         table.put_item(Item=item)
-        logger.info(f"✅ User flow created: {uiid}")
+        print(f"✅ User flow created: {uiid}")
         
         return UserFlow(**item)
         
@@ -83,6 +137,7 @@ def create_user_flow(project_id: str, flow: UserFlowCreate):
 def get_user_flows(project_id: str):
     """Get all user flows for a project"""
     try:
+        print("🛫 ENTER get_user_flows(project_id=%s)", project_id)
         table = get_table('user_flows')
         
         response = table.query(
@@ -92,7 +147,7 @@ def get_user_flows(project_id: str):
         )
         
         flows = [UserFlow(**item) for item in response.get('Items', [])]
-        logger.info(f"✅ Retrieved {len(flows)} user flows for project {project_id}")
+        print(f"✅ Retrieved {len(flows)} user flows for project {project_id}")
         
         return flows
         
@@ -104,6 +159,7 @@ def get_user_flows(project_id: str):
 def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCreate):
     """Create a new high-level requirement"""
     try:
+        print("🛫 ENTER create_high_level_requirement(project_id=%s, hlr=%s)", project_id, hlr)
         table = get_table('high_level_requirements')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
@@ -118,7 +174,7 @@ def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCrea
         }
         
         table.put_item(Item=item)
-        logger.info(f"✅ High-level requirement created: {uiid}")
+        print(f"✅ High-level requirement created: {uiid}")
         
         return HighLevelRequirement(**item)
         
@@ -130,6 +186,7 @@ def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCrea
 def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = None):
     """Get high-level requirements for a project"""
     try:
+        print("🛫 ENTER get_high_level_requirements(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
         table = get_table('high_level_requirements')
         
         if parent_uiid:
@@ -142,7 +199,7 @@ def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = No
             response = table.scan()
         
         requirements = [HighLevelRequirement(**item) for item in response.get('Items', [])]
-        logger.info(f"✅ Retrieved {len(requirements)} high-level requirements")
+        print(f"✅ Retrieved {len(requirements)} high-level requirements")
         
         return requirements
         
@@ -154,6 +211,7 @@ def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = No
 def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate):
     """Create a new low-level requirement"""
     try:
+        print("🛫 ENTER create_low_level_requirement(project_id=%s, llr=%s)", project_id, llr)
         table = get_table('low_level_requirements')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
@@ -168,7 +226,7 @@ def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate
         }
         
         table.put_item(Item=item)
-        logger.info(f"✅ Low-level requirement created: {uiid}")
+        print(f"✅ Low-level requirement created: {uiid}")
         
         return LowLevelRequirement(**item)
         
@@ -180,6 +238,7 @@ def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate
 def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = None):
     """Get low-level requirements for a project"""
     try:
+        print("🛫 ENTER get_low_level_requirements(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
         table = get_table('low_level_requirements')
         
         if parent_uiid:
@@ -192,7 +251,7 @@ def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = Non
             response = table.scan()
         
         requirements = [LowLevelRequirement(**item) for item in response.get('Items', [])]
-        logger.info(f"✅ Retrieved {len(requirements)} low-level requirements")
+        print(f"✅ Retrieved {len(requirements)} low-level requirements")
         
         return requirements
         
@@ -204,6 +263,7 @@ def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = Non
 def create_test_case(project_id: str, test_case: TestCaseCreate):
     """Create a new test case"""
     try:
+        print("🛫 ENTER create_test_case(project_id=%s, test_case=%s)", project_id, test_case)
         table = get_table('test_cases')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
@@ -218,7 +278,7 @@ def create_test_case(project_id: str, test_case: TestCaseCreate):
         }
         
         table.put_item(Item=item)
-        logger.info(f"✅ Test case created: {uiid}")
+        print(f"✅ Test case created: {uiid}")
         
         return TestCase(**item)
         
@@ -230,6 +290,7 @@ def create_test_case(project_id: str, test_case: TestCaseCreate):
 def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
     """Get test cases for a project"""
     try:
+        print("🛫 ENTER get_test_cases(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
         table = get_table('test_cases')
         
         if parent_uiid:
@@ -242,7 +303,7 @@ def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
             response = table.scan()
         
         test_cases = [TestCase(**item) for item in response.get('Items', [])]
-        logger.info(f"✅ Retrieved {len(test_cases)} test cases")
+        print(f"✅ Retrieved {len(test_cases)} test cases")
         
         return test_cases
         
@@ -252,178 +313,92 @@ def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
 
 @app.get("/requirements/{project_id}", response_model=ProjectRequirementsResponse)
 def get_project_requirements(project_id: str):
-    """Get complete requirements hierarchy for a project"""
+    
     try:
-        logger.info(f"🔍 DEBUG: Starting get_project_requirements for project_id: {project_id}")
-        print(f"🔍 DEBUG: Starting get_project_requirements for project_id: {project_id}")
-        
-        # Get user flows
-        flows_table = get_table('user_flows')
-        logger.info(f"🔍 DEBUG: Got user_flows table: {flows_table.name}")
-        print(f"🔍 DEBUG: Got user_flows table: {flows_table.name}")
-        
-        # Get user flows for this project
-        flows_response = flows_table.query(
-            IndexName='project_id-index',
-            KeyConditionExpression='project_id = :project_id',
-            ExpressionAttributeValues={':project_id': project_id}
+    
+        print("🛫 ENTER get_project_requirements(project_id=%s)", project_id)
+
+        flows_tbl = get_table("user_flows")
+        hlr_tbl   = get_table("high_level_requirements")
+        llr_tbl   = get_table("low_level_requirements")
+        tc_tbl    = get_table("test_cases")
+
+        # ── 1️⃣ USER FLOWS ──────────────────────────────────────────────────────
+        flows_raw = query_all(
+            flows_tbl,
+            IndexName="project_id-index",
+            KeyConditionExpression=Key("project_id").eq(project_id)
         )
-        
-        logger.info(f"🔍 Found {len(flows_response.get('Items', []))} user flows for project {project_id}")
-        
-        # If no flows found, try with different project_id formats
-        if not flows_response.get('Items'):
-            logger.info(f"🔍 No flows found with project_id: {project_id}, trying integer format")
-            
-            # Try with integer project_id
-            try:
-                int_project_id = int(project_id)
-                flows_response = flows_table.query(
-                    IndexName='project_id-index',
-                    KeyConditionExpression='project_id = :project_id',
-                    ExpressionAttributeValues={':project_id': int_project_id}
-                )
-                logger.info(f"🔍 Found {len(flows_response.get('Items', []))} flows with integer project_id")
-            except ValueError:
-                logger.info(f"🔍 Could not convert project_id to int: {project_id}")
-        
-        flows = []
-        for flow_item in flows_response.get('Items', []):
-            logger.info(f"🔍 DEBUG: Processing flow item: {flow_item}")
-            logger.info(f"🔍 DEBUG: Flow item keys: {list(flow_item.keys())}")
-            
-            # Get high-level requirements for this flow (even if empty)
-            flow_uiid = flow_item.get('uiid')
-            high_level_requirements = []
-            
-            # Try to get HLRs for this flow
-            hlr_table = get_table('high_level_requirements')
-            hlr_response = hlr_table.scan(
-                FilterExpression='parent_uiid = :parent_uiid',
-                ExpressionAttributeValues={':parent_uiid': flow_uiid}
+        print("📦 Flows raw → %s", _json_dump(flows_raw))
+        flows: list[UserFlow] = []
+        for f in flows_raw:
+            # ── 2️⃣ HLRs for each flow ────────────────────────────────────────
+            hlrs_raw = query_all(
+                hlr_tbl,
+                IndexName="parent_uiid-index",
+                KeyConditionExpression=Key("parent_uiid").eq(f["uiid"])
             )
-            
-            logger.info(f"🔍 DEBUG: Found {len(hlr_response.get('Items', []))} HLRs for flow {flow_uiid}")
-            
-            for hlr_item in hlr_response.get('Items', []):
-                logger.info(f"🔍 DEBUG: Processing HLR item: {hlr_item}")
-                logger.info(f"🔍 DEBUG: HLR item keys: {list(hlr_item.keys())}")
-                
-                # Get low-level requirements for this HLR
-                llr_table = get_table('low_level_requirements')
-                llr_response = llr_table.scan(
-                    FilterExpression='parent_uiid = :parent_uiid',
-                    ExpressionAttributeValues={':parent_uiid': hlr_item.get('uiid')}
+            print("📦 HLRs raw → %s", _json_dump(hlrs_raw))
+            hlrs: list[HighLevelRequirement] = []
+            for h in hlrs_raw:
+                # ── 3️⃣ LLRs for each HLR ────────────────────────────────────
+                llrs_raw = query_all(
+                    llr_tbl,
+                    IndexName="parent_uiid-index",
+                    KeyConditionExpression=Key("parent_uiid").eq(h["uiid"])
                 )
-                
-                logger.info(f"🔍 DEBUG: Found {len(llr_response.get('Items', []))} LLRs for HLR {hlr_item.get('uiid')}")
-                
-                low_level_requirements = []
-                for llr_item in llr_response.get('Items', []):
-                    logger.info(f"🔍 DEBUG: Processing LLR item: {llr_item}")
-                    logger.info(f"🔍 DEBUG: LLR item keys: {list(llr_item.keys())}")
-                    
-                    # Get test cases for this LLR
-                    tc_table = get_table('test_cases')
-                    tc_response = tc_table.scan(
-                        FilterExpression='parent_uiid = :parent_uiid',
-                        ExpressionAttributeValues={':parent_uiid': llr_item.get('uiid')}
+                print("📦 LLRs raw → %s", _json_dump(llrs_raw))
+                llrs: list[LowLevelRequirement] = []
+                for l in llrs_raw:
+                    # ── 4️⃣ TC for each LLR ──────────────────────────────────
+                    tcs_raw = query_all(
+                        tc_tbl,
+                        IndexName="parent_uiid-index",
+                        KeyConditionExpression=Key("parent_uiid").eq(l["uiid"])
                     )
-                    
-                    test_cases = []
-                    for tc_item in tc_response.get('Items', []):
-                        tc = TestCase(
-                            uiid=tc_item.get('uiid'),
-                            name=tc_item.get('name'),
-                            description=tc_item.get('description'),
-                            parent_uiid=tc_item.get('parent_uiid'),
-                            created_at=tc_item.get('created_at'),
-                            updated_at=tc_item.get('updated_at')
-                        )
-                        test_cases.append(tc)
-                    
-                    # Create LLR with test cases
-                    llr = LowLevelRequirement(
-                        uiid=llr_item.get('uiid'),
-                        name=llr_item.get('name'),
-                        description=llr_item.get('description'),
-                        parent_uiid=llr_item.get('parent_uiid'),
-                        created_at=llr_item.get('created_at'),
-                        updated_at=llr_item.get('updated_at'),
-                        test_case_list=test_cases
-                    )
-                    low_level_requirements.append(llr)
-                
-                # Create HLR with LLRs
-                hlr = HighLevelRequirement(
-                    uiid=hlr_item.get('uiid'),
-                    name=hlr_item.get('name'),
-                    description=hlr_item.get('description'),
-                    parent_uiid=hlr_item.get('parent_uiid'),
-                    created_at=hlr_item.get('created_at'),
-                    updated_at=hlr_item.get('updated_at'),
-                    low_level_requirement_list=low_level_requirements
-                )
-                high_level_requirements.append(hlr)
-            
-            # Create UserFlow with HLRs (even if empty)
-            # Note: high_level_requirement_list is not stored in DynamoDB, it's computed
-            try:
-                flow = UserFlow(
-                    uiid=flow_item.get('uiid'),
-                    name=flow_item.get('name'),
-                    description=flow_item.get('description'),
-                    project_id=flow_item.get('project_id'),
-                    created_at=flow_item.get('created_at'),
-                    updated_at=flow_item.get('updated_at'),
-                    high_level_requirement_list=high_level_requirements  # This is computed, not from DB
-                )
-                logger.info(f"✅ Created UserFlow: {flow.name} with {len(high_level_requirements)} HLRs")
-                flows.append(flow)
-            except Exception as e:
-                logger.error(f"❌ Error creating UserFlow: {str(e)}")
-                logger.error(f"❌ Flow item data: {flow_item}")
-                raise HTTPException(status_code=500, detail=f"Failed to create UserFlow: {str(e)}")
+                    tcs = [TestCase(**tc) for tc in tcs_raw]
+                    llrs.append(LowLevelRequirement(**l, test_case_list=tcs))
+                    print("📦 TCs → %s", _json_dump(tcs))
+                hlrs.append(HighLevelRequirement(**h, low_level_requirement_list=llrs))
+
+            flows.append(UserFlow(**f, high_level_requirement_list=hlrs))
+
+        print("📦 Flows → %s", _json_dump(flows))
+        response_obj = ProjectRequirementsResponse(project_id=project_id, flows=flows)
+
         
-        logger.info(f"✅ Retrieved {len(flows)} user flows for project {project_id}")
-        
-        # Create the response with proper structure
-        try:
-            response = ProjectRequirementsResponse(project_id=project_id, flows=flows)
-            
-            # Log summary of the response structure with safe attribute access
-            total_hlrs = 0
-            total_llrs = 0
-            total_tcs = 0
-            
-            for flow in flows:
-                if hasattr(flow, 'high_level_requirement_list'):
-                    total_hlrs += len(flow.high_level_requirement_list)
-                    for hlr in flow.high_level_requirement_list:
-                        if hasattr(hlr, 'low_level_requirement_list'):
-                            total_llrs += len(hlr.low_level_requirement_list)
-                            for llr in hlr.low_level_requirement_list:
-                                if hasattr(llr, 'test_case_list'):
-                                    total_tcs += len(llr.test_case_list)
-            
-            logger.info(f"📊 Response summary: {len(flows)} flows, {total_hlrs} HLRs, {total_llrs} LLRs, {total_tcs} test cases")
-            
-            return response
-        except Exception as e:
-            logger.error(f"❌ Error creating ProjectRequirementsResponse: {str(e)}")
-            logger.error(f"❌ Flows data: {flows}")
-            raise HTTPException(status_code=500, detail=f"Failed to create response: {str(e)}")
-        
+        summaries = []
+        for flow in response_obj.flows:
+            hlrs = getattr(flow, "high_level_requirement_list", [])
+            llrs = sum(len(getattr(h, "low_level_requirement_list", [])) for h in hlrs)
+            tcs  = sum(
+                len(getattr(l, "test_case_list", []))
+                for h in hlrs
+                for l in getattr(h, "low_level_requirement_list", [])
+            )
+            summaries.append(f"{flow.name or flow.uiid}: HLR={len(hlrs)}, LLR={llrs}, TC={tcs}")
+        print("📊 Flow summaries → %s", "; ".join(summaries))
+
+        print("📦 Outbound JSON (≤10 KB) → %s", _json_dump(response_obj.model_dump()
+                                                                if PYD_VER.startswith("2")
+                                                                else response_obj.dict()))
+
+        print("🏁 EXIT get_project_requirements(project_id=%s)", project_id)
+        return response_obj
+
     except Exception as e:
         logger.error(f"❌ Error retrieving project requirements: {str(e)}")
-        print(f"❌ DEBUG: Error retrieving project requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve project requirements: {str(e)}")
 
 # Lambda handler
 def handler(event, context):
     """AWS Lambda handler"""
     try:
-        logger.info(f"Lambda invoked with event: {json.dumps(event)}")
+        print(f"Lambda invoked with event: {json.dumps(event)}")
+
+        print("📦 schemas loaded from →", inspect.getfile(sch))
+        _show_userflow_fields()
+
         
         # Create Mangum adapter for AWS Lambda
         asgi_handler = Mangum(app, lifespan="off")
@@ -431,7 +406,7 @@ def handler(event, context):
         # Process the event
         response = asgi_handler(event, context)
         
-        logger.info(f"Lambda response: {json.dumps(response)}")
+        print(f"Lambda response: {json.dumps(response)}")
         return response
         
     except Exception as e:
