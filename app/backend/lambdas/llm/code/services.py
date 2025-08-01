@@ -772,80 +772,39 @@ class LLMProcessingService:
         Returns:
         List of dictionaries with name, description, uiid, and order
         """
-        print(f"🔍 DEBUG: _parse_pipe_delimited_content called with content length: {len(content)}")
-        print(f"🔍 DEBUG: Content type: {type(content)}")
-        print(f"🔍 DEBUG: Content preview: {content[:200]}...")
-        
         if not content or not content.strip():
             raise ValueError("Content is empty")
         
         # Check if content is in pipe-delimited format and fix if needed
-        print(f"🔍 DEBUG: Validating pipe-delimited format")
-        original_content = content  # Store original content for fallback
         if not self._validate_pipe_delimited_format(content):
-            print(f"🔍 DEBUG: Content not in pipe-delimited format, fixing...")
             content = self._fix_output_format(content)
-            print(f"🔍 DEBUG: Fixed content preview: {content[:200]}...")
-            
-            # Check if the fixed content is valid
-            if not content or not content.strip():
-                print(f"⚠️ DEBUG: Fixed content is empty, creating fallback items")
-                # Create fallback items from original content
-                original_lines = original_content.split('\n') if original_content else []
-                items = []
-                for i, line in enumerate(original_lines):
-                    if line.strip():
-                        items.append({
-                            "name": f"Item {i+1}",
-                            "description": line.strip(),
-                            "uiid": f"fallback-{i}-{hash(line.strip()) & 0xffffffff}",
-                            "order": i
-                        })
-                print(f"🔍 DEBUG: Created {len(items)} fallback items")
-                return items
         
         # Parse each line
         lines = content.strip().split('\n')
-        print(f"🔍 DEBUG: Split into {len(lines)} lines")
         items = []
         
         for i, line in enumerate(lines):
-            print(f"🔍 DEBUG: Processing line {i}: '{line}'")
             line = line.strip()
             if not line:
-                print(f"🔍 DEBUG: Line {i} is empty, skipping")
                 continue
                 
             if '|' not in line:
-                print(f"🔍 DEBUG: Line {i} has no pipe, trying to fix")
                 # Try to fix lines without pipe delimiter
                 if ':' in line:
                     parts = line.split(':', 1)
-                    print(f"🔍 DEBUG: Line {i} split by colon: {parts}")
                     line = f"{parts[0].strip()} | {parts[1].strip()}"
                 elif '.' in line:
                     parts = line.split('.', 1)
-                    print(f"🔍 DEBUG: Line {i} split by dot: {parts}")
                     line = f"{parts[0].strip()} | {parts[1].strip()}"
                 else:
                     line = f"Item {i+1} | {line}"
-                print(f"🔍 DEBUG: Line {i} after fixing: '{line}'")
                 
             parts = line.split('|')
-            print(f"🔍 DEBUG: Line {i} split by pipe: {parts}")
-            
-            # Check for None values before calling strip()
-            part0 = parts[0] if parts[0] is not None else ""
-            part1 = parts[1] if len(parts) > 1 and parts[1] is not None else ""
-            part2 = parts[2] if len(parts) > 2 and parts[2] is not None else ""
-            
-            name = part0.strip() if part0 else f"Item {i+1}"
-            description = part1.strip() if part1 else ""
+            name = parts[0].strip()
+            description = parts[1].strip() if len(parts) > 1 else ""
             
             # Extract UIID if present, or generate a unique one
-            uiid = part2.strip() if part2 and part2.strip() else f"auto-{i}-{hash(str(name) + str(description)) & 0xffffffff}"
-            
-            print(f"🔍 DEBUG: Line {i} parsed - name: '{name}', description: '{description}', uiid: '{uiid}'")
+            uiid = parts[2].strip() if len(parts) > 2 and parts[2].strip() else f"auto-{i}-{hash(name + description) & 0xffffffff}"
             
             items.append({
                 "name": name,
@@ -854,8 +813,8 @@ class LLMProcessingService:
                 "order": i
             })
         
-        print(f"🔍 DEBUG: Parsed {len(items)} items total")
         return items
+    
     
     def _validate_pipe_delimited_format(self, text: str) -> bool:
         """
@@ -888,40 +847,22 @@ class LLMProcessingService:
                 if ':' in line:
                     # Split by colon (common in key-value pairs)
                     parts = line.split(':', 1)
-                    if len(parts) == 2:
-                        formatted_lines.append(f"{parts[0].strip()} | {parts[1].strip()}")
-                    else:
-                        formatted_lines.append(f"Item {i+1} | {line.strip()}")
+                    formatted_lines.append(f"{parts[0].strip()} | {parts[1].strip()}")
                 elif '. ' in line and line[0].isdigit():
                     # Split numbered items (e.g., "1. First item")
                     parts = line.split('. ', 1)
-                    if len(parts) == 2:
-                        formatted_lines.append(f"Item {parts[0].strip()} | {parts[1].strip()}")
-                    else:
-                        formatted_lines.append(f"Item {i+1} | {line.strip()}")
+                    formatted_lines.append(f"Item {parts[0].strip()} | {parts[1].strip()}")
                 elif line.strip().startswith('- '):
                     # Handle bullet points
                     content = line.strip()[2:]
                     formatted_lines.append(f"Item {i+1} | {content}")
-                elif line.strip().startswith('**') and line.strip().endswith('**'):
-                    # Handle bold headers
-                    content = line.strip()[2:-2]  # Remove **
-                    formatted_lines.append(f"{content} | ")
-                elif line.strip().startswith('##'):
-                    # Handle markdown headers
-                    content = line.strip()[2:].strip()
-                    formatted_lines.append(f"{content} | ")
-                elif line.strip().startswith('#'):
-                    # Handle markdown headers
-                    content = line.strip()[1:].strip()
-                    formatted_lines.append(f"{content} | ")
                 else:
-                    # For any other line, treat as a description
                     formatted_lines.append(f"Item {i+1} | {line.strip()}")
             else:
                 formatted_lines.append(line)
         
         return '\n'.join(formatted_lines)
+    
     
     def _generate_uiid(self, table_type: str, index: int, text: str) -> str:
         """
