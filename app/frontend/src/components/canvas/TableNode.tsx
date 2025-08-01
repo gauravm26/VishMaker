@@ -209,6 +209,8 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
     
     // Toggle table size (minimize/maximize)
     const handleToggleSize = () => {
+        console.log(`TableNode: Toggling size for ${nodeId}`);
+        console.log(`TableNode: Current state - isMinimized: ${isMinimized}, rows: ${rows.length}, allRows: ${allRows.length}`);
         if (actions.onToggleSize) {
             actions.onToggleSize(nodeId);
         }
@@ -278,7 +280,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
             {/* Node Body - Table Container */}
             <div className="text-gray-900">
                 {/* Responsive Table Wrapper with horizontal and vertical scroll */}
-                <div className="overflow-x-auto max-w-full max-h-64 overflow-y-auto">
+                <div className={`overflow-x-auto max-w-full overflow-y-auto ${isMinimized ? 'max-h-64' : 'max-h-[500px]'}`}>
                     <div className="min-w-full">
                         {/* Header Row */}
                         <div className="flex bg-gray-100 border-b border-gray-300 text-gray-800 sticky top-0 z-10">
@@ -390,13 +392,13 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 {isMinimized && allRows.length > rows.length && (
                     <button
                         onClick={() => actions.onToggleSize(nodeId)}
-                                                        className="w-full text-center py-2 sm:py-3 text-gray-500 text-xs sm:text-sm border-t border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="w-full text-center py-2 sm:py-3 text-gray-600 text-xs sm:text-sm border-t border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer font-medium"
                     >
                         <span className="inline-flex items-center">
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                            {allRows.length - rows.length} more rows hidden (click to expand)
+                            Show {allRows.length - rows.length} more rows
                         </span>
                     </button>
                 )}
