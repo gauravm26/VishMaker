@@ -19,7 +19,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
-from dynamodb.code.schemas import ProjectCreate, ProjectUpdate, Project
 from shared.auth import get_current_user
 from botocore.exceptions import ClientError
 from pathlib import Path
@@ -132,10 +131,10 @@ class BedrockService:
             accept='application/json'
         )
         
-        # Process the response
-        response_body = response.get('body', {})
-        if isinstance(response_body, str):
-            response_body = json.loads(response_body)
+        # Read the streaming body content
+        response_body_bytes = response['body'].read()
+        response_body_str = response_body_bytes.decode('utf-8')
+        response_body = json.loads(response_body_str)
         
         # Extract content based on provider
         provider_name = self._get_provider_name(target_model_id)
@@ -209,16 +208,18 @@ class BedrockService:
             print(f"✅ DEBUG: Response type: {type(response)}")
             print(f"✅ DEBUG: Response keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
             
-            # Process the response
-            response_body = response.get('body', {})
-            if isinstance(response_body, str):
-                response_body = json.loads(response_body)
+            # Read the streaming body content
+            response_body_bytes = response['body'].read()
+            response_body_str = response_body_bytes.decode('utf-8')
+            response_body = json.loads(response_body_str)
             
             # Extract content based on provider
             provider_name = self._get_provider_name(target_model_id)
             content = self._process_response_content(provider_name, response_body)
             
             print(f"✅ DEBUG: Extracted content length: {len(content)}")
+            print(f"✅ DEBUG: Extracted content preview: {content[:200]}...")
+            print(f"✅ DEBUG: Content type: {type(content)}")
             return content
                 
         except ClientError as e:
@@ -295,36 +296,26 @@ class BedrockService:
             The processed content as string
         """
         print(f"🔍 DEBUG: Processing response for provider: {provider_name}")
+        print(f"🔍 DEBUG: Response body type: {type(response_body)}")
         print(f"🔍 DEBUG: Response body keys: {list(response_body.keys())}")
+        print(f"🔍 DEBUG: Full response body: {response_body}")
         
         try:
-            if provider_name == "anthropic":
-                # Anthropic Claude format
-                if "content" in response_body and isinstance(response_body["content"], list):
-                    content_parts = []
-                    for part in response_body["content"]:
-                        if part.get("type") == "text":
-                            content_parts.append(part.get("text", ""))
-                    content = "".join(content_parts)
-                else:
-                    content = response_body.get("content", "")
-                    
-            elif provider_name == "openai":
-                # OpenAI format
-                content = response_body.get("choices", [{}])[0].get("message", {}).get("content", "")
-                
-            elif provider_name == "amazon":
-                # Amazon Titan format
-                content = response_body.get("completion", "")
-                
+            if "content" in response_body and isinstance(response_body["content"], list):
+                content_parts = []
+                for part in response_body["content"]:
+                    if part.get("type") == "text":
+                        content_parts.append(part.get("text", ""))
+                content = "".join(content_parts)
+                print(f"🔍 DEBUG: Extracted content from Anthropic response: {content[:200]}...")
             else:
-                # Default: try to extract from common fields
-                content = (
-                    response_body.get("content", "") or
-                    response_body.get("completion", "") or
-                    response_body.get("text", "") or
-                    str(response_body)
-                )
+                content = response_body.get("content", "")
+                print(f"🔍 DEBUG: Using direct content from Anthropic response: {content[:200]}...")
+
+                    
+
+            
+            print(f"🔍 DEBUG: Extracted content from default response: {content[:200]}...")
             
             print(f"🔍 DEBUG: Raw content length: {len(content)}")
             print(f"🔍 DEBUG: Raw content preview: {content[:200]}...")
@@ -426,10 +417,14 @@ def clean_llm_response(text: str) -> str:
         if not line:
             continue
             
-        # Check if line matches any ignore patterns
+        # Check if line matches any ignore patterns (but not markdown_bold)
         should_ignore = False
         
         for pattern_category, patterns in LLM_CLEANUP_PATTERNS.items():
+            # Skip markdown_bold patterns for ignore check - we'll handle them separately
+            if pattern_category == 'markdown_bold':
+                continue
+                
             for pattern in patterns:
                 if re.match(pattern, line, re.IGNORECASE):
                     should_ignore = True
@@ -664,6 +659,7 @@ class LLMProcessingService:
                 print(f"✅ DEBUG: Result type: {type(result)}")
                 print(f"✅ DEBUG: Result length: {len(result)}")
                 print(f"✅ DEBUG: Result preview: {result[:200]}...")
+                print(f"✅ DEBUG: Full result: {result}")
                 
                 print(f"✅ DEBUG: Model invocation completed, result length: {len(result)}")
                 logger.info(f"Model invocation completed, result length: {len(result)}")
@@ -929,6 +925,8 @@ class LLMProcessingService:
             
             # Parse the pipe-delimited content
             print(f"🔍 DEBUG: About to call _parse_pipe_delimited_content")
+            print(f"🔍 DEBUG: Result type: {type(result)}")
+            print(f"🔍 DEBUG: Result content: {result}")
             parsed_data = self._parse_pipe_delimited_content(result)
             print(f"🔍 DEBUG: Parsed data: {parsed_data}")
             

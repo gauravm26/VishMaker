@@ -54,45 +54,45 @@
     },
     "instructions": {
       "instruction1": {
-        "Role": "You are a product specification expert who transforms high-level product ideas into comprehensive product blueprints with detailed components and systems.",
-        "Objective": "Convert the user's input into a professional product specification that outlines the complete solution architecture. Your output should describe the product vision and enumerate all critical technical and functional components needed for real-world implementation.",
+        "Role": "You are an elite product-specification strategist who turns raw ideas into rock-solid blueprints ready for engineering execution.",
+        "Objective": "Take any user input and deliver a crystal-clear specification that begins with the end-user journey, then drills methodically into UI, security, system architecture, and finally backend services—so the build team always knows exactly what to do next.",
         "Output Word Limit": 100,
         "Constraints & Guidelines": {
-          "Maintain Meaning": "Preserve the user's core product concept while expanding it into a complete solution.",
-          "Industry Standards": "Apply current industry best practices and standard system components relevant to the product domain.",
-          "Technical Depth": "Include both user-facing features and necessary backend systems that would be required in production.",
-          "Comprehensive Scope": "Cover all aspects of a professional product: frontend, backend, integrations, security, and scalability considerations.",
-          "Output Format": "Begin with a concise product vision statement (2-3 sentences), followed by a comprehensive list of components organized by category (e.g., User Interface, Data Management, Third-party Integrations)."
+          "Maintain Meaning": "Honor the user’s core vision while expanding it into a fully-fledged, production-ready solution.",
+          "Industry Standards": "Embed current best practices and proven system patterns for the product’s domain.",
+          "Technical Depth": "Describe every layer the real world demands—from pixel-perfect interfaces to hard-core infrastructure.",
+          "Comprehensive Scope": "Cover user flows, UI/UX, security posture, high-level architecture, integrations, scalability, and backend subsystems—presented in that order.",
+          "Format": "Start with a punchy 2-3 sentence product vision. Immediately follow with a hierarchical outline in this sequence: (1) **User Flow & Requirements**, (2) **User Interface**, (3) **Security & Compliance**, (4) **System Architecture**, (5) **Backend & Data Management**, (6) **Third-party Integrations**."
         },
         "Examples": [
           {
             "Input": "Hi i want to build an ecommerce website that sells home decor items, but i also want it to have a blog and a section where i can post DIY tutorials for customers.",
-            "Output": "**Luxe Home Décor Platform**\n\nA comprehensive e-commerce ecosystem for premium home décor products with integrated content marketing capabilities. The platform will combine robust shopping functionality with engaging content elements to drive customer acquisition, improve retention, and position the brand as an authority in home styling and DIY projects.\n\n**Core System Components:**\n\n**Customer-Facing Systems:**\n- **Product Catalog & Search Engine** - Advanced filtering, category management, and AI-powered product recommendations\n- **Account Management System** - User profiles, saved preferences, purchase history, and wishlists\n- **Shopping Cart & Checkout** - Multi-step checkout with address validation and abandoned cart recovery\n- **Payment Processing** - Integration with multiple payment gateways (Stripe, PayPal, Apple Pay)\n- **Order Management** - Order tracking, history, and status notifications\n- **Content Hub** - Blog platform with categorization, tagging, and related product suggestions\n- **DIY Project Center** - Step-by-step tutorials with required materials linking to product pages\n- **Customer Reviews & Ratings** - Product rating system with photo/video upload capabilities\n\n**Administrative Systems:**\n- **Inventory Management** - Stock tracking, low inventory alerts, and supplier integration\n- **Content Management System** - WYSIWYG editor for blog and tutorial creation with scheduling\n- **Analytics Dashboard** - Sales reporting, customer behavior tracking, and content performance metrics\n- **Marketing Tools** - Email campaign management, discount code generation, and loyalty program administration\n- **Order Fulfillment** - Shipping label generation, packing slips, and delivery tracking\n\n**Technical Infrastructure:**\n- **User Authentication & Security** - Multi-factor authentication and PCI compliance measures\n- **Database Architecture** - Relational database for transactional data and NoSQL for content\n- **Search Optimization** - Elasticsearch implementation for product and content discovery\n- **CDN Integration** - Fast global content delivery for images and media files\n- **Mobile Responsiveness** - Progressive web app capabilities for cross-device compatibility\n- **API Layer** - RESTful API for potential mobile app expansion and third-party integrations"
+            "Output": "**Luxe Home Décor Platform**\n\nAn immersive commerce and content experience for premium home-décor lovers that converts inspiration into revenue.\n\n1. **User Flow & Requirements** – Browse décor → read DIY blog → add to cart → friction-free checkout → share finished projects.\n2. **User Interface** – Responsive catalog, AI-driven search, tutorial hub with embedded shoppable links, seamless mobile PWA.\n3. **Security & Compliance** – MFA, PCI-compliant payments, secure session handling, GDPR-ready data policies.\n4. **System Architecture** – Micro-services behind API gateway, CDN-accelerated assets, autoscaling container cluster.\n5. **Backend & Data Management** – Relational store for orders, NoSQL CMS for content, event-driven inventory sync, Elasticsearch for discovery.\n6. **Third-party Integrations** – Stripe/PayPal, email/SMS marketing, analytics, shipping carriers."
           }
         ]
       },
       "instruction2": {
-        "Role": "You are a chain-of-thought AI composed of multiple specialized agents (e.g., Business Analyst, UX Expert, Technical Architect). Working together, you transform a clarified project description into a structured high-level user flow.",
-        "Objective": "Identify the key steps, interactions, and user actions needed to achieve the user's goal—illustrated.",
+        "Role": "You are a expert AI that blends business, experience-design, and technical perspectives to turn a clarified project brief into a clean, sequential user-flow blueprint.",
+        "Objective": "Produce a high-level user flow that lists every essential step, interaction, and decision point the user must take to reach their goal, expressed in plain language the whole team can act on.",
         "ConstraintsAndGuidelines": {
-          "Input": "Use the refined user description from Step 1.",
+          "Input": "Use only the refined user description",
           "AnalyzeInSteps": {
-            "Business Analyst": "Identify the core user objectives and target audience.",
-            "UX Expert": "Define the intuitive user interactions and navigation steps.",
-            "Technical Architect": "Outline the main technical components that support the flow."
+            "Business Analyst": "Identify core user objectives, success criteria, and audience segments.",
+            "UX Expert": "Lay out friction-free navigation and interaction touchpoints.",
+            "Technical Architect": "Map the technical components or services that enable each step."
           },
-          "Output": "Provide a consolidated list or table of high-level user flow steps, each accompanied by a brief rationale.",
-          "Scope": "Keep the flow high-level, focusing on major user actions without detailed implementation.",
-          "NoFeatureCreep": "Avoid adding steps not mentioned or implied by the refined description.",
-          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each step MUST be on a new line with the step name and description separated by a pipe character (|). Example: 'Landing Page | User lands on homepage'. DO NOT use bullet points, numbers, or any other format."
+          "Output": "Return one consolidated list of user-flow steps, each paired with a single-sentence rationale.",
+          "Scope": "Stay high-level—capture major user actions and system responses; omit implementation details.",
+          "NoFeatureCreep": "Do NOT invent features or steps not explicitly required or logically implied.",
+          "Format": "IMPORTANT RULES — break **none** of these:\n1. Write EXACTLY one short introduction sentence (no headings, markdown, or role labels).\n2. Start each subsequent line with <Step Name> | <Description>. Nothing before or after.\n3. Step Name must be a single word or concise phrase (e.g., \"Landing Page\").\n4. No bullet points, numbers, tables, markdown, code fences, bold, italics, or additional commentary.\n5. End output immediately after the final step—no summaries, notes, or blank lines."
         },
         "Example": [
-          "Home Page | User lands on a polished page that captures attention with a clear call-to-action.",
-          "Browse Items | User browses items organized by categories and groups.",
-          "Item Details | User selects an item to view detailed information.",
-          "Basket Management | User adds or removes items from their basket.",
-          "Checkout | User proceeds to a simple checkout process by entering payment details.",
-          "Confirmation | User receives an email confirming the successful purchase."
+          "Landing Page | User arrives on an engaging homepage with one clear call-to-action.",
+          "Check-In | User authenticates or provides minimal details to continue.",
+          "Dashboard | User sees a personalized overview of available actions.",
+          "Primary Task | User performs the core action that fulfills their objective.",
+          "Review | User reviews inputs and confirms submission.",
+          "Confirmation | User receives on-screen and email confirmation, then exits."
         ]
       },
       "instruction3": {
@@ -281,10 +281,6 @@
             "instruction": "instruction1"
           }
         ],
-        "outputModel": {
-          "model": "model1",
-          "instruction": "instruction4"
-        },
         "outputFormat": "plain"
       },
       "component2": {
@@ -296,10 +292,6 @@
             "instruction": "instruction2"
           }
         ],
-        "outputModel": {
-          "model": "model2",
-          "instruction": "instruction4"
-        },
         "outputFormat": "columns_2"
       },
       "component3": {
@@ -311,10 +303,6 @@
             "instruction": "instruction5"
           }
         ],
-        "outputModel": {
-          "model": "model2",
-          "instruction": "instruction4"
-        },
         "outputFormat": "columns_2"
       },
       "component4": {
@@ -326,10 +314,6 @@
             "instruction": "instruction6"
           }
         ],
-        "outputModel": {
-          "model": "model2",
-          "instruction": "instruction4"
-        },
         "outputFormat": "columns_2"
       },
       "component5": {
@@ -341,14 +325,10 @@
             "instruction": "instruction7"
           }
         ],
-        "outputModel": {
-          "model": "model2",
-          "instruction": "instruction4"
-        },
         "outputFormat": "columns_2"
       },
       "component6": {
-        "componentId": "ManagerAgent",        
+        "componentId": "ManagerAgent",
         "modelInstructions": [
           {
             "model": "model1",
@@ -390,23 +370,23 @@
       "component10": {
         "componentId": "TesterAgent",
         "modelInstructions": [
-          { 
+          {
             "model": "model1",
             "instruction": "instruction12"
           }
         ],
         "outputFormat": "plain"
       },
-      "component11": {  
+      "component11": {
         "componentId": "DeployerAgent",
         "modelInstructions": [
           {
             "model": "model1",
             "instruction": "instruction13"
-          }   
+          }
         ],
         "outputFormat": "plain"
-      } 
+      }
     }
   },
   "techstack": {
@@ -430,7 +410,7 @@
       {
         "name": "EC2",
         "instanceType": "large"
-            }
+      }
     ]
   },
   "cloud": {

@@ -277,11 +277,11 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
 
             {/* Node Body - Table Container */}
             <div className="text-gray-900">
-                {/* Responsive Table Wrapper with horizontal scroll */}
-                <div className="overflow-x-auto max-w-full">
+                {/* Responsive Table Wrapper with horizontal and vertical scroll */}
+                <div className="overflow-x-auto max-w-full max-h-64 overflow-y-auto">
                     <div className="min-w-full">
                         {/* Header Row */}
-                        <div className="flex bg-gray-100 border-b border-gray-300 text-gray-800">
+                        <div className="flex bg-gray-100 border-b border-gray-300 text-gray-800 sticky top-0 z-10">
                             {sortedColumns.map(col => (
                                 <div 
                                     key={col.key} 
@@ -314,7 +314,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                         </div>
 
                         {/* Table Body */}
-                        <div className="scrollbar-hide">
+                        <div>
                         {rows.map((row, rowIndex) => (
                             <div
                                 key={`row-${row.id}-${rowIndex}`}
