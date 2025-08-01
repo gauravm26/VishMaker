@@ -26,16 +26,17 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
     { key: 'desc', label: 'Desc', width: 'w-[135px]', editable: true, order: 2 },
 ];
 
-// Responsive width mapping for mobile-first design
+// Responsive width mapping for percentage-based design
 const getResponsiveWidth = (width: string, isCompact: boolean = false): string => {
+    // Map old width classes to percentage-based widths
     const widthMap: { [key: string]: string } = {
-        'w-[70px]': isCompact ? 'w-12 sm:w-16' : 'w-16 sm:w-20',
-        'w-[180px]': isCompact ? 'w-24 sm:w-32' : 'w-32 sm:w-40 lg:w-48',
-        'w-[135px]': isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-36 lg:w-44',
-        'w-[120px]': isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-32 lg:w-40',
+        'w-[70px]': 'w-[10%]',    // First column (SNO) - 10%
+        'w-[180px]': 'w-[30%]',   // Second column (Name) - 30%
+        'w-[135px]': 'w-[60%]',   // Third column (Description) - 60%
+        'w-[120px]': 'w-[60%]',   // Fallback for description column
     };
     
-    return widthMap[width] || (isCompact ? 'w-20 sm:w-28' : 'w-28 sm:w-32 lg:w-40');
+    return widthMap[width] || 'w-[30%]'; // Default to 30% if not found
 };
 
 const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions }>> = ({ data, id: nodeId, selected }) => {
@@ -304,7 +305,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             className="w-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
                                         />
                                     ) : (
-                                        <span className="truncate block text-gray-800" title={col.label}>
+                                        <span className="break-words block text-gray-800 leading-relaxed" title={col.label}>
                                             {col.label}
                                         </span>
                                     )}
@@ -338,7 +339,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                 ${isLastCol ? 'border-r-0' : ''} 
                                                 ${col.editable ? 'cursor-text' : ''} 
                                                 ${isEditing ? 'p-0' : ''}
-                                                flex-shrink-0 flex items-center
+                                                flex-shrink-0 flex items-start
                                             `}
                                             onDoubleClick={() => handleDoubleClick(rowIndex, col.key, cellValue)}
                                         >
@@ -353,7 +354,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                     className="w-full h-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
                                                 />
                                             ) : (
-                                                <span className="truncate block w-full text-gray-900" title={String(cellValue)}>
+                                                <span className="break-words block w-full text-gray-900 leading-relaxed" title={String(cellValue)}>
                                                     {String(cellValue)}
                                                 </span>
                                             )}

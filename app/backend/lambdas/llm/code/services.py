@@ -9,12 +9,22 @@ This file contains all business logic, including:
 import json
 import logging
 import boto3
-from typing import Dict, Any, Optional, List
+import uuid
+import time
+import random
+from datetime import datetime
+from fastapi import FastAPI, Request, HTTPException, Depends
+from mangum import Mangum
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Dict, Any, List, Optional
+from pydantic import BaseModel
+from dynamodb.code.schemas import ProjectCreate, ProjectUpdate, Project
+from shared.auth import get_current_user
 from botocore.exceptions import ClientError
 from pathlib import Path
 import sys
 import os
-from datetime import datetime
 
 print("🔍 DEBUG: Starting to import modules in services.py")
 
@@ -56,6 +66,83 @@ class BedrockService:
             logger.error(f"Failed to initialize BedrockService: {e}")
             raise
     
+    def _retry_with_backoff(self, func, *args, max_retries=3, base_delay=1, **kwargs):
+        """
+        Retry function with exponential backoff for handling throttling exceptions.
+        
+        Args:
+            func: Function to retry
+            max_retries: Maximum number of retries
+            base_delay: Base delay in seconds
+            *args, **kwargs: Arguments to pass to func
+            
+        Returns:
+            Result of func if successful
+            
+        Raises:
+            Exception: If all retries fail
+        """
+        last_exception = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                
+                # Only retry on throttling exceptions
+                if error_code in ['ThrottlingException', 'TooManyRequestsException', 'ThrottledException']:
+                    if attempt < max_retries:
+                        # Calculate delay with exponential backoff and jitter
+                        delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                        print(f"⚠️ DEBUG: Throttling detected, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries + 1})")
+                        time.sleep(delay)
+                        last_exception = e
+                        continue
+                    else:
+                        print(f"❌ DEBUG: Max retries ({max_retries}) reached for throttling")
+                        raise e
+                else:
+                    # For non-throttling errors, don't retry
+                    raise e
+            except Exception as e:
+                # For non-ClientError exceptions, don't retry
+                raise e
+        
+        # If we get here, all retries failed
+        raise last_exception
+
+    def _invoke_model_internal(self, target_model_id: str, request_body: dict) -> str:
+        """
+        Internal method for invoking the Bedrock model (used by retry logic).
+        
+        Args:
+            target_model_id: The model ID to invoke
+            request_body: The request body
+            
+        Returns:
+            The response content as string
+        """
+        print(f"🔍 DEBUG: Invoking model internally: {target_model_id}")
+        
+        response = self.bedrock.invoke_model(
+            modelId=target_model_id,
+            body=json.dumps(request_body),
+            contentType='application/json',
+            accept='application/json'
+        )
+        
+        # Process the response
+        response_body = response.get('body', {})
+        if isinstance(response_body, str):
+            response_body = json.loads(response_body)
+        
+        # Extract content based on provider
+        provider_name = self._get_provider_name(target_model_id)
+        content = self._process_response_content(provider_name, response_body)
+        
+        return content
+
     def invoke_model(self, model_id: str, prompt: str, max_tokens: int = 2048, temperature: float = 0.8, inference_arn: str = None) -> str:
         """
         Invoke a Bedrock model with the given prompt.
@@ -98,6 +185,9 @@ class BedrockService:
             print(f"🔍 DEBUG: Content type: application/json")
             print(f"🔍 DEBUG: Accept type: application/json")
             
+            # Add a small delay to prevent throttling
+            time.sleep(0.5)
+            
             print("🚀 DEBUG: ===== BEDROCK INVOKE START =====")
             print(f"🚀 DEBUG: Calling bedrock.invoke_model with:")
             print(f"🚀 DEBUG:   - modelId: {target_model_id}")
@@ -119,32 +209,43 @@ class BedrockService:
             print(f"✅ DEBUG: Response type: {type(response)}")
             print(f"✅ DEBUG: Response keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
             
-            print("✅ DEBUG: Bedrock model invoked successfully")
-            logger.info(f"Bedrock model {model_id} invoked successfully")
+            # Process the response
+            response_body = response.get('body', {})
+            if isinstance(response_body, str):
+                response_body = json.loads(response_body)
             
-            print(f"🔍 DEBUG: Reading response body")
-            response_body = json.loads(response.get('body').read())
-            print(f"🔍 DEBUG: Response body received: {json.dumps(response_body)[:200]}...")
-            logger.info(f"Response body received from {model_id}")
+            # Extract content based on provider
+            provider_name = self._get_provider_name(target_model_id)
+            content = self._process_response_content(provider_name, response_body)
             
-            # Process response based on provider
-            print(f"🔍 DEBUG: Processing response content for provider: {provider_name}")
-            result = self._process_response_content(provider_name, response_body)
-            
-            print(f"🔍 DEBUG: Extracted response text length: {len(result)}")
-            logger.info(f"Extracted {len(result)} chars from {model_id} response")
-            return result
+            print(f"✅ DEBUG: Extracted content length: {len(content)}")
+            return content
                 
         except ClientError as e:
-            error_msg = f"Error invoking Bedrock model {model_id}: {str(e)}"
-            print(f"❌ DEBUG: {error_msg}")
-            logger.error(error_msg)
-            raise Exception(f"Failed to invoke LLM model: {str(e)}")
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            
+            if error_code in ['ThrottlingException', 'TooManyRequestsException', 'ThrottledException']:
+                print(f"⚠️ DEBUG: Throttling exception detected: {error_code} - {error_message}")
+                # Use retry logic for throttling exceptions
+                try:
+                    return self._retry_with_backoff(
+                        self._invoke_model_internal,
+                        target_model_id,
+                        request_body,
+                        max_retries=3,
+                        base_delay=2
+                    )
+                except Exception as retry_error:
+                    print(f"❌ DEBUG: Retry failed: {str(retry_error)}")
+                    raise Exception(f"Failed to invoke LLM model after retries: {str(retry_error)}")
+            else:
+                print(f"❌ DEBUG: Non-throttling error: {error_code} - {error_message}")
+                raise Exception(f"Failed to invoke LLM model: {error_message}")
+                    
         except Exception as e:
-            error_msg = f"Unexpected error invoking Bedrock model: {str(e)}"
-            print(f"❌ DEBUG: {error_msg}")
-            logger.error(error_msg)
-            raise Exception(f"Unexpected error: {str(e)}")
+            print(f"❌ DEBUG: Unexpected error invoking Bedrock model: {str(e)}")
+            raise Exception(f"Failed to invoke LLM model: {str(e)}")
 
     def _get_provider_name(self, model_id: str) -> str:
         """Extract the provider name from the model ID."""
@@ -183,42 +284,172 @@ class BedrockService:
             }
 
     def _process_response_content(self, provider_name: str, response_body: dict) -> str:
-        """Process provider-specific response content."""
-        if not isinstance(response_body, dict):
-            return str(response_body)
+        """
+        Process response content based on the provider.
         
-        if provider_name == "anthropic":
-            # Claude v3+ format
-            if "content" in response_body and isinstance(response_body["content"], list):
-                text_parts = [
-                    item.get("text", "")
-                    for item in response_body["content"]
-                    if isinstance(item, dict) and item.get("type") == "text"
-                ]
-                return "\n".join(text_parts).strip()
-            # Claude v2 format
-            elif "completion" in response_body:
-                return response_body.get("completion", "").strip()
+        Args:
+            provider_name: The provider name (anthropic, openai, etc.)
+            response_body: The response body from the LLM
+            
+        Returns:
+            The processed content as string
+        """
+        print(f"🔍 DEBUG: Processing response for provider: {provider_name}")
+        print(f"🔍 DEBUG: Response body keys: {list(response_body.keys())}")
+        
+        try:
+            if provider_name == "anthropic":
+                # Anthropic Claude format
+                if "content" in response_body and isinstance(response_body["content"], list):
+                    content_parts = []
+                    for part in response_body["content"]:
+                        if part.get("type") == "text":
+                            content_parts.append(part.get("text", ""))
+                    content = "".join(content_parts)
+                else:
+                    content = response_body.get("content", "")
+                    
+            elif provider_name == "openai":
+                # OpenAI format
+                content = response_body.get("choices", [{}])[0].get("message", {}).get("content", "")
+                
+            elif provider_name == "amazon":
+                # Amazon Titan format
+                content = response_body.get("completion", "")
+                
             else:
-                return str(response_body)
-        elif provider_name == "meta":
-            # Llama format
-            if "generation" in response_body:
-                return response_body.get("generation", "").strip()
-            elif "outputs" in response_body and isinstance(response_body["outputs"], list) and response_body["outputs"]:
-                first_output = response_body["outputs"][0]
-                if isinstance(first_output, dict) and "text" in first_output:
-                    return first_output.get("text", "").strip()
-            else:
-                return str(response_body)
-        else:
-            # Generic fallback
-            for key in ["text", "content", "completion", "generation", "output", "answer", "response"]:
-                if key in response_body:
-                    value = response_body[key]
-                    if isinstance(value, str):
-                        return value.strip()
+                # Default: try to extract from common fields
+                content = (
+                    response_body.get("content", "") or
+                    response_body.get("completion", "") or
+                    response_body.get("text", "") or
+                    str(response_body)
+                )
+            
+            print(f"🔍 DEBUG: Raw content length: {len(content)}")
+            print(f"🔍 DEBUG: Raw content preview: {content[:200]}...")
+            
+            # Clean the content using our cleanup function
+            cleaned_content = clean_llm_response(content)
+            
+            print(f"🔍 DEBUG: Cleaned content length: {len(cleaned_content)}")
+            print(f"🔍 DEBUG: Cleaned content preview: {cleaned_content[:200]}...")
+            
+            return cleaned_content
+            
+        except Exception as e:
+            print(f"❌ DEBUG: Error processing response content: {str(e)}")
+            # Fallback: return the raw response as string
             return str(response_body)
+
+# Patterns to clean up LLM responses
+LLM_CLEANUP_PATTERNS = {
+    # Markdown formatting patterns to remove
+    'markdown_bold': [
+        r'\*\*(.*?)\*\*',  # **bold text**
+        r'__(.*?)__',      # __bold text__
+    ],
+    
+    # Markdown headers to ignore
+    'markdown_headers': [
+        r'^#{1,6}\s+.*$',  # # Header, ## Header, etc.
+        r'^Step\s*\d*:?$',  # Step 1:, Step:, etc.
+        r'^Description:?$',  # Description:
+        r'^Name:?$',        # Name:
+        r'^Title:?$',       # Title:
+        r'^Header:?$',      # Header:
+        r'^Flow:?$',        # Flow:
+        r'^Process:?$',     # Process:
+        r'^Action:?$',      # Action:
+        r'^User\s+Action:?$',  # User Action:
+        r'^System\s+Response:?$',  # System Response:
+    ],
+    
+    # Separator patterns to ignore
+    'separators': [
+        r'^---+$',          # ---
+        r'^===+$',          # ===
+        r'^\*\*\*+$',       # ***
+        r'^___+$',          # ___
+        r'^\.\.\.+$',       # ...
+    ],
+    
+    # Empty or whitespace-only patterns
+    'empty_content': [
+        r'^\s*$',           # Empty lines or whitespace only
+        r'^\s*[-*]\s*$',    # Just a bullet point with no content
+        r'^\s*\d+\.\s*$',   # Just a number with no content
+    ],
+    
+    # Common LLM artifacts to remove
+    'llm_artifacts': [
+        r'^Response:$',      # Response:
+        r'^Output:$',        # Output:
+        r'^Result:$',        # Result:
+        r'^Answer:$',        # Answer:
+        r'^Here\s+is\s+the\s+.*:$',  # Here is the...
+        r'^Based\s+on\s+.*:$',        # Based on...
+        r'^I\s+have\s+.*:$',         # I have...
+        r'^Let\s+me\s+.*:$',         # Let me...
+        r'^The\s+.*\s+is\s+.*:$',    # The process is...
+    ],
+    
+    # Table formatting artifacts
+    'table_artifacts': [
+        r'^\|.*\|$',        # Table rows with pipes
+        r'^[-|]+\s*$',      # Table separators
+    ]
+}
+
+def clean_llm_response(text: str) -> str:
+    """
+    Clean up LLM response by removing unwanted patterns and formatting.
+    
+    Args:
+        text: Raw LLM response text
+        
+    Returns:
+        Cleaned text with unwanted patterns removed
+    """
+    import re
+    
+    if not text:
+        return text
+    
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Skip empty lines
+        if not line:
+            continue
+            
+        # Check if line matches any ignore patterns
+        should_ignore = False
+        
+        for pattern_category, patterns in LLM_CLEANUP_PATTERNS.items():
+            for pattern in patterns:
+                if re.match(pattern, line, re.IGNORECASE):
+                    should_ignore = True
+                    print(f"🔍 DEBUG: Ignoring line (pattern: {pattern_category}): '{line}'")
+                    break
+            if should_ignore:
+                break
+        
+        if should_ignore:
+            continue
+        
+        # Remove markdown bold formatting but keep the text
+        for bold_pattern in LLM_CLEANUP_PATTERNS['markdown_bold']:
+            line = re.sub(bold_pattern, r'\1', line)
+        
+        # Only add non-empty lines
+        if line.strip():
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
 
 class LLMProcessingService:
     """Service for processing LLM requests with component-specific logic."""
