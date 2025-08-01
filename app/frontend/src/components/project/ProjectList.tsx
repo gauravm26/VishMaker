@@ -4,7 +4,7 @@ import { Project } from '../../types/project';
 import apiClient from '../../lib/apiClient';
 
 interface ProjectListProps {
-    onProjectSelect: (projectId: number) => void;
+    onProjectSelect: (projectId: number, projectName?: string) => void;
     refreshTrigger: number;
     selectedProjectId: number | null;
     triggerRefresh: () => void;
@@ -116,7 +116,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                                     }
                                     ${isDeleting ? 'opacity-50' : ''}
                                 `}
-                                onClick={() => !isDeleting && onProjectSelect(project.id)}
+                                onClick={() => !isDeleting && onProjectSelect(project.id, project.name)}
                             >
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1 min-w-0 pr-3">

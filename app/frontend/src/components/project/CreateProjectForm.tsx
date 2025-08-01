@@ -6,7 +6,7 @@ import LlmService, { LlmResponse } from '../../lib/llmService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface CreateProjectFormProps {
-    onProjectCreated: () => void;
+    onProjectCreated: (projectId?: number, projectName?: string) => void;
     shouldExpand?: boolean;
     onExpandChange?: (expanded: boolean) => void;
 }
@@ -96,8 +96,9 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
             // Update the prompt with the generated text
             setPrompt(response.result);
             
-            // Show success message with model ID and instruction ID from the response
-            setSuccessMessage(`Refined with ${response.modelId} using ${response.instructionId}`);
+            // Show success message with model name and instruction ID from the response
+            const modelName = response.modelName || response.modelId || 'AI Model';
+            setSuccessMessage(`Refined with ${modelName} using ${response.instructionId}`);
             
             // Display the final progress update
             if (response.progressUpdates && response.progressUpdates.length > 0) {
@@ -194,7 +195,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                     setPrompt('');
                     setProgressUpdate(null);
                     setIsExpanded(false); // Collapse after success
-                    onProjectCreated();
+                    onProjectCreated(project.id, name.trim()); // Pass project ID and name back to parent
                 }, 2000);
                 
             } catch (llmErr: any) {
@@ -205,7 +206,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                     setName('');
                     setPrompt('');
                     setProgressUpdate(null);
-                    onProjectCreated();
+                    onProjectCreated(project.id, name.trim()); // Pass project ID and name even if LLM failed
                 }, 3000);
             }
         } catch (err: any) {
@@ -239,26 +240,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                 </div>
             ) : (
                 // Expanded state - full form
-                <div className="space-y-6 bg-white/5 border border-white/20 rounded-xl p-6 backdrop-blur-sm">
-                    <div className="relative">
-                        <button
-                            onClick={() => handleExpandedChange(false)}
-                            className="absolute top-0 right-0 text-white/50 hover:text-white/80 transition-colors p-2 rounded-lg hover:bg-white/10"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                        <div className="text-center pr-12">
-                            <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">
-                                Create New Project
-                            </h2>
-                            <p className="text-sm text-gray-300">
-                                Start your creative journey with a new project
-                            </p>
-                        </div>
-                    </div>
-                    
+                <div className="space-y-6">
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {/* Project Name Field */}
                         <div className="space-y-2">
@@ -322,7 +304,7 @@ const CreateProjectForm: React.FC<CreateProjectFormProps> = ({
                                     ) : (
                                         <span className="flex items-center space-x-1">
                                             <span className="animate-pulse text-yellow-300">✨</span>
-                                            <span>AI</span>
+                                            <span>Refine with AI</span>
                                         </span>
                                     )}
                                 </button>

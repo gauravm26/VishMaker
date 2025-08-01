@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from dynamodb.code.schemas import ProjectCreate, ProjectUpdate, Project
+from shared.auth import get_current_user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -117,12 +118,20 @@ def get_project(project_id: str):
     """Get a specific project by ID"""
     try:
         table = get_table()
-        response = table.get_item(Key={'id': project_id})
         
-        if 'Item' not in response:
+        # Since we need both keys but only have the id, we need to scan
+        # This is not ideal for performance, but works with the current setup
+        response = table.scan(
+            FilterExpression='id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        
+        items = response.get('Items', [])
+        if not items:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        project = Project(**response['Item'])
+        # Take the first match (should be unique by id)
+        project = Project(**items[0])
         logger.info(f"✅ Retrieved project: {project_id}")
         
         return project
@@ -139,6 +148,22 @@ def update_project(project_id: str, project_update: ProjectUpdate):
     try:
         table = get_table()
         
+        # First, get the project to find the user_id
+        response = table.scan(
+            FilterExpression='id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        
+        items = response.get('Items', [])
+        if not items:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_item = items[0]
+        user_id = project_item.get('user_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Project missing user_id")
+        
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_attribute_values = {':updated_at': datetime.utcnow().isoformat()}
@@ -152,9 +177,9 @@ def update_project(project_id: str, project_update: ProjectUpdate):
             update_expression += ", initial_prompt = :initial_prompt"
             expression_attribute_values[':initial_prompt'] = project_update.initial_prompt
         
-        # Update the item
+        # Update the item with both keys
         response = table.update_item(
-            Key={'id': project_id},
+            Key={'id': project_id, 'user_id': user_id},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values,
             ExpressionAttributeNames=expression_attribute_names if 'expression_attribute_names' in locals() else None,
@@ -177,11 +202,31 @@ def delete_project(project_id: str):
     """Delete a project by ID"""
     try:
         table = get_table()
-        table.delete_item(Key={'id': project_id})
         
-        logger.info(f"✅ Deleted project: {project_id}")
+        # First, get the project to find the user_id
+        response = table.scan(
+            FilterExpression='id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        
+        items = response.get('Items', [])
+        if not items:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_item = items[0]
+        user_id = project_item.get('user_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Project missing user_id")
+        
+        # Delete with both hash key (id) and range key (user_id)
+        table.delete_item(Key={'id': project_id, 'user_id': user_id})
+        
+        logger.info(f"✅ Deleted project: {project_id} for user: {user_id}")
         return None
         
+    except table.meta.client.exceptions.ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="Project not found")
     except Exception as e:
         logger.error(f"❌ Error deleting project {project_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")

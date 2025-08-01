@@ -89,10 +89,22 @@ class BedrockService:
             print(f"🔍 DEBUG: Request body prepared: {json.dumps(request_body)[:200]}...")
             logger.info(f"Request body prepared for model {model_id}")
             
-            print(f"🔍 DEBUG: About to call bedrock.invoke_model")
-            
             # Use inference profile if provided, otherwise use model_id directly
             target_model_id = inference_arn if inference_arn else model_id
+            
+            print(f"🔍 DEBUG: About to call bedrock.invoke_model")
+            print(f"🔍 DEBUG: Target model ID: {target_model_id}")
+            print(f"🔍 DEBUG: Request body size: {len(json.dumps(request_body))} bytes")
+            print(f"🔍 DEBUG: Content type: application/json")
+            print(f"🔍 DEBUG: Accept type: application/json")
+            
+            print("🚀 DEBUG: ===== BEDROCK INVOKE START =====")
+            print(f"🚀 DEBUG: Calling bedrock.invoke_model with:")
+            print(f"🚀 DEBUG:   - modelId: {target_model_id}")
+            print(f"🚀 DEBUG:   - request body: {request_body}")
+            print(f"🚀 DEBUG:   - body length: {len(json.dumps(request_body))}")
+            print(f"🚀 DEBUG:   - contentType: application/json")
+            print(f"🚀 DEBUG:   - accept: application/json")
             
             response = self.bedrock.invoke_model(
                 modelId=target_model_id,
@@ -100,6 +112,12 @@ class BedrockService:
                 contentType='application/json',
                 accept='application/json'
             )
+            
+            print("✅ DEBUG: ===== BEDROCK INVOKE SUCCESS =====")
+            print(f"✅ DEBUG: Response received from Bedrock")
+            print(f"✅ DEBUG: Response: {response}")
+            print(f"✅ DEBUG: Response type: {type(response)}")
+            print(f"✅ DEBUG: Response keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
             
             print("✅ DEBUG: Bedrock model invoked successfully")
             logger.info(f"Bedrock model {model_id} invoked successfully")
@@ -302,15 +320,6 @@ class LLMProcessingService:
                 print(f"🔍 DEBUG: Got target table from config: {target_table}")
                 logger.info(f"Got target table from config: {target_table}")
             
-            # Normalize target_table to ensure consistency
-            # Keep the original table names as they are in DynamoDB
-            # if target_table == "high_level_requirements":
-            #     target_table = "high_level_requirement"
-            # elif target_table == "low_level_requirements":
-            #     target_table = "low_level_requirement"
-            # elif target_table == "test_cases":
-            #     target_table = "test_case"
-            
             # Get model instructions
             print(f"🔍 DEBUG: Getting model instructions from component config")
             model_instructions = component_config.get("modelInstructions", [])
@@ -401,6 +410,16 @@ class LLMProcessingService:
                     print(f"🔍 DEBUG: Using inference profile: {inference_arn}")
                 logger.info(f"Invoking model {model_id} with max_tokens={max_tokens}, temperature={temperature}")
                 
+                print("🚀 DEBUG: ===== LLM INVOKE START =====")
+                print(f"🚀 DEBUG: About to call bedrock_service.invoke_model")
+                print(f"🚀 DEBUG:   - model_id: {model_id}")
+                print(f"🚀 DEBUG:   - prompt length: {len(prompt)}")
+                print(f"🚀 DEBUG:   - max_tokens: {max_tokens}")
+                print(f"🚀 DEBUG:   - temperature: {temperature}")
+                print(f"🚀 DEBUG:   - inference_arn: {inference_arn}")
+                print(f"🚀 DEBUG:   - component_id: {component_id}")
+                print(f"🚀 DEBUG:   - output_format: {output_format}")
+                
                 result = self.bedrock_service.invoke_model(
                     model_id=model_id,
                     prompt=prompt,
@@ -408,6 +427,12 @@ class LLMProcessingService:
                     temperature=temperature,
                     inference_arn=inference_arn
                 )
+                
+                print("✅ DEBUG: ===== LLM INVOKE SUCCESS =====")
+                print(f"✅ DEBUG: Model invocation completed successfully")
+                print(f"✅ DEBUG: Result type: {type(result)}")
+                print(f"✅ DEBUG: Result length: {len(result)}")
+                print(f"✅ DEBUG: Result preview: {result[:200]}...")
                 
                 print(f"✅ DEBUG: Model invocation completed, result length: {len(result)}")
                 logger.info(f"Model invocation completed, result length: {len(result)}")
@@ -445,9 +470,14 @@ class LLMProcessingService:
                     
                     if output_instruction:
                         try:
+                            print(f"🔍 DEBUG: Output instruction keys: {list(output_instruction.keys())}")
+                            print(f"🔍 DEBUG: Output instruction constraints: {output_instruction.get('Constraints & Guidelines', 'NOT FOUND')}")
+                            print(f"🔍 DEBUG: Output instruction examples: {output_instruction.get('Example', 'NOT FOUND')}")
+                            
                             # Build prompt for output refinement
                             refinement_prompt = self._build_prompt(output_instruction, final_result, project_id, parent_uiid)
-                            print(f"🔍 DEBUG: Refinement prompt: {refinement_prompt}")
+                            print(f"🔍 DEBUG: Refinement prompt length: {len(refinement_prompt)}")
+                            print(f"🔍 DEBUG: Refinement prompt preview: {refinement_prompt[:500]}...")
                             # Get output model configuration
                             output_model_config = self.config.get("llm", {}).get("models", {}).get(output_model_key)
                             if output_model_config:
@@ -493,6 +523,7 @@ class LLMProcessingService:
                 "success": True,
                 "result": final_result,
                 "modelId": results[-1]["model"] if results else "",
+                "modelName": results[-1]["model"] if results else "",  # This will be the friendly name like "model1"
                 "instructionId": results[-1]["instruction"] if results else "",
                 "progressUpdates": progress_updates,
                 "generated_uiids": generated_uiids,
@@ -589,16 +620,33 @@ class LLMProcessingService:
         # Build the prompt
         prompt = f"{role}\n\n{objective}\n\n"
         
-        # Add constraints
+        # Add constraints and guidelines
         if constraints:
             prompt += "Constraints & Guidelines:\n"
             for key, value in constraints.items():
                 if isinstance(value, dict):
                     prompt += f"- {key}:\n"
                     for subkey, subvalue in value.items():
-                        prompt += f"  - {subkey}: {subvalue}\n"
+                        if isinstance(subvalue, dict):
+                            prompt += f"  - {subkey}:\n"
+                            for subsubkey, subsubvalue in subvalue.items():
+                                prompt += f"    - {subsubkey}: {subsubvalue}\n"
+                        else:
+                            prompt += f"  - {subkey}: {subvalue}\n"
                 else:
                     prompt += f"- {key}: {value}\n"
+        
+        # Add examples if available
+        examples = instruction_config.get("Example", [])
+        print(f"🔍 DEBUG: Examples found: {examples}")
+        if examples:
+            prompt += "\nExamples:\n"
+            for example in examples:
+                prompt += f"- {example}\n"
+            print(f"🔍 DEBUG: Added {len(examples)} examples to prompt")
+        else:
+            print(f"🔍 DEBUG: No examples found in instruction config")
+            print(f"🔍 DEBUG: Available keys in instruction_config: {list(instruction_config.keys())}")
         
         # Add context information
         context_info = []
@@ -612,6 +660,15 @@ class LLMProcessingService:
         
         # Add output limit
         prompt += f"\nOutput Word Limit: {output_limit} words\n\n"
+        
+        # Add output format if specified
+        output_format = instruction_config.get("output_format")
+        print(f"🔍 DEBUG: Output format found: {output_format}")
+        if output_format:
+            prompt += f"\nOutput Format: {output_format}\n\n"
+            print(f"🔍 DEBUG: Added output format to prompt: {output_format}")
+        else:
+            print(f"🔍 DEBUG: No output format found in instruction config")
         
         # Add the input text
         prompt += f"Input: {text}\n\nResponse:"

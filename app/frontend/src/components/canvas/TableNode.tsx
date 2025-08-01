@@ -304,7 +304,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                             className="w-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
                                         />
                                     ) : (
-                                        <span className="truncate block" title={col.label}>
+                                        <span className="truncate block text-gray-800" title={col.label}>
                                             {col.label}
                                         </span>
                                     )}
@@ -353,7 +353,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                                     className="w-full h-full outline-none border border-blue-400 px-1 py-0 m-0 text-xs sm:text-sm bg-white text-gray-900 rounded"
                                                 />
                                             ) : (
-                                                <span className="truncate block w-full" title={String(cellValue)}>
+                                                <span className="truncate block w-full text-gray-900" title={String(cellValue)}>
                                                     {String(cellValue)}
                                                 </span>
                                             )}

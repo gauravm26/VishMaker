@@ -65,15 +65,24 @@ const LandingPage: React.FC = () => {
 
   // Parallax effect for the background
   useEffect(() => {
+    let ticking = false;
+    
     const handleMouseMove = (e: MouseEvent) => {
-      if (parallaxRef.current) {
-        const { clientX, clientY } = e;
-        const { innerWidth, innerHeight } = window;
-        const x = (clientX / innerWidth - 0.5) * 30;
-        const y = (clientY / innerHeight - 0.5) * 30;
-        parallaxRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          if (parallaxRef.current) {
+            const { clientX, clientY } = e;
+            const { innerWidth, innerHeight } = window;
+            const x = (clientX / innerWidth - 0.5) * 30;
+            const y = (clientY / innerHeight - 0.5) * 30;
+            parallaxRef.current.style.transform = `translate(${x}px, ${y}px)`;
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
     };
+    
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
@@ -92,6 +101,28 @@ const LandingPage: React.FC = () => {
       return <div key={`star-${starKey}-${i}`} className="shooting-star" style={style} />;
     });
   }, [isShootingStarsLoaded, starKey]);
+
+  // Memoize stardust elements to prevent re-creation on every render
+  const stardustElements = useMemo(() => {
+    return Array.from({ length: 50 }).map((_, i) => { // Reduced from 100 to 50
+      const size = Math.random() * 2 + 1;
+      const colors = ['bg-white/70', 'bg-blue-300/70', 'bg-purple-300/70', 'bg-teal-300/70'];
+      return (
+        <div
+          key={`stardust-${i}`}
+          className={`absolute rounded-full animate-pulse ${colors[Math.floor(Math.random() * colors.length)]}`}
+          style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+            animationDuration: `${Math.random() * 8 + 8}s`,
+            animationDelay: `${Math.random() * 8}s`,
+          }}
+        />
+      );
+    });
+  }, []); // Empty dependency array - only create once
 
   // Load shooting stars after page load
   useEffect(() => {
@@ -113,24 +144,7 @@ const LandingPage: React.FC = () => {
         {/* Shooting Stars */}
         {shootingStars}
         <div id="stardust-container" className="absolute inset-0">
-          {Array.from({ length: 100 }).map((_, i) => {
-            const size = Math.random() * 2 + 1;
-            const colors = ['bg-white/70', 'bg-blue-300/70', 'bg-purple-300/70', 'bg-teal-300/70'];
-            return (
-              <div
-                key={i}
-                className={`absolute rounded-full animate-pulse ${colors[Math.floor(Math.random() * colors.length)]}`}
-                style={{
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  top: `${Math.random() * 100}%`,
-                  left: `${Math.random() * 100}%`,
-                  animationDuration: `${Math.random() * 8 + 8}s`,
-                  animationDelay: `${Math.random() * 8}s`,
-                }}
-              />
-            );
-          })}
+          {stardustElements}
         </div>
       </div>
       
@@ -158,7 +172,12 @@ const LandingPage: React.FC = () => {
                   </Link>
                 )}
               </div>
-              <button className="sm:hidden text-white" onClick={() => setIsMobileMenuOpen(true)}>
+              <button 
+                className="sm:hidden text-white" 
+                onClick={() => setIsMobileMenuOpen(true)}
+                aria-label="Open mobile menu"
+                aria-expanded={isMobileMenuOpen}
+              >
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
               </button>
             </div>
@@ -169,10 +188,12 @@ const LandingPage: React.FC = () => {
         <section className="min-h-[80vh] flex items-center justify-center text-center px-4 relative">
           <div className="max-w-4xl">
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold leading-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-white animate-gradient-x">
-              Your wish, launched into reality.
+              Your Wish,<br />
+              <span className="lowercase font-normal">live in your cloud.</span>
             </h1>
+
             <p className="mt-6 text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto animate-fade-in-up" style={{animationDelay: '0.5s'}}>
-              VishMaker is the celebration of creation, spinning every wish into a fully featured solution
+            VishMaker turns ideas into requirements, architecture, code, and deployment-ready features—automated, auditable, and always yours.
             </p>
             <div className="mt-12 animate-fade-in-up" style={{animationDelay: '1s'}}>
               <WaitlistForm 
@@ -194,9 +215,9 @@ const LandingPage: React.FC = () => {
               <div className="relative bg-black rounded-3xl flex items-center justify-center border-2 border-purple-500/30 shadow-2xl h-full">
                 <div className="text-center space-y-4">
                   <div className="bg-gradient-to-r from-blue-500 to-purple-600 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transform transition-transform duration-300 group-hover:scale-110">
-                    <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
                   </div>
-                  
+                  <p className="text-gray-400 text-sm">Video coming soon</p>
                 </div>
               </div>
             </div>
@@ -208,49 +229,61 @@ const LandingPage: React.FC = () => {
           <div className="container-responsive text-center">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500">Productionalize</span></h2>
             <p className="text-lg text-gray-400 mb-16">From idea to deployment, VishMaker provides all the tools you need.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                title="Crystal-Clear Requirements → Bullet-proof Code"
-                description="A visual canvas that chains User Flow → High-Level → Low-Level → Tests, so every feature ships with an audit-ready paper trail."
-                gradient="from-blue-500 to-cyan-500"
-                delay="0s"
-              />
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
-                title="Own Your Stack, Own Your Future"
-                description="One-click IaC deploys VishMaker into your AWS, Azure, or GCP—no vendor lock-in, no data leaving your VPC."
-                gradient="from-purple-500 to-pink-500"
-                delay="0.2s"
-              />
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-                title="Best-of-Breed LLM Orchestration"
-                description="Routes planning to Gemini /OpenAI, coding to Codex (or any model you choose) for higher accuracy, lower cost, and zero single-point failure."
-                gradient="from-emerald-500 to-teal-500"
-                delay="0.4s"
-              />
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
-                title="Enterprise-Grade Governance & Audit"
-                description="Built-in policy engine, role-based controls, and tamper-proof logs that keep compliance teams smiling."
-                gradient="from-orange-500 to-red-500"
-                delay="0.6s"
-              />
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
-                title="Real-Time Cost & Performance Insight"
-                description="See token spend, model latency, and cloud costs in one dashboard—optimize budgets before they bite."
-                gradient="from-indigo-500 to-purple-500"
-                delay="0.8s"
-              />
-              <FeatureCard 
-                icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>}
-                title="Unified Docs & Project Hub"
-                description="Requirements, user stories, and progress live together—so business intent and code never drift apart."
-                gradient="from-green-500 to-emerald-500"
-                delay="1s"
-              />
+            
+            {/* Available Now Section */}
+            <div className="mb-16">
+              <h3 className="text-xl font-semibold text-white mb-8">🚀 Available Now</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                  title="Crystal-Clear Requirements → Bullet-proof Code"
+                  description="A visual canvas that chains User Flow → High-Level → Low-Level → Tests, so every feature ships with an audit-ready paper trail."
+                  gradient="from-blue-500 to-cyan-500"
+                  delay="0s"
+                />
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                  title="Own Your Stack, Own Your Future"
+                  description="One-click IaC deploys VishMaker into your AWS, Azure, or GCP—no vendor lock-in, no data leaving your VPC."
+                  gradient="from-purple-500 to-pink-500"
+                  delay="0.2s"
+                />
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
+                  title="The smartest agent wins."
+                  description="Plan with Gemini, code with Claude, validate with GPT — VishMaker routes tasks to the best LLM for the job. No silos, no limits."
+                  gradient="from-emerald-500 to-teal-500"
+                  delay="0.4s"
+                />
+              </div>
+            </div>
+
+            {/* Coming Soon Section */}
+            <div>
+              <h3 className="text-xl font-semibold text-white mb-8">🛠️ On the Roadmap</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 opacity-70">
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
+                  title="Enterprise-Grade Governance & Audit"
+                  description="Built-in policy engine, role-based controls, and tamper-proof logs that keep compliance teams smiling."
+                  gradient="from-orange-500 to-red-500"
+                  delay="0.6s"
+                />
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}
+                  title="Real-Time Cost & Performance Insight"
+                  description="See token spend, model latency, and cloud costs in one dashboard—optimize budgets before they bite."
+                  gradient="from-indigo-500 to-purple-500"
+                  delay="0.8s"
+                />
+                <FeatureCard 
+                  icon={<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>}
+                  title="Unified Docs & Project Hub"
+                  description="Requirements, user stories, and progress live together—so business intent and code never drift apart."
+                  gradient="from-green-500 to-emerald-500"
+                  delay="1s"
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -283,6 +316,7 @@ const LandingPage: React.FC = () => {
                 <button 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="text-white hover:text-gray-300"
+                  aria-label="Close mobile menu"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

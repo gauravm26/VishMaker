@@ -126,7 +126,15 @@
             "Ensure the text is coherent and grammatically correct."
           ],
           "Output Constraint": "Output ONLY the final refined and formatted text as specified."
-        }
+        },
+        "Example": [
+          "Home Page | User lands on a polished page that captures attention with a clear call-to-action, including visually appealing elements and strategic placement of key messaging.",
+          "Browse Items | User browses items organized by categories and groups, with intuitive navigation menus and filtering options to enhance product discovery.",
+          "Item Details | User selects an item to view detailed information, including high-quality images, descriptions, specifications, and customer reviews.",
+          "Basket Management | User adds or removes items from their basket, with a dynamic summary of selected products and options to adjust quantities.",
+          "Checkout | User proceeds to a streamlined checkout process by entering payment details, shipping information, and confirming the order.",
+          "Confirmation | User receives an immediate email confirmation of the successful purchase, along with an order summary and tracking information if applicable."
+        ]
       },
       "instruction5": {
         "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
