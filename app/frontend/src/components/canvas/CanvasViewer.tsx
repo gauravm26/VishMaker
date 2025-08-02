@@ -89,6 +89,7 @@ const determineFields = (item: any): {
 interface CanvasViewerProps {
     projectId: number | null;
     refreshTrigger: number;
+    onToggleSidebar?: () => void;
 }
 
 // Custom edge component to handle errors with missing handles
@@ -155,7 +156,7 @@ const createNewRow = (idPrefix: string, nextSno: number, columns: ColumnDef[]): 
     return newRow;
 };
 
-const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
+const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar }) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeData & { actions: any }>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [userFlows, setUserFlows] = useState<UserFlow[]>([]);
@@ -171,7 +172,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
     const [clickedNodeType, setClickedNodeType] = useState<string | null>(null);
     
     // Panel states
-    const [leftPanelOpen, setLeftPanelOpen] = useState<boolean>(false);
     const [bottomPanelOpen, setBottomPanelOpen] = useState<boolean>(false);
     const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(false);
     const [devMode, setDevMode] = useState<boolean>(false);
@@ -1314,8 +1314,14 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
 
     // Panel toggle functions
     const toggleLeftPanel = useCallback(() => {
-        setLeftPanelOpen(prev => !prev);
-    }, []);
+        console.log('CanvasViewer: toggleLeftPanel called');
+        if (onToggleSidebar) {
+            console.log('CanvasViewer: calling onToggleSidebar');
+            onToggleSidebar();
+        } else {
+            console.log('CanvasViewer: onToggleSidebar is not provided');
+        }
+    }, [onToggleSidebar]);
 
     const toggleBottomPanel = useCallback(() => {
         setBottomPanelOpen(prev => !prev);
@@ -1666,48 +1672,46 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 `}
             </style>
             
-            {/* Header - Hide when panels are open */}
-            {(!leftPanelOpen && !rightPanelOpen && !bottomPanelOpen) && (
-                <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
-                    <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
+            {/* Header - Always visible with control buttons */}
+            <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
+                <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
+                
+                {/* Panel Controls - Always visible */}
+                <div className="flex items-center space-x-2">
+                    {/* Main Sidebar Toggle */}
+                    <button
+                        onClick={toggleLeftPanel}
+                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                        title="Toggle Projects Sidebar"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                    </button>
                     
-                    {/* Panel Controls */}
-                    <div className="flex items-center space-x-2">
-                        {/* Left Panel Toggle */}
-                        <button
-                            onClick={toggleLeftPanel}
-                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                            title="Toggle Left Panel"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
-                        
-                        {/* Bottom Panel Toggle */}
-                        <button
-                            onClick={toggleBottomPanel}
-                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                            title="Toggle Terminal"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                        </button>
-                        
-                        {/* Right Panel Toggle */}
-                        <button
-                            onClick={toggleRightPanel}
-                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                            title="Toggle Chat Panel"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                        </button>
-                    </div>
+                    {/* Bottom Panel Toggle */}
+                    <button
+                        onClick={toggleBottomPanel}
+                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                        title="Toggle Terminal"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                    
+                    {/* Right Panel Toggle */}
+                    <button
+                        onClick={toggleRightPanel}
+                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                        title="Toggle Chat Panel"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                    </button>
                 </div>
-            )}
+            </div>
             
             {error && (
                 <div className="p-4 text-red-300 border-b border-white/10 bg-red-500/10 backdrop-blur-sm">
@@ -1728,52 +1732,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             )}
             
             <div className="flex-1 relative flex">
-                {/* Left Panel - Slides from left */}
-                {leftPanelOpen && (
-                    <div className="w-80 bg-gray-900 border-r border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
-                        <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                            <h3 className="text-white font-semibold">Project Overview</h3>
-                            <button
-                                onClick={toggleLeftPanel}
-                                className="text-gray-400 hover:text-white p-1"
-                                title="Close Panel"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <div className="space-y-4">
-                                <div className="bg-white/5 rounded-lg p-3">
-                                    <h4 className="text-white font-medium mb-2">Project Info</h4>
-                                    <p className="text-gray-300 text-sm">Project ID: {projectId}</p>
-                                    <p className="text-gray-300 text-sm">Nodes: {nodes.length}</p>
-                                    <p className="text-gray-300 text-sm">Edges: {edges.length}</p>
-                                </div>
-                                
-                                <div className="bg-white/5 rounded-lg p-3">
-                                    <h4 className="text-white font-medium mb-2">Quick Actions</h4>
-                                    <div className="space-y-2">
-                                        <button 
-                                            onClick={() => addTerminalLog('Manual log entry added')}
-                                            className="w-full text-left text-sm text-gray-300 hover:text-white p-2 rounded bg-white/5 hover:bg-white/10 transition-colors"
-                                        >
-                                            Add Test Log
-                                        </button>
-                                        <button 
-                                            onClick={() => setTerminalLogs([])}
-                                            className="w-full text-left text-sm text-gray-300 hover:text-white p-2 rounded bg-white/5 hover:bg-white/10 transition-colors"
-                                        >
-                                            Clear Terminal
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                
                 {/* Main Canvas Area */}
                 <div className="flex-1 relative">
                     {/* ReactFlow component */}
@@ -1809,11 +1767,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                         
                         {/* Agent Logs */}
                         <div 
-                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10"
+                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 agent-logs-container"
                             style={{ height: '300px' }}
                         >
                             <div 
-                                className="text-xs whitespace-pre-wrap"
+                                className="text-xs whitespace-pre-wrap text-gray-800"
                                 dangerouslySetInnerHTML={{ __html: agentLogs }}
                             />
                         </div>
@@ -2015,6 +1973,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 .log-error {
                     background-color: #dc3545;
                     color: white;
+                }
+                
+                /* Ensure text in agent logs is readable */
+                .agent-logs-container {
+                    color: #1f2937 !important;
+                }
+                
+                .agent-logs-container .badge {
+                    color: white !important;
                 }
                 `}
             </style>

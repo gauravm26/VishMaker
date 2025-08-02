@@ -17,8 +17,8 @@ const ProjectDashboard: React.FC = () => {
     const [listRefreshKey, setListRefreshKey] = useState<number>(0);
     const [canvasRefreshNonce, setCanvasRefreshNonce] = useState<number>(0);
 
-    // Mobile responsive state
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    // Mobile responsive state - Start with sidebar open on desktop for easier project selection
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(false);
     
     // Settings state
@@ -40,8 +40,8 @@ const ProjectDashboard: React.FC = () => {
             if (mobile && !isSidebarOpen) {
                 setIsSidebarOpen(false);
             }
-            // Auto-open sidebar on desktop
-            if (!mobile) {
+            // Keep sidebar open by default on desktop for easier project selection
+            if (!mobile && isSidebarOpen === undefined) {
                 setIsSidebarOpen(true);
             }
         };
@@ -105,6 +105,7 @@ const ProjectDashboard: React.FC = () => {
     }, [isMobile]);
 
     const toggleSidebar = () => {
+        console.log('ProjectDashboard: toggleSidebar called, current state:', isSidebarOpen);
         setIsSidebarOpen(!isSidebarOpen);
     };
 
@@ -158,7 +159,7 @@ const ProjectDashboard: React.FC = () => {
             <div className={`
                 ${isMobile 
                     ? `fixed top-0 left-0 h-full w-80 transform transition-transform duration-300 ease-out z-50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
-                    : 'relative w-80 xl:w-96'
+                    : `relative transition-all duration-300 ease-out ${isSidebarOpen ? 'w-80 xl:w-96' : 'w-0'} overflow-hidden`
                 }
                 flex flex-col bg-white/5 backdrop-blur-xl border-r border-white/10
             `}>
@@ -167,17 +168,15 @@ const ProjectDashboard: React.FC = () => {
                     <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
                         VishMaker
                     </h1>
-                    {isMobile && (
-                        <button
-                            onClick={closeSidebar}
-                            className="touch-target text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10"
-                            aria-label="Close sidebar"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
+                    <button
+                        onClick={closeSidebar}
+                        className="touch-target text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10"
+                        aria-label="Close sidebar"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
 
                 {/* Sidebar Content */}
@@ -234,10 +233,11 @@ const ProjectDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Main Content Area */}
+            {/* Main Content Area - Expands when sidebar is closed */}
             <div className={`
                 flex-1 flex flex-col overflow-hidden relative z-10
                 ${isMobile ? 'pt-16' : ''}
+                transition-all duration-300 ease-out
             `}>
                 {/* Desktop Header */}
                 <div className="hidden lg:flex items-center justify-between p-6 bg-white/5 backdrop-blur-lg border-b border-white/10">
@@ -276,6 +276,7 @@ const ProjectDashboard: React.FC = () => {
                             <CanvasViewer
                                 projectId={selectedProjectId}
                                 refreshTrigger={canvasRefreshNonce}
+                                onToggleSidebar={toggleSidebar}
                             />
                         </div>
                     ) : (
