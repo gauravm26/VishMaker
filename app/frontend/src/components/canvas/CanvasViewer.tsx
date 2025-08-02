@@ -170,6 +170,31 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
     // Track the current right-clicked node type
     const [clickedNodeType, setClickedNodeType] = useState<string | null>(null);
     
+    // Panel states
+    const [leftPanelOpen, setLeftPanelOpen] = useState<boolean>(false);
+    const [bottomPanelOpen, setBottomPanelOpen] = useState<boolean>(false);
+    const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(false);
+    const [devMode, setDevMode] = useState<boolean>(false);
+    
+    // Terminal logs state
+    const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+    const [dockerLogs, setDockerLogs] = useState<string>('Connecting to log stream...');
+    const [logSocket, setLogSocket] = useState<WebSocket | null>(null);
+    const [logConnected, setLogConnected] = useState<boolean>(false);
+    
+    // Chat state
+    const [chatMessages, setChatMessages] = useState<Array<{id: string, type: 'user' | 'assistant', content: string, timestamp: Date}>>([]);
+    const [chatInput, setChatInput] = useState<string>('');
+    const [chatLoading, setChatLoading] = useState<boolean>(false);
+    
+    // AI Agent state
+    const [agentSocket, setAgentSocket] = useState<WebSocket | null>(null);
+    const [agentConnected, setAgentConnected] = useState<boolean>(false);
+    const [agentStatus, setAgentStatus] = useState<string>('Connecting...');
+    const [agentLogs, setAgentLogs] = useState<string>('');
+    const [agentInput, setAgentInput] = useState<string>('');
+    const [agentProcessing, setAgentProcessing] = useState<boolean>(false);
+    
     // Context menu setup
     const { show } = useContextMenu({
         id: "tableNodeMenu"
@@ -895,11 +920,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             setNodes([]);
             setEdges([]);
             setUserFlows([]);
+            addTerminalLog('No project selected');
             return;
         }
 
         setLoading(true);
         setError(null);
+        addTerminalLog(`Loading project data for project ID: ${projectId}`);
 
         try {
             // Fade out existing nodes during loading
@@ -919,6 +946,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             
             // Log the response for debugging
             console.log("API Response:", response);
+            addTerminalLog(`Received ${response.flows?.length || 0} user flows from API`);
             
             // Store the user flows for reference
             setUserFlows(response.flows || []);
@@ -961,16 +989,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 });
                 
                 console.log(`Created ${animatedNodes.length} nodes and ${validEdges.length} valid edges (filtered out ${builtEdges.length - validEdges.length})`);
+                addTerminalLog(`Built ${animatedNodes.length} nodes and ${validEdges.length} edges`);
                 
                 setNodes(animatedNodes);
                 setEdges(validEdges);
             } else {
                 setNodes([]);
                 setEdges([]);
+                addTerminalLog('No flows found in project data');
             }
         } catch (error: any) {
             console.error('Error loading project data:', error);
             setError(`Failed to load project data: ${error.message || 'Unknown error'}`);
+            addTerminalLog(`Error loading project data: ${error.message || 'Unknown error'}`);
         } finally {
             setLoading(false);
         }
@@ -987,6 +1018,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         console.log(`Generating requirements for nodeId=${nodeId}, rowIndex=${rowIndex}, projectId=${projectId}`);
         setGenerateLoading(true);
         setError(null);
+        addTerminalLog(`Generating requirements for nodeId=${nodeId}, rowIndex=${rowIndex}, projectId=${projectId}`);
         
         // Show loading state in the node
         setNodes(nodes.map(node => 
@@ -1081,6 +1113,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 console.log("LLM result:", response.result.substring(0, 200) + "...");
             }
             console.log("Backend-generated UIIDs:", response.generated_uiids || []);
+            addTerminalLog(`Requirements generated successfully. Generated ${response.generated_uiids?.length || 0} new items`);
             
             // Show success feedback
             const originalTitle = nodeData.title;
@@ -1098,6 +1131,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             
             // Re-fetch data to show updated requirements
             console.log("Refreshing data to show new requirements");
+            addTerminalLog('Refreshing canvas to show new requirements');
             await fetchData();
             
             // Reset title after delay
@@ -1118,6 +1152,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         } catch (error: any) {
             console.error('Error generating requirements:', error);
             setError(`Failed to generate requirements: ${error.message || 'Unknown error'}`);
+            addTerminalLog(`Error generating requirements: ${error.message || 'Unknown error'}`);
             
             // Reset nodes to original state
             await fetchData();
@@ -1137,6 +1172,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         console.log(`Building feature for nodeId=${nodeId}, rowIndex=${rowIndex}, projectId=${projectId}`);
         setGenerateLoading(true);
         setError(null);
+        addTerminalLog(`Building feature for nodeId=${nodeId}, rowIndex=${rowIndex}, projectId=${projectId}`);
         
         // Show loading state in the node
         setNodes(nodes.map(node => 
@@ -1228,6 +1264,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             });
             
             console.log("API response received:", response);
+            addTerminalLog(`Feature built successfully`);
             
             // Show success feedback
             const originalTitle = nodeData.title;
@@ -1245,6 +1282,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             
             // Re-fetch data to show updated requirements
             console.log("Refreshing data to show new feature");
+            addTerminalLog('Refreshing canvas to show new feature');
             await fetchData();
             
             // Reset title after delay
@@ -1265,6 +1303,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
         } catch (error: any) {
             console.error('Error building feature:', error);
             setError(`Failed to build feature: ${error.message || 'Unknown error'}`);
+            addTerminalLog(`Error building feature: ${error.message || 'Unknown error'}`);
             
             // Reset nodes to original state
             await fetchData();
@@ -1272,6 +1311,252 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
             setGenerateLoading(false);
         }
     };
+
+    // Panel toggle functions
+    const toggleLeftPanel = useCallback(() => {
+        setLeftPanelOpen(prev => !prev);
+    }, []);
+
+    const toggleBottomPanel = useCallback(() => {
+        setBottomPanelOpen(prev => !prev);
+    }, []);
+
+    const toggleRightPanel = useCallback(() => {
+        setRightPanelOpen(prev => !prev);
+    }, []);
+
+    // Add log to terminal
+    const addTerminalLog = useCallback((message: string) => {
+        const timestamp = new Date().toLocaleTimeString();
+        setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+    }, []);
+
+    // Send chat message
+    const sendChatMessage = useCallback(async (message: string) => {
+        if (!message.trim()) return;
+
+        const userMessage = {
+            id: `user-${Date.now()}`,
+            type: 'user' as const,
+            content: message,
+            timestamp: new Date()
+        };
+
+        setChatMessages(prev => [...prev, userMessage]);
+        setChatInput('');
+        setChatLoading(true);
+
+        try {
+            // TODO: Replace with actual chat API call
+            // const response = await apiClient('/chat', {
+            //     method: 'POST',
+            //     body: { message, projectId }
+            // });
+
+            // Simulate chat response for now
+            setTimeout(() => {
+                const assistantMessage = {
+                    id: `assistant-${Date.now()}`,
+                    type: 'assistant' as const,
+                    content: `I received your message: "${message}". This is a placeholder response.`,
+                    timestamp: new Date()
+                };
+                setChatMessages(prev => [...prev, assistantMessage]);
+                setChatLoading(false);
+            }, 1000);
+
+        } catch (error) {
+            console.error('Chat error:', error);
+            setChatLoading(false);
+        }
+    }, []);
+
+    // Handle chat input key press
+    const handleChatKeyPress = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage(chatInput);
+        }
+    }, [chatInput, sendChatMessage]);
+
+    // WebSocket connection for Docker logs
+    const connectToLogStream = useCallback(() => {
+        if (logSocket) {
+            logSocket.close();
+        }
+
+        const socket = new WebSocket("wss://vishmaker.com/ws/logs");
+        
+        socket.onopen = () => {
+            setLogConnected(true);
+            setDockerLogs("Log stream connected. Waiting for logs...\n");
+            addTerminalLog('Docker log stream connected');
+        };
+
+        socket.onmessage = (event) => {
+            setDockerLogs(prev => prev + event.data);
+            // Auto-scroll to bottom
+            setTimeout(() => {
+                const terminal = document.getElementById('docker-terminal');
+                if (terminal) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            }, 100);
+        };
+
+        socket.onerror = (error) => {
+            setLogConnected(false);
+            setDockerLogs(prev => prev + "\n--- CONNECTION ERROR ---\nCould not connect to the log stream. Is the backend running?\n");
+            addTerminalLog('Docker log stream connection error');
+        };
+
+        socket.onclose = () => {
+            setLogConnected(false);
+            setDockerLogs(prev => prev + "\n--- DISCONNECTED ---\nLog stream has been closed.\n");
+            addTerminalLog('Docker log stream disconnected');
+        };
+
+        setLogSocket(socket);
+    }, [logSocket, addTerminalLog, logConnected]);
+
+    // Disconnect from log stream
+    const disconnectFromLogStream = useCallback(() => {
+        if (logSocket) {
+            logSocket.close();
+            setLogSocket(null);
+            setLogConnected(false);
+            addTerminalLog('Docker log stream disconnected manually');
+        }
+    }, [logSocket, addTerminalLog]);
+
+    // Auto-scroll to bottom of Docker logs
+    useEffect(() => {
+        const terminalElement = document.getElementById('docker-terminal');
+        if (terminalElement) {
+            terminalElement.scrollTop = terminalElement.scrollHeight;
+        }
+    }, [dockerLogs]);
+
+    // Connect to log stream when bottom panel opens
+    useEffect(() => {
+        if (bottomPanelOpen && !logSocket) {
+            connectToLogStream();
+        } else if (!bottomPanelOpen && logSocket) {
+            disconnectFromLogStream();
+        }
+    }, [bottomPanelOpen, logSocket, connectToLogStream, disconnectFromLogStream]);
+
+    // Cleanup WebSocket on component unmount
+    useEffect(() => {
+        return () => {
+            if (logSocket) {
+                logSocket.close();
+            }
+        };
+    }, [logSocket]);
+
+    // AI Agent WebSocket connection
+    const connectToAgent = useCallback(() => {
+        if (agentSocket) {
+            agentSocket.close();
+        }
+
+        const socket = new WebSocket("wss://vishmaker.com/ws");
+        
+        socket.onopen = () => {
+            setAgentConnected(true);
+            setAgentStatus('Connected and Idle');
+            setAgentLogs('<div><span class="badge log-system">SYSTEM</span><strong>Connection Opened. Ready to receive requests.</strong></div>');
+            addTerminalLog('AI agent connected');
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                let logClass = 'log-system';
+                let content = '';
+
+                if(data.source === 'manager') logClass = 'log-manager';
+                if(data.source === 'coder') logClass = 'log-coder';
+                if(data.error) logClass = 'log-error';
+
+                // Update status based on incoming messages
+                if (data.log && data.log.includes("Manager is thinking")) {
+                    setAgentStatus("Manager is planning the next step...");
+                } else if (data.log && data.log.includes("Sending task to Coder")) {
+                    setAgentStatus("Coder is generating code...");
+                }
+
+                const messageContent = data.log || data.error || data.status || "Received an empty message.";
+                content = `<div><span class="badge ${logClass}">${data.source.toUpperCase()}</span> ${messageContent.replace(/\n/g, '<br>')}</div>`;
+                setAgentLogs(prev => prev + content);
+
+                // If the process is finished, re-enable the UI
+                if (data.status === "SUCCESS" || data.status === "FAILED" || data.error) {
+                    setAgentStatus(`Finished (${data.status || 'Error'})`);
+                    setAgentProcessing(false);
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                setAgentLogs(prev => prev + '<div><span class="badge log-error">ERROR</span> Failed to parse message from server.</div>');
+            }
+        };
+
+        socket.onerror = (error) => {
+            setAgentConnected(false);
+            setAgentStatus('Connection Failed');
+            setAgentLogs(prev => prev + '<div><span class="badge log-error">ERROR</span><strong>Connection Failed. Check backend server and WebSocket URL.</strong></div>');
+            addTerminalLog('AI agent connection error');
+        };
+
+        socket.onclose = () => {
+            setAgentConnected(false);
+            setAgentStatus('Disconnected');
+            setAgentLogs(prev => prev + '<div><span class="badge log-system">SYSTEM</span><strong>Connection Closed.</strong></div>');
+            addTerminalLog('AI agent disconnected');
+        };
+
+        setAgentSocket(socket);
+    }, [agentSocket, addTerminalLog, agentConnected]);
+
+    // Disconnect from agent
+    const disconnectFromAgent = useCallback(() => {
+        if (agentSocket) {
+            agentSocket.close();
+            setAgentSocket(null);
+            setAgentConnected(false);
+            setAgentStatus('Disconnected');
+            addTerminalLog('AI agent disconnected manually');
+        }
+    }, [agentSocket, addTerminalLog]);
+
+    // Send requirement to agent
+    const sendAgentRequirement = useCallback(() => {
+        if (!agentInput.trim() || !agentSocket || agentProcessing) return;
+        
+        setAgentProcessing(true);
+        setAgentStatus('Sending request to agent...');
+        agentSocket.send(agentInput);
+        addTerminalLog(`Sent requirement to AI Agent: ${agentInput.substring(0, 50)}...`);
+    }, [agentInput, agentSocket, agentProcessing, addTerminalLog]);
+
+    // Connect to agent when right panel opens
+    useEffect(() => {
+        if (rightPanelOpen && !agentSocket) {
+            connectToAgent();
+        } else if (!rightPanelOpen && agentSocket) {
+            disconnectFromAgent();
+        }
+    }, [rightPanelOpen, agentSocket, connectToAgent, disconnectFromAgent]);
+
+    // Cleanup agent WebSocket on component unmount
+    useEffect(() => {
+        return () => {
+            if (agentSocket) {
+                agentSocket.close();
+            }
+        };
+    }, [agentSocket]);
 
     // Fetch data when component mounts or projectId changes
     useEffect(() => {
@@ -1365,12 +1650,64 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                     from { opacity: 0; }
                     to { opacity: 1; }
                 }
+                
+                /* Panel slide animations */
+                .panel-slide-left {
+                    transform: translateX(-100%);
+                }
+                
+                .panel-slide-right {
+                    transform: translateX(100%);
+                }
+                
+                .panel-slide-bottom {
+                    transform: translateY(100%);
+                }
                 `}
             </style>
             
-            <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
-                <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
-            </div>
+            {/* Header - Hide when panels are open */}
+            {(!leftPanelOpen && !rightPanelOpen && !bottomPanelOpen) && (
+                <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
+                    <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
+                    
+                    {/* Panel Controls */}
+                    <div className="flex items-center space-x-2">
+                        {/* Left Panel Toggle */}
+                        <button
+                            onClick={toggleLeftPanel}
+                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                            title="Toggle Left Panel"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                        
+                        {/* Bottom Panel Toggle */}
+                        <button
+                            onClick={toggleBottomPanel}
+                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                            title="Toggle Terminal"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        
+                        {/* Right Panel Toggle */}
+                        <button
+                            onClick={toggleRightPanel}
+                            className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                            title="Toggle Chat Panel"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
             
             {error && (
                 <div className="p-4 text-red-300 border-b border-white/10 bg-red-500/10 backdrop-blur-sm">
@@ -1390,103 +1727,297 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId }) => {
                 </div>
             )}
             
-            <div className="flex-1 relative">
-                {/* ReactFlow component */}
-                {getCanvasContent()}
+            <div className="flex-1 relative flex">
+                {/* Left Panel - Slides from left */}
+                {leftPanelOpen && (
+                    <div className="w-80 bg-gray-900 border-r border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                            <h3 className="text-white font-semibold">Project Overview</h3>
+                            <button
+                                onClick={toggleLeftPanel}
+                                className="text-gray-400 hover:text-white p-1"
+                                title="Close Panel"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <div className="space-y-4">
+                                <div className="bg-white/5 rounded-lg p-3">
+                                    <h4 className="text-white font-medium mb-2">Project Info</h4>
+                                    <p className="text-gray-300 text-sm">Project ID: {projectId}</p>
+                                    <p className="text-gray-300 text-sm">Nodes: {nodes.length}</p>
+                                    <p className="text-gray-300 text-sm">Edges: {edges.length}</p>
+                                </div>
+                                
+                                <div className="bg-white/5 rounded-lg p-3">
+                                    <h4 className="text-white font-medium mb-2">Quick Actions</h4>
+                                    <div className="space-y-2">
+                                        <button 
+                                            onClick={() => addTerminalLog('Manual log entry added')}
+                                            className="w-full text-left text-sm text-gray-300 hover:text-white p-2 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                                        >
+                                            Add Test Log
+                                        </button>
+                                        <button 
+                                            onClick={() => setTerminalLogs([])}
+                                            className="w-full text-left text-sm text-gray-300 hover:text-white p-2 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                                        >
+                                            Clear Terminal
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 
-                {/* Context Menu */}
-                <Menu id="tableNodeMenu">
-                    {/* Table manipulation items */}
-                    <Item onClick={({ props }) => {
-                        if (props?.type === 'row' && props.rowIndex !== undefined) {
-                            handleAddRow(props.nodeId, props.rowIndex);
-                        }
-                    }}>
-                        Add Row
-                    </Item>
-                    <Item onClick={({ props }) => {
-                        if (props?.type === 'row' && props.rowIndex !== undefined) {
-                            handleDeleteRow(props.nodeId, props.rowIndex);
-                        }
-                    }}>
-                        Delete Row
-                    </Item>
-                    <Item onClick={({ props }) => {
-                        if (props?.nodeId) {
-                            handleAddColumn(props.nodeId, {
-                                key: `col-${Date.now()}`,
-                                label: 'New Column',
-                                width: 'w-[120px]',
-                                editable: true,
-                                order: 999
-                            });
-                        }
-                    }}>
-                        Add Column
-                    </Item>
-                    <Item onClick={({ props }) => {
-                        if (props?.type === 'header' && props.colKey) {
-                            handleDeleteColumn(props.nodeId, props.colKey);
-                        }
-                    }}>
-                        Delete Column
-                    </Item>
-                    
-                    {/* Generate Child Requirements - Only show for non-test case tables */}
-                    {clickedNodeType !== 'testcase' && (
-                        <Item 
-                            id="generate-child-req"
-                            onClick={({ props }) => {
-                                if (props?.type === 'row' && props.rowIndex !== undefined && 
-                                    props.nodeId && !props.nodeId.startsWith('testcase_')) {
-                                    console.log('Context menu: Generate Child Requirements clicked', {
-                                        nodeId: props.nodeId,
-                                        rowIndex: props.rowIndex,
-                                        rowType: props.type
-                                    });
-                                    handleGenerateRequirements(props.nodeId, props.rowIndex);
-                                } else {
-                                    console.warn('Cannot generate requirements: Missing nodeId or rowIndex', props);
-                                }
-                            }}
-                        >
-                            Generate Child Requirements
-                        </Item>
-                    )}
-                    
-                    {/* Build the Feature - Only show for test case tables with highlighted styling */}
-                    {clickedNodeType === 'testcase' && (
-                        <Item 
-                            id="build-feature"
-                            onClick={({ props }) => {
-                                if (props?.type === 'row' && props.rowIndex !== undefined && 
-                                    props.nodeId && props.nodeId.startsWith('testcase_')) {
-                                    console.log('Context menu: Build the Feature clicked', {
-                                        nodeId: props.nodeId,
-                                        rowIndex: props.rowIndex,
-                                        rowType: props.type
-                                    });
-                                    handleBuildFeature(props.nodeId, props.rowIndex);
-                                } else {
-                                    console.warn('Cannot build feature: Missing nodeId or rowIndex or not a test case', props);
-                                }
-                            }}
-                        >
-                            <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
-                        </Item>
-                    )}
-                </Menu>
+                {/* Main Canvas Area */}
+                <div className="flex-1 relative">
+                    {/* ReactFlow component */}
+                    {getCanvasContent()}
+                </div>
                 
-                {/* Add custom styles for the Build Feature menu item */}
-                <style>
-                    {`
-                    /* Make the text white when the menu item is highlighted */
-                    .contexify_item:hover .build-feature-text { 
-                        color: white !important; 
-                    }
-                    `}
-                </style>
+                {/* Right Panel - Slides from right, max 20% width */}
+                {rightPanelOpen && (
+                    <div className="w-1/5 max-w-80 bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                        <div className="p-4 border-b border-white/10">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-white font-semibold text-sm">AI Coding Agent</h3>
+                                <div className="flex items-center space-x-2">
+                                    <div className={`w-2 h-2 rounded-full ${agentConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                    <span className={`text-xs ${agentConnected ? 'text-green-400' : 'text-red-400'}`}>
+                                        {agentConnected ? 'Connected' : 'Disconnected'}
+                                    </span>
+                                    <button
+                                        onClick={toggleRightPanel}
+                                        className="text-gray-400 hover:text-white p-1"
+                                        title="Close Panel"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1" style={{ fontStyle: 'italic' }}>
+                                Status: {agentStatus}
+                            </div>
+                        </div>
+                        
+                        {/* Agent Logs */}
+                        <div 
+                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10"
+                            style={{ height: '300px' }}
+                        >
+                            <div 
+                                className="text-xs whitespace-pre-wrap"
+                                dangerouslySetInnerHTML={{ __html: agentLogs }}
+                            />
+                        </div>
+                        
+                        {/* Agent Input */}
+                        <div className="p-3 border-t border-white/10">
+                            <div className="flex space-x-2">
+                                <input
+                                    type="text"
+                                    value={agentInput}
+                                    onChange={(e) => setAgentInput(e.target.value)}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            sendAgentRequirement();
+                                        }
+                                    }}
+                                    placeholder="Enter coding requirement..."
+                                    disabled={agentProcessing || !agentConnected}
+                                    className="flex-1 bg-white/10 text-white placeholder-gray-400 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <button
+                                    onClick={sendAgentRequirement}
+                                    disabled={!agentInput.trim() || agentProcessing || !agentConnected}
+                                    className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    Generate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+            
+            {/* Bottom Panel - Slides from bottom, max 20% height */}
+            {bottomPanelOpen && (
+                <div className="h-1/5 max-h-64 bg-gray-900 border-t border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                    <div className="p-3 border-b border-white/10 flex justify-between items-center">
+                        <div className="flex items-center space-x-2">
+                            <h3 className="text-white font-semibold text-sm">Live Docker Container Logs</h3>
+                            <div className={`w-2 h-2 rounded-full ${logConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <span className={`text-xs ${logConnected ? 'text-green-400' : 'text-red-400'}`}>
+                                {logConnected ? 'Connected' : 'Disconnected'}
+                            </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => setDockerLogs('Connecting to log stream...')}
+                                className="text-gray-400 hover:text-white text-xs"
+                            >
+                                Clear
+                            </button>
+                            <button
+                                onClick={logConnected ? disconnectFromLogStream : connectToLogStream}
+                                className={`text-xs px-2 py-1 rounded ${
+                                    logConnected 
+                                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                                        : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
+                            >
+                                {logConnected ? 'Disconnect' : 'Connect'}
+                            </button>
+                            <button
+                                onClick={toggleBottomPanel}
+                                className="text-gray-400 hover:text-white p-1"
+                                title="Close Panel"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div 
+                        id="docker-terminal" 
+                        className="flex-1 overflow-y-auto p-3 font-mono text-xs bg-[#1e1e1e] text-[#d4d4d4] whitespace-pre-wrap"
+                    >
+                        {dockerLogs}
+                    </div>
+                </div>
+            )}
+            
+            {/* Context Menu */}
+            <Menu id="tableNodeMenu">
+                {/* Table manipulation items */}
+                <Item onClick={({ props }) => {
+                    if (props?.type === 'row' && props.rowIndex !== undefined) {
+                        handleAddRow(props.nodeId, props.rowIndex);
+                    }
+                }}>
+                    Add Row
+                </Item>
+                <Item onClick={({ props }) => {
+                    if (props?.type === 'row' && props.rowIndex !== undefined) {
+                        handleDeleteRow(props.nodeId, props.rowIndex);
+                    }
+                }}>
+                    Delete Row
+                </Item>
+                <Item onClick={({ props }) => {
+                    if (props?.nodeId) {
+                        handleAddColumn(props.nodeId, {
+                            key: `col-${Date.now()}`,
+                            label: 'New Column',
+                            width: 'w-[120px]',
+                            editable: true,
+                            order: 999
+                        });
+                    }
+                }}>
+                    Add Column
+                </Item>
+                <Item onClick={({ props }) => {
+                    if (props?.type === 'header' && props.colKey) {
+                        handleDeleteColumn(props.nodeId, props.colKey);
+                    }
+                }}>
+                    Delete Column
+                </Item>
+                
+                {/* Generate Child Requirements - Only show for non-test case tables */}
+                {clickedNodeType !== 'testcase' && (
+                    <Item 
+                        id="generate-child-req"
+                        onClick={({ props }) => {
+                            if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                props.nodeId && !props.nodeId.startsWith('testcase_')) {
+                                console.log('Context menu: Generate Child Requirements clicked', {
+                                    nodeId: props.nodeId,
+                                    rowIndex: props.rowIndex,
+                                    rowType: props.type
+                                });
+                                handleGenerateRequirements(props.nodeId, props.rowIndex);
+                            } else {
+                                console.warn('Cannot generate requirements: Missing nodeId or rowIndex', props);
+                            }
+                        }}
+                    >
+                        Generate Child Requirements
+                    </Item>
+                )}
+                
+                {/* Build the Feature - Only show for test case tables with highlighted styling */}
+                {clickedNodeType === 'testcase' && (
+                    <Item 
+                        id="build-feature"
+                        onClick={({ props }) => {
+                            if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                props.nodeId && props.nodeId.startsWith('testcase_')) {
+                                console.log('Context menu: Build the Feature clicked', {
+                                    nodeId: props.nodeId,
+                                    rowIndex: props.rowIndex,
+                                    rowType: props.type
+                                });
+                                handleBuildFeature(props.nodeId, props.rowIndex);
+                            } else {
+                                console.warn('Cannot build feature: Missing nodeId or rowIndex or not a test case', props);
+                            }
+                        }}
+                    >
+                        <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
+                    </Item>
+                )}
+            </Menu>
+            
+            {/* Add custom styles for the Build Feature menu item */}
+            <style>
+                {`
+                /* Make the text white when the menu item is highlighted */
+                .contexify_item:hover .build-feature-text { 
+                    color: white !important; 
+                }
+                
+                /* AI Agent log badges */
+                .badge {
+                    display: inline-block;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 10px;
+                    font-weight: bold;
+                    margin-right: 8px;
+                }
+                
+                .log-system {
+                    background-color: #6c757d;
+                    color: white;
+                }
+                
+                .log-manager {
+                    background-color: #007bff;
+                    color: white;
+                }
+                
+                .log-coder {
+                    background-color: #28a745;
+                    color: white;
+                }
+                
+                .log-error {
+                    background-color: #dc3545;
+                    color: white;
+                }
+                `}
+            </style>
         </div>
     );
 };
