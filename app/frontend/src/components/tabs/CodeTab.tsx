@@ -5,6 +5,7 @@ import GitHubDemo from '../code/GitHubDemo';
 
 interface CodeTabProps {
     projectId: number | null;
+    refreshTrigger?: number;
 }
 
 interface GitHubSettings {
@@ -12,11 +13,12 @@ interface GitHubSettings {
     branch: string;
 }
 
-const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
+const CodeTab: React.FC<CodeTabProps> = ({ projectId, refreshTrigger = 0 }) => {
     const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showConfigureMessage, setShowConfigureMessage] = useState(false);
+    const [internalRefreshTrigger, setInternalRefreshTrigger] = useState(0);
 
     // Load GitHub settings from localStorage
     useEffect(() => {
@@ -41,6 +43,13 @@ const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
             setShowConfigureMessage(true);
         }
     }, []);
+
+    // Handle refresh trigger from parent
+    useEffect(() => {
+        if (refreshTrigger > 0) {
+            setInternalRefreshTrigger(prev => prev + 1);
+        }
+    }, [refreshTrigger]);
 
     const renderConfigureMessage = () => {
         return (
@@ -71,7 +80,8 @@ const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
     };
 
     const renderError = (errorMessage: string) => {
-        const isPrivateRepo = errorMessage.includes('private');
+        const isPrivateRepo = errorMessage.includes('private') || errorMessage.includes('authentication');
+        const isRateLimited = errorMessage.includes('rate limit');
         const suggestedRepos = GitHubService.getSuggestedRepositories();
 
         return (
@@ -83,16 +93,29 @@ const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
                         </svg>
                     </div>
                     <h3 className="text-lg font-semibold text-white mb-2">
-                        {isPrivateRepo ? 'Private Repository Detected' : 'Repository Error'}
+                        {isRateLimited ? 'Rate Limit Exceeded' : isPrivateRepo ? 'Repository Access Error' : 'Repository Error'}
                     </h3>
                     <p className="text-gray-300 mb-4">
                         {errorMessage}
                     </p>
                     
-                    {isPrivateRepo && (
+                    {isRateLimited && (
+                        <div className="bg-yellow-500/10 border border-yellow-400/30 rounded-xl p-4 mb-6">
+                            <p className="text-sm text-yellow-300 mb-3">
+                                <strong>Note:</strong> GitHub API rate limit exceeded. This happens with unauthenticated requests. You can:
+                            </p>
+                            <div className="space-y-2 text-xs text-yellow-200">
+                                <div>• Wait a few minutes and try again</div>
+                                <div>• Add a GitHub token in Settings for higher limits</div>
+                                <div>• Try a different public repository</div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {isPrivateRepo && !isRateLimited && (
                         <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-4 mb-6">
                             <p className="text-sm text-blue-300 mb-3">
-                                <strong>Note:</strong> Private repositories require GitHub authentication. For testing, try a public repository:
+                                <strong>Note:</strong> Repository access issue. For testing, try a public repository:
                             </p>
                             <div className="space-y-2">
                                 {suggestedRepos.slice(0, 3).map((repo, index) => (
@@ -135,9 +158,6 @@ const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
                             ({githubSettings.branch})
                         </span>
                     </div>
-                    <div className="text-xs text-gray-400">
-                        Configure in Settings
-                    </div>
                 </div>
                 <div className="h-full">
                     <CodeViewer
@@ -145,6 +165,7 @@ const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
                         repo={repoInfo.repo}
                         branch={githubSettings.branch}
                         onError={setError}
+                        refreshTrigger={internalRefreshTrigger}
                     />
                 </div>
             </div>

@@ -40,6 +40,21 @@ const ProjectDashboard: React.FC = () => {
     const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
     const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
 
+    // Refresh triggers for tabs
+    const [architectureRefreshTrigger, setArchitectureRefreshTrigger] = useState(0);
+    const [codeRefreshTrigger, setCodeRefreshTrigger] = useState(0);
+
+    // Handle refresh based on active tab
+    const handleRefresh = () => {
+        if (activeTab === 'architecture') {
+            setArchitectureRefreshTrigger(prev => prev + 1);
+        } else if (activeTab === 'code') {
+            setCodeRefreshTrigger(prev => prev + 1);
+        } else if (activeTab === 'requirements') {
+            setCanvasRefreshNonce(Date.now());
+        }
+    };
+
     // Check if mobile on mount and resize
     useEffect(() => {
         const checkMobile = () => {
@@ -106,7 +121,11 @@ const ProjectDashboard: React.FC = () => {
     const handleProjectSelected = useCallback((projectId: number, projectName?: string) => {
         setSelectedProjectId(projectId);
         setSelectedProjectName(projectName || '');
+        
+        // Auto-refresh all tabs when a project is selected
         setCanvasRefreshNonce(Date.now());
+        setArchitectureRefreshTrigger(prev => prev + 1);
+        setCodeRefreshTrigger(prev => prev + 1);
         
         // Close mobile sidebar after selecting project
         if (isMobile) {
@@ -312,36 +331,48 @@ const ProjectDashboard: React.FC = () => {
                 {/* Tab Navigation */}
                 {selectedProjectId !== null && (
                     <div className="bg-white/5 backdrop-blur-lg border-b border-white/10">
-                        <div className="flex space-x-1 p-2">
+                        <div className="flex items-center justify-between p-2">
+                            <div className="flex space-x-1 flex-1">
+                                <button
+                                    onClick={() => setActiveTab('requirements')}
+                                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                        activeTab === 'requirements'
+                                            ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-lg'
+                                            : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    Requirements
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('architecture')}
+                                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                        activeTab === 'architecture'
+                                            ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg'
+                                            : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    Architecture
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('code')}
+                                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                        activeTab === 'code'
+                                            ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                                            : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    Code
+                                </button>
+                            </div>
                             <button
-                                onClick={() => setActiveTab('requirements')}
-                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                    activeTab === 'requirements'
-                                        ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-lg'
-                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
-                                }`}
+                                onClick={handleRefresh}
+                                className="ml-2 flex items-center space-x-1 px-3 py-2 text-xs bg-white/10 border border-white/20 rounded text-white hover:bg-white/20 transition-colors"
+                                title="Refresh data"
                             >
-                                Requirements
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('architecture')}
-                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                    activeTab === 'architecture'
-                                        ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg'
-                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
-                                }`}
-                            >
-                                Architecture
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('code')}
-                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                    activeTab === 'code'
-                                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
-                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
-                                }`}
-                            >
-                                Code
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Refresh</span>
                             </button>
                         </div>
                     </div>
@@ -364,19 +395,16 @@ const ProjectDashboard: React.FC = () => {
                                 />
                             )}
                             {activeTab === 'architecture' && (
-                                <CanvasViewer
-                                    projectId={selectedProjectId}
-                                    refreshTrigger={canvasRefreshNonce}
-                                    onToggleSidebar={toggleSidebar}
-                                    showCanvas={false}
-                                    isBottomPanelOpen={isBottomPanelOpen}
-                                    isRightPanelOpen={isRightPanelOpen}
-                                    onToggleBottomPanel={toggleBottomPanel}
-                                    onToggleRightPanel={toggleRightPanel}
+                                <ArchitectureTab 
+                                    projectId={selectedProjectId} 
+                                    refreshTrigger={architectureRefreshTrigger}
                                 />
                             )}
                             {activeTab === 'code' && (
-                                <CodeTab projectId={selectedProjectId} />
+                                <CodeTab 
+                                    projectId={selectedProjectId} 
+                                    refreshTrigger={codeRefreshTrigger}
+                                />
                             )}
                         </div>
                     ) : (

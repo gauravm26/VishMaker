@@ -8,6 +8,7 @@ interface CodeViewerProps {
   branch: string;
   initialPath?: string;
   onError?: (error: string) => void;
+  refreshTrigger?: number;
 }
 
 interface FileTreeItem {
@@ -22,7 +23,8 @@ const CodeViewer: React.FC<CodeViewerProps> = ({
   repo, 
   branch, 
   initialPath = '',
-  onError
+  onError,
+  refreshTrigger = 0
 }) => {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
@@ -36,6 +38,13 @@ const CodeViewer: React.FC<CodeViewerProps> = ({
   useEffect(() => {
     loadContents(currentPath);
   }, [currentPath, owner, repo, branch]);
+
+  // Handle refresh trigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      loadContents(currentPath);
+    }
+  }, [refreshTrigger]);
 
   const loadContents = async (path: string) => {
     setIsLoading(true);
