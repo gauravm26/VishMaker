@@ -64,7 +64,7 @@ const determineFields = (item: any): {
     // Common field names for display/title
     const possibleDisplayFields = ['name', 'title', 'requirement_text', 'description'];
     // Common field names for description
-    const possibleDescFields = ['description', 'desc', 'tech_stack_details', 'expected_result', 'details'];
+    const possibleDescFields = ['description', 'desc', 'expected_result', 'details'];
     // Field names that might contain child items (usually ending with _list)
     const possibleChildrenFields = Object.keys(item || {}).filter(key => 
         key.endsWith('_list') && Array.isArray(item[key])
@@ -205,7 +205,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
         // Save the node type to determine what menu items to show
         if (props?.nodeId) {
             const isTestCase = props.nodeId.startsWith('testcase_') || props.isTestCase === true;
-            setClickedNodeType(isTestCase ? 'testcase' : 'other');
+            const isLlr = props.nodeId.startsWith('lowlevelrequirement_') || props.isLlr === true;
+            setClickedNodeType(isTestCase ? 'testcase' : isLlr ? 'llr' : 'other');
         } else {
             setClickedNodeType(null);
         }
@@ -565,8 +566,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
             [nodeId]: true
         }));
         
-        // Determine if this is a test case table for context menu customization
+        // Determine if this is a test case table or LLR table for context menu customization
         const isTestCase = nodeId.startsWith('testcase_');
+        const isLlr = nodeId.startsWith('lowlevelrequirement_');
         
         // Create the node with the organized data
         return {
@@ -580,6 +582,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                 allRows: tableRows,
                 isMinimized: isMinimized,
                 isTestCase: isTestCase, // Pass flag to determine table type
+                isLlr: isLlr, // Pass flag to determine table type
                 connectedRowUiids: [], // Will be populated with UIIDs of rows that have connections
                 actions: {
                     onCellChange: handleCellChange,
@@ -1161,6 +1164,158 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
         }
     };
 
+    // Build requirements object by traversing the hierarchy
+    const buildRequirementsObject = async (llrUiid: string, llrData: TableRowData, nodeData: any, nodeId: string) => {
+        const requirements = {
+            user_flow: {},
+            high_level_requirements: {},
+            low_level_requirements: {},
+            test_cases: {},
+            tech_stack: {
+                frontend_language: "TypeScript",
+                frontend_framework: "React (.tsx)",
+                css_framework: "Tailwind CSS",
+                backend_architecture: "Serverless Functions",
+                backend_language: "Python",
+                cloud_provider: "AWS",
+                infrastructure_as_code: "AWS CDK (Python)",
+                aws_services: [
+                    "API Gateway",
+                    "Lambda",
+                    "DynamoDB",
+                    "S3",
+                    "Cognito",
+                    "CloudWatch",
+                    "Step Functions",
+                    "IAM",
+                    "SSM Parameter Store",
+                    "Secrets Manager"
+                ]
+            }
+        };
+        
+        try {
+            console.log('LLR Data:', llrData);
+            console.log('Node Data:', nodeData);
+            console.log('Building requirements for LLR:', llrUiid, llrData.name);
+            
+            // Step 1: Add the selected LLR
+            const llr = llrData.originalData || llrData;
+            requirements.low_level_requirements = {
+                uiid: llrUiid,
+                name: llrData.name,
+                description: llrData.desc || '',
+                parent_uiid: llr.parent_uiid
+            };
+            
+            console.log('Step 1 - Added LLR:', llrUiid, llrData.name);
+            console.log('LLR parent_uiid:', llr.parent_uiid);
+            
+            // Step 2: Get Test Cases from LLR's test_case_list
+            const testCasesForLlr: any[] = [];
+            
+            console.log(`Getting test cases from LLR's test_case_list for ${llrUiid}`);
+            console.log(`LLR original data:`, llr);
+            
+            if (llr.test_case_list && Array.isArray(llr.test_case_list)) {
+                console.log(`Found ${llr.test_case_list.length} test cases in LLR's test_case_list`);
+                
+                llr.test_case_list.forEach((testCase: any) => {
+                    console.log(`Processing test case from LLR: ${testCase.uiid} - ${testCase.name}`);
+                    
+                    testCasesForLlr.push({
+                        uiid: testCase.uiid,
+                        name: testCase.name,
+                        description: testCase.description || '',
+                        parent_uiid: testCase.parent_uiid
+                    });
+                    console.log(`✅ Added test case: ${testCase.uiid} - ${testCase.name}`);
+                });
+            } else {
+                console.log('No test_case_list found in LLR original data');
+            }
+            
+            requirements.test_cases = testCasesForLlr;
+            console.log(`Step 2 - Found ${testCasesForLlr.length} Test Cases for LLR ${llrUiid}`);
+            
+            // Step 3: Find HLR where LLR.parent_uiid == HLR.uiid
+            const hlrNodes = nodes.filter(n => n.id.startsWith('highlevelrequirement_'));
+            let parentHlr: any = null;
+            
+            hlrNodes.forEach(hlrNode => {
+                const hlrData = hlrNode.data;
+                const hlrRows = hlrData.allRows || hlrData.rows || [];
+                
+                hlrRows.forEach((hlr: any) => {
+                    const hlrUiid = hlr.uiid || hlr.id;
+                    console.log(`Checking HLR ${hlrUiid}: uiid=${hlrUiid}, LLR.parent_uiid=${llr.parent_uiid}`);
+                    
+                    if (llr.parent_uiid === hlrUiid) {
+                        parentHlr = hlr;
+                        console.log(`✅ Found parent HLR: ${hlrUiid} - ${hlr.name}`);
+                    }
+                });
+            });
+            
+            if (parentHlr) {
+                const hlrUiid = parentHlr.uiid || parentHlr.id;
+                requirements.high_level_requirements = {
+                    uiid: hlrUiid,
+                    name: parentHlr.name,
+                    description: parentHlr.desc || '',
+                    parent_uiid: parentHlr.parent_uiid || null
+                };
+                console.log(`Step 3 - Added HLR: ${hlrUiid} - ${parentHlr.name}`);
+                console.log('HLR parent_uiid:', parentHlr.parent_uiid);
+            } else {
+                console.log('❌ No parent HLR found for LLR:', llrUiid);
+            }
+            
+            // Step 4: Find User Flow where HLR.parent_uiid == User_Flow.uiid
+            let parentFlow: any = null;
+            if (parentHlr) {
+                const flowNodes = nodes.filter(n => n.id.startsWith('flow_genChildReq_'));
+                
+                flowNodes.forEach(flowNode => {
+                    const flowData = flowNode.data;
+                    const flowRows = flowData.allRows || flowData.rows || [];
+                    
+                    flowRows.forEach((flow: any) => {
+                        const flowUiid = flow.uiid || flow.id;
+                        console.log(`Checking User Flow ${flowUiid}: uiid=${flowUiid}, HLR.parent_uiid=${parentHlr.parent_uiid}`);
+                        
+                        if (parentHlr.parent_uiid === flowUiid) {
+                            parentFlow = flow;
+                            console.log(`✅ Found parent User Flow: ${flowUiid} - ${flow.name}`);
+                        }
+                    });
+                });
+                
+                if (parentFlow) {
+                    const flowUiid = parentFlow.uiid || parentFlow.id;
+                    requirements.user_flow = {
+                        uiid: flowUiid,
+                        name: parentFlow.name,
+                        description: parentFlow.desc || '',
+                        parent_uiid: parentFlow.parent_uiid
+                    };
+                    console.log(`Step 4 - Added User Flow: ${flowUiid} - ${parentFlow.name}`);
+                } else {
+                    console.log('❌ No parent User Flow found for HLR:', parentHlr.uiid);
+                }
+            }
+            
+            console.log('Final requirements object:', requirements);
+            console.log(`Summary: LLR=${llrUiid}, HLR=${parentHlr ? parentHlr.uiid : 'Not found'}, User Flow=${parentFlow ? parentFlow.uiid : 'Not found'}, Test Cases=${testCasesForLlr.length}`);
+            
+            return requirements;
+            
+        } catch (error) {
+            console.error('Error building requirements object:', error);
+            return requirements;
+        }
+    };
+
     // Build feature for test cases
     const handleBuildFeature = async (nodeId: string, rowIndex: number): Promise<void> => {
         if (!projectId) {
@@ -1241,30 +1396,131 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
             console.log(`Row UIID: ${rowUiid}`);
             console.log(`Original data:`, rowData.originalData);
             
-            // Prepare data for the API request
-            const requestData: BuildFeatureRequest = {
-                project_id: projectId,
-                test_case_id: rowUiid,
-                test_name: rowData.name,
-                test_description: rowData.desc || '',
-                parent_uiid: rowUiid,
-                additional_context: {
-                    table_title: nodeData.title,
-                    row_index: effectiveRowIndex,
-                    component_id: componentId
+            // Build the requirements object by traversing the hierarchy
+            const requirementsObject = await buildRequirementsObject(rowUiid, rowData, nodeData, nodeId);
+            
+            // Create the request JSON object
+            const requestId = crypto.randomUUID();
+            const timestamp = new Date().toISOString();
+            
+            const buildFeatureRequest = {
+                request_id: requestId,
+                timestamp: timestamp,
+                payload: {
+                    user_flow: requirementsObject.user_flow,
+                    high_level_requirement: requirementsObject.high_level_requirements,
+                    low_level_requirement: requirementsObject.low_level_requirements,
+                    test_cases: requirementsObject.test_cases,
+                    tech_stack: requirementsObject.tech_stack
+                },
+                user_input: "",
+                metadata: {
+                    request_type: "code_generation",
+                    github: {
+                        repo: "",
+                        branch: "",
+                        pr: null
+                    }
                 }
             };
             
-            console.log('Calling code generation API with request:', requestData);
+            console.log('Build Feature Request:', buildFeatureRequest);
+            addTerminalLog(`Created build feature request with ID: ${requestId}`);
             
-            // Call the code generation API endpoint
-            const response = await apiClient<BuildFeatureResponse>('/code-generation/build-feature', {
-                method: 'POST',
-                body: requestData
-            });
+            // Open the chat panel and send the request
+            setRightPanelOpen(true);
             
-            console.log("API response received:", response);
-            addTerminalLog(`Feature built successfully`);
+            // Wait for the panel to open and agent to connect, then send the request
+            setTimeout(() => {
+                // Check if agent is connected or if we need to wait for connection
+                if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                    const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
+                    agentSocket.send(requestMessage);
+                    addTerminalLog(`✅ Sent build feature request to AI agent`);
+                    
+                    // Add user message to chat
+                    const userMessage = {
+                        id: `user-${Date.now()}`,
+                        type: 'user' as const,
+                        content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
+                        timestamp: new Date()
+                    };
+                    setChatMessages(prev => [...prev, userMessage]);
+                    
+                    // Clear any existing error since we're connected
+                    setError(null);
+                } else {
+                    // Agent socket exists but not connected yet - wait longer for connection
+                    addTerminalLog(`⏳ Waiting for AI agent to connect...`);
+                    setTimeout(() => {
+                        if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                            const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
+                            agentSocket.send(requestMessage);
+                            addTerminalLog(`✅ Sent build feature request to AI agent`);
+                            
+                            // Add user message to chat
+                            const userMessage = {
+                                id: `user-${Date.now()}`,
+                                type: 'user' as const,
+                                content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
+                                timestamp: new Date()
+                            };
+                            setChatMessages(prev => [...prev, userMessage]);
+                            
+                            // Clear any existing error since we're connected
+                            setError(null);
+                        } else {
+                            // Try one more time with longer wait
+                            addTerminalLog(`⏳ Still waiting for AI agent to connect...`);
+                            setTimeout(() => {
+                                if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                                    const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
+                                    agentSocket.send(requestMessage);
+                                    addTerminalLog(`✅ Sent build feature request to AI agent`);
+                                    
+                                    // Add user message to chat
+                                    const userMessage = {
+                                        id: `user-${Date.now()}`,
+                                        type: 'user' as const,
+                                        content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
+                                        timestamp: new Date()
+                                    };
+                                    setChatMessages(prev => [...prev, userMessage]);
+                                    
+                                    // Clear any existing error since we're connected
+                                    setError(null);
+                                } else {
+                                    // Final attempt with even longer wait
+                                    addTerminalLog(`⏳ Final attempt to connect to AI agent...`);
+                                    setTimeout(() => {
+                                        if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                                            const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
+                                            agentSocket.send(requestMessage);
+                                            addTerminalLog(`✅ Sent build feature request to AI agent`);
+                                            
+                                            // Add user message to chat
+                                            const userMessage = {
+                                                id: `user-${Date.now()}`,
+                                                type: 'user' as const,
+                                                content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
+                                                timestamp: new Date()
+                                            };
+                                            setChatMessages(prev => [...prev, userMessage]);
+                                            
+                                            // Clear any existing error since we're connected
+                                            setError(null);
+                                        } else {
+                                            console.error('AI agent not connected after 10 seconds of waiting');
+                                            addTerminalLog(`❌ Failed to connect to AI agent after multiple attempts`);
+                                            setError('AI agent not connected after 10 seconds. Please ensure the chat panel is open and connected.');
+                                        }
+                                    }, 3000); // Wait 3 more seconds
+                                }
+                            }, 3000); // Wait 3 seconds
+                        }
+                    }, 2000); // Wait 2 seconds first
+                }
+            }, 2000); // Wait 2 seconds initially
             
             // Show success feedback
             const originalTitle = nodeData.title;
@@ -1274,16 +1530,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                         ...node, 
                         data: { 
                             ...node.data, 
-                            title: `${originalTitle} (Feature Built!)` 
+                            title: `${originalTitle} (Feature Request Sent!)` 
                         } 
                     } 
                     : node
             ));
-            
-            // Re-fetch data to show updated requirements
-            console.log("Refreshing data to show new feature");
-            addTerminalLog('Refreshing canvas to show new feature');
-            await fetchData();
             
             // Reset title after delay
             setTimeout(() => {
@@ -1304,9 +1555,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
             console.error('Error building feature:', error);
             setError(`Failed to build feature: ${error.message || 'Unknown error'}`);
             addTerminalLog(`Error building feature: ${error.message || 'Unknown error'}`);
-            
-            // Reset nodes to original state
-            await fetchData();
         } finally {
             setGenerateLoading(false);
         }
@@ -1806,9 +2054,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                 )}
             </div>
             
-            {/* Bottom Panel - Slides from bottom, max 20% height */}
+            {/* Bottom Panel - Slides from bottom, 35% height */}
             {bottomPanelOpen && (
-                <div className="h-1/5 max-h-64 bg-gray-900 border-t border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                <div className="h-1/3 max-h-96 bg-gray-900 border-t border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
                     <div className="p-3 border-b border-white/10 flex justify-between items-center">
                         <div className="flex items-center space-x-2">
                             <h3 className="text-white font-semibold text-sm">Live Docker Container Logs</h3>
@@ -1914,13 +2162,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                     </Item>
                 )}
                 
-                {/* Build the Feature - Only show for test case tables with highlighted styling */}
-                {clickedNodeType === 'testcase' && (
+                {/* Build the Feature - Only show for low level requirement tables with highlighted styling */}
+                {clickedNodeType === 'llr' && (
                     <Item 
                         id="build-feature"
                         onClick={({ props }) => {
                             if (props?.type === 'row' && props.rowIndex !== undefined && 
-                                props.nodeId && props.nodeId.startsWith('testcase_')) {
+                                props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
                                 console.log('Context menu: Build the Feature clicked', {
                                     nodeId: props.nodeId,
                                     rowIndex: props.rowIndex,
@@ -1928,7 +2176,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                                 });
                                 handleBuildFeature(props.nodeId, props.rowIndex);
                             } else {
-                                console.warn('Cannot build feature: Missing nodeId or rowIndex or not a test case', props);
+                                console.warn('Cannot build feature: Missing nodeId or rowIndex or not a low level requirement', props);
                             }
                         }}
                     >

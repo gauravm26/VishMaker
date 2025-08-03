@@ -168,15 +168,15 @@ const ProjectDashboard: React.FC = () => {
                     <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
                         VishMaker
                     </h1>
-                    <button
-                        onClick={closeSidebar}
-                        className="touch-target text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10"
-                        aria-label="Close sidebar"
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                        <button
+                            onClick={closeSidebar}
+                            className="touch-target text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10"
+                            aria-label="Close sidebar"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                 </div>
 
                 {/* Sidebar Content */}

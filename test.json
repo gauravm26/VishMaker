@@ -1,0 +1,45 @@
+{
+    "request_id": "6a39742a-0a62-4858-9005-446a6f391253",
+    "timestamp": "2025-08-03T09:07:18.932Z",
+    "payload": {
+        "requirements": {
+            "user_flow": {
+                "uiid": "auto-13-931465651",
+                "name": "Guest Checkout Preparation",
+                "description": "Cart review capabilities for non-registered users with option to create account or proceed as guest while maintaining cart integrity.",
+                "parent_uiid": "auto-5-1624690853"
+            },
+            "high_level_requirement": {
+                "uiid": "auto-13-931465651",
+                "name": "Guest Checkout Preparation",
+                "description": "Cart review capabilities for non-registered users with option to create account or proceed as guest while maintaining cart integrity.",
+                "parent_uiid": "auto-5-1624690853"
+            },
+            "low_level_requirement": {
+                "uiid": "auto-0-2436592272",
+                "name": "Item 1",
+                "description": "GUEST CHECKOUT PREPARATION - LOW-LEVEL REQUIREMENTS",
+                "parent_uiid": "auto-13-931465651"
+            },
+            "test_cases": [
+                {
+                    "uiid": "auto-13-931465651",
+                    "name": "Guest Checkout Preparation",
+                    "description": "Cart review capabilities for non-registered users with option to create account or proceed as guest while maintaining cart integrity.",
+                    "parent_uiid": "auto-0-2436592272"
+                },
+                {}
+            ],
+            "tech_stack": {}
+        },
+        "user_input": "",
+        "metadata": {
+            "request_type": "code_generation",
+            "github": {
+                "repo": "",
+                "branch": "",
+                "pr": null
+            }
+        }
+    }
+}
