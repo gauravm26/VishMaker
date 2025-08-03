@@ -90,6 +90,11 @@ interface CanvasViewerProps {
     projectId: number | null;
     refreshTrigger: number;
     onToggleSidebar?: () => void;
+    showCanvas?: boolean;
+    isBottomPanelOpen?: boolean;
+    isRightPanelOpen?: boolean;
+    onToggleBottomPanel?: () => void;
+    onToggleRightPanel?: () => void;
 }
 
 // Custom edge component to handle errors with missing handles
@@ -156,7 +161,15 @@ const createNewRow = (idPrefix: string, nextSno: number, columns: ColumnDef[]): 
     return newRow;
 };
 
-const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar }) => {
+const CanvasViewer: React.FC<CanvasViewerProps> = ({ 
+    projectId, 
+    onToggleSidebar, 
+    showCanvas = true,
+    isBottomPanelOpen = false,
+    isRightPanelOpen = false,
+    onToggleBottomPanel,
+    onToggleRightPanel
+}) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeData & { actions: any }>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [userFlows, setUserFlows] = useState<UserFlow[]>([]);
@@ -171,9 +184,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
     // Track the current right-clicked node type
     const [clickedNodeType, setClickedNodeType] = useState<string | null>(null);
     
-    // Panel states
-    const [bottomPanelOpen, setBottomPanelOpen] = useState<boolean>(false);
-    const [rightPanelOpen, setRightPanelOpen] = useState<boolean>(false);
+    // Panel states - use props if provided, otherwise use internal state
+    const bottomPanelOpen = isBottomPanelOpen;
+    const rightPanelOpen = isRightPanelOpen;
     const [devMode, setDevMode] = useState<boolean>(false);
     
     // Terminal logs state
@@ -1443,7 +1456,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
             addTerminalLog(`Created build feature request with ID: ${requestId}`);
             
             // Open the chat panel and send the request
-            setRightPanelOpen(true);
+            if (onToggleRightPanel) {
+                onToggleRightPanel();
+            }
             
             // Wait for the panel to open and agent to connect, then send the request
             setTimeout(() => {
@@ -1587,12 +1602,16 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
     }, [onToggleSidebar]);
 
     const toggleBottomPanel = useCallback(() => {
-        setBottomPanelOpen(prev => !prev);
-    }, []);
+        if (onToggleBottomPanel) {
+            onToggleBottomPanel();
+        }
+    }, [onToggleBottomPanel]);
 
     const toggleRightPanel = useCallback(() => {
-        setRightPanelOpen(prev => !prev);
-    }, []);
+        if (onToggleRightPanel) {
+            onToggleRightPanel();
+        }
+    }, [onToggleRightPanel]);
 
     // Add log to terminal
     const addTerminalLog = useCallback((message: string) => {
@@ -1874,6 +1893,14 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
         }
 
         // Return the React Flow component with just the user flow node
+        if (!showCanvas) {
+            return <div className="absolute inset-0 flex items-center justify-center bg-[#0A071B]/90 backdrop-blur-sm z-10">
+                <div className="text-center">
+                    <p className="text-gray-300">Canvas view is not available in this tab.</p>
+                </div>
+            </div>;
+        }
+
         return (
             <ReactFlow
                 nodes={nodes}
@@ -1935,45 +1962,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                 `}
             </style>
             
-            {/* Header - Always visible with control buttons */}
-            <div className="p-4 flex justify-between items-center border-b border-white/10 bg-white/5 backdrop-blur-sm">
-                <h2 className="text-lg font-semibold text-white">Requirements Canvas</h2>
-                
-                {/* Panel Controls - Always visible */}
-                <div className="flex items-center space-x-2">
-                    {/* Main Sidebar Toggle */}
-                    <button
-                        onClick={toggleLeftPanel}
-                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                        title="Toggle Projects Sidebar"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                    </button>
-                    
-                    {/* Bottom Panel Toggle */}
-                    <button
-                        onClick={toggleBottomPanel}
-                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                        title="Toggle Terminal"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                    </button>
-                    
-                    {/* Right Panel Toggle */}
-                    <button
-                        onClick={toggleRightPanel}
-                        className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                        title="Toggle Chat Panel"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                    </button>
-                </div>
+            {/* Header - Removed control buttons, they're now in the main dashboard header */}
+            <div className="p-4 border-b border-white/10 bg-white/5 backdrop-blur-sm">
+                {/* Empty header space for consistency */}
             </div>
             
             {error && (

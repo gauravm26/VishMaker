@@ -1,0 +1,239 @@
+/* Custom syntax highlighting theme for dark mode */
+pre[class*="language-"],
+code[class*="language-"] {
+  color: #e4e4e7;
+  background: none;
+  font-family: 'Fira Code', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 14px;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  word-wrap: normal;
+  line-height: 1.5;
+  tab-size: 2;
+  hyphens: none;
+}
+
+/* Code blocks */
+pre[class*="language-"] {
+  padding: 1em;
+  margin: 0;
+  overflow: auto;
+  background: #0a0a0a;
+  border-radius: 0.5rem;
+}
+
+/* Inline code */
+:not(pre) > code[class*="language-"] {
+  padding: 0.2em 0.4em;
+  border-radius: 0.3em;
+  white-space: normal;
+  background: #1f1f1f;
+  color: #e4e4e7;
+}
+
+/* Token colors */
+.token.comment,
+.comment {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.token.punctuation,
+.punctuation {
+  color: #d1d5db;
+}
+
+.token.namespace,
+.namespace {
+  opacity: 0.7;
+}
+
+.token.property,
+.property,
+.token.tag,
+.tag,
+.token.boolean,
+.boolean,
+.token.number,
+.number,
+.token.constant,
+.constant,
+.token.symbol,
+.symbol,
+.token.deleted,
+.deleted {
+  color: #fbbf24;
+}
+
+.token.selector,
+.selector,
+.token.attr-name,
+.attr-name,
+.token.string,
+.string,
+.token.char,
+.char,
+.token.builtin,
+.builtin,
+.token.inserted,
+.inserted {
+  color: #34d399;
+}
+
+.token.operator,
+.operator,
+.token.entity,
+.entity,
+.token.url,
+.url,
+.language-css .token.string,
+.language-css .string,
+.style .token.string,
+.style .string {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.token.atrule,
+.atrule,
+.token.attr-value,
+.attr-value,
+.token.keyword,
+.keyword {
+  color: #a78bfa;
+}
+
+.token.function,
+.function,
+.token.class-name,
+.class-name {
+  color: #60a5fa;
+}
+
+.token.regex,
+.regex,
+.token.important,
+.important,
+.token.variable,
+.variable {
+  color: #f59e0b;
+}
+
+.token.important,
+.important,
+.token.bold,
+.bold {
+  font-weight: bold;
+}
+
+.token.italic,
+.italic {
+  font-style: italic;
+}
+
+.token.entity,
+.entity {
+  cursor: help;
+}
+
+/* Line numbers */
+.line-numbers .line-numbers-rows {
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  font-size: 100%;
+  left: -3.8em;
+  width: 3em;
+  letter-spacing: -1px;
+  border-right: 1px solid #374151;
+  user-select: none;
+}
+
+.line-numbers-rows > span {
+  pointer-events: none;
+  display: block;
+  counter-increment: linenumber;
+}
+
+.line-numbers-rows > span:before {
+  content: counter(linenumber);
+  color: #6b7280;
+  display: block;
+  padding-right: 0.8em;
+  text-align: right;
+}
+
+/* Command line */
+.command-line-prompt {
+  border-right: 1px solid #374151;
+  display: block;
+  float: left;
+  font-size: 100%;
+  letter-spacing: -1px;
+  margin-right: 1em;
+  pointer-events: none;
+  text-align: right;
+  user-select: none;
+}
+
+.command-line-prompt > span:before {
+  color: #6b7280;
+  content: " ";
+  display: block;
+  padding-right: 0.8em;
+}
+
+.command-line-prompt > span[data-user]:before {
+  content: "[" attr(data-user) "@" attr(data-host) "] $";
+}
+
+.command-line-prompt > span[data-user="root"]:before {
+  content: "[" attr(data-user) "@" attr(data-host) "] #";
+}
+
+.command-line-prompt > span[data-prompt]:before {
+  content: attr(data-prompt);
+}
+
+/* File tree styling */
+.file-tree {
+  background: #0a0a0a;
+  border-right: 1px solid #374151;
+}
+
+.file-tree-item {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.file-tree-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.file-tree-item.selected {
+  background-color: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+}
+
+/* Scrollbar styling */
+pre[class*="language-"]::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+pre[class*="language-"]::-webkit-scrollbar-track {
+  background: #1f1f1f;
+  border-radius: 4px;
+}
+
+pre[class*="language-"]::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+pre[class*="language-"]::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+} 

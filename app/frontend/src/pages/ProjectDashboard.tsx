@@ -3,6 +3,9 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import CreateProjectForm from '../components/project/CreateProjectForm';
 import ProjectList from '../components/project/ProjectList';
 import CanvasViewer from '../components/canvas/CanvasViewer';
+import RequirementsTab from '../components/tabs/RequirementsTab';
+import ArchitectureTab from '../components/tabs/ArchitectureTab';
+import CodeTab from '../components/tabs/CodeTab';
 import Settings from '../components/Settings';
 import Modal from '../components/shared/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +32,13 @@ const ProjectDashboard: React.FC = () => {
     
     // Create project form expansion state
     const [shouldExpandCreateForm, setShouldExpandCreateForm] = useState(false);
+    
+    // Tab state
+    const [activeTab, setActiveTab] = useState<'requirements' | 'architecture' | 'code'>('requirements');
+    
+    // Panel visibility states
+    const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
+    const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
 
     // Check if mobile on mount and resize
     useEffect(() => {
@@ -111,6 +121,15 @@ const ProjectDashboard: React.FC = () => {
 
     const closeSidebar = () => {
         setIsSidebarOpen(false);
+    };
+
+    // Panel toggle functions
+    const toggleBottomPanel = () => {
+        setIsBottomPanelOpen(!isBottomPanelOpen);
+    };
+
+    const toggleRightPanel = () => {
+        setIsRightPanelOpen(!isRightPanelOpen);
     };
 
     return (
@@ -207,30 +226,7 @@ const ProjectDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Settings and Sign Out Buttons - Bottom of Sidebar */}
-                <div className="p-4 border-t border-white/10 bg-white/5">
-                    <div className="flex justify-center space-x-3">
-                        <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-purple-500/25 transition-all duration-300 flex items-center justify-center group"
-                            title="Settings"
-                        >
-                            <svg className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={signOut}
-                            className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-red-500/25 transition-all duration-300 flex items-center justify-center group"
-                            title="Sign Out"
-                        >
-                            <svg className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+
             </div>
 
             {/* Main Content Area - Expands when sidebar is closed */}
@@ -247,11 +243,53 @@ const ProjectDashboard: React.FC = () => {
                     
                     {/* Desktop actions */}
                     <div className="flex items-center space-x-3">
-                        {selectedProjectId !== null && (
-                            <span className="text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full">
-                                Canvas View
-                            </span>
-                        )}
+                        {/* Panel Controls */}
+                        <div className="flex items-center space-x-2">
+                            {/* Bottom Panel Toggle */}
+                            <button
+                                onClick={toggleBottomPanel}
+                                className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                                title="Toggle Terminal"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+                            
+                            {/* Right Panel Toggle */}
+                            <button
+                                onClick={toggleRightPanel}
+                                className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
+                                title="Toggle Chat Panel"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        {/* Settings and Sign Out */}
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => setIsSettingsOpen(true)}
+                                className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white rounded-lg shadow-lg hover:shadow-purple-500/25 transition-all duration-300 flex items-center justify-center group"
+                                title="Settings"
+                            >
+                                <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={signOut}
+                                className="w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg shadow-lg hover:shadow-red-500/25 transition-all duration-300 flex items-center justify-center group"
+                                title="Sign Out"
+                            >
+                                <svg className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -263,21 +301,83 @@ const ProjectDashboard: React.FC = () => {
                         </h2>
                         {selectedProjectId !== null && (
                             <span className="text-xs text-gray-300 bg-white/10 px-2 py-1 rounded-full">
-                                Canvas
+                                {activeTab === 'requirements' && 'Requirements'}
+                                {activeTab === 'architecture' && 'Architecture'}
+                                {activeTab === 'code' && 'Code'}
                             </span>
                         )}
                     </div>
                 </div>
 
-                {/* Canvas Content */}
+                {/* Tab Navigation */}
+                {selectedProjectId !== null && (
+                    <div className="bg-white/5 backdrop-blur-lg border-b border-white/10">
+                        <div className="flex space-x-1 p-2">
+                            <button
+                                onClick={() => setActiveTab('requirements')}
+                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                    activeTab === 'requirements'
+                                        ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-lg'
+                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                Requirements
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('architecture')}
+                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                    activeTab === 'architecture'
+                                        ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg'
+                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                Architecture
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('code')}
+                                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                    activeTab === 'code'
+                                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg'
+                                        : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                Code
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab Content */}
                 <div className="flex-1 overflow-hidden bg-white/5 backdrop-blur-lg">
                     {selectedProjectId !== null ? (
                         <div className="h-full w-full">
-                            <CanvasViewer
-                                projectId={selectedProjectId}
-                                refreshTrigger={canvasRefreshNonce}
-                                onToggleSidebar={toggleSidebar}
-                            />
+                            {activeTab === 'requirements' && (
+                                <CanvasViewer
+                                    projectId={selectedProjectId}
+                                    refreshTrigger={canvasRefreshNonce}
+                                    onToggleSidebar={toggleSidebar}
+                                    showCanvas={true}
+                                    isBottomPanelOpen={isBottomPanelOpen}
+                                    isRightPanelOpen={isRightPanelOpen}
+                                    onToggleBottomPanel={toggleBottomPanel}
+                                    onToggleRightPanel={toggleRightPanel}
+                                />
+                            )}
+                            {activeTab === 'architecture' && (
+                                <CanvasViewer
+                                    projectId={selectedProjectId}
+                                    refreshTrigger={canvasRefreshNonce}
+                                    onToggleSidebar={toggleSidebar}
+                                    showCanvas={false}
+                                    isBottomPanelOpen={isBottomPanelOpen}
+                                    isRightPanelOpen={isRightPanelOpen}
+                                    onToggleBottomPanel={toggleBottomPanel}
+                                    onToggleRightPanel={toggleRightPanel}
+                                />
+                            )}
+                            {activeTab === 'code' && (
+                                <CodeTab projectId={selectedProjectId} />
+                            )}
                         </div>
                     ) : (
                         /* Empty State */

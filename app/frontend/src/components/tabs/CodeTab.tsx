@@ -1,0 +1,180 @@
+import React, { useState, useEffect } from 'react';
+import CodeViewer from '../code/CodeViewer';
+import GitHubService from '../../lib/githubService';
+import GitHubDemo from '../code/GitHubDemo';
+
+interface CodeTabProps {
+    projectId: number | null;
+}
+
+interface GitHubSettings {
+    repo: string;
+    branch: string;
+}
+
+const CodeTab: React.FC<CodeTabProps> = ({ projectId }) => {
+    const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showConfigureMessage, setShowConfigureMessage] = useState(false);
+
+    // Load GitHub settings from localStorage
+    useEffect(() => {
+        const savedSettings = localStorage.getItem('appSettings');
+        if (savedSettings) {
+            try {
+                const settings = JSON.parse(savedSettings);
+                if (settings.github?.repo && settings.github?.branch) {
+                    setGitHubSettings({
+                        repo: settings.github.repo,
+                        branch: settings.github.branch
+                    });
+                    setShowConfigureMessage(false);
+                } else {
+                    setShowConfigureMessage(true);
+                }
+            } catch (error) {
+                console.error('Failed to load GitHub settings:', error);
+                setShowConfigureMessage(true);
+            }
+        } else {
+            setShowConfigureMessage(true);
+        }
+    }, []);
+
+    const renderConfigureMessage = () => {
+        return (
+            <div className="h-full w-full flex items-center justify-center p-8">
+                <div className="text-center max-w-md mx-auto">
+                    <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-full flex items-center justify-center border border-white/10 backdrop-blur-lg">
+                        <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                        </svg>
+                    </div>
+                    <h3 className="text-xl font-semibold text-white mb-4">Configure GitHub Repository</h3>
+                    <p className="text-gray-300 mb-8 leading-relaxed">
+                        To view code from GitHub repositories, please configure your GitHub settings in the Settings panel.
+                    </p>
+                    
+                    <div className="bg-white/5 backdrop-blur-lg rounded-xl p-4 border border-white/10 mb-6">
+                        <p className="text-sm text-gray-400">
+                            Go to <strong className="text-white">Settings → GitHub Repository</strong> and enter your repository path and branch.
+                        </p>
+                    </div>
+                    
+                    <div className="mt-8">
+                        <GitHubDemo />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderError = (errorMessage: string) => {
+        const isPrivateRepo = errorMessage.includes('private');
+        const suggestedRepos = GitHubService.getSuggestedRepositories();
+
+        return (
+            <div className="h-full w-full flex items-center justify-center p-8">
+                <div className="text-center max-w-md mx-auto">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center border border-red-400/20">
+                        <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                        {isPrivateRepo ? 'Private Repository Detected' : 'Repository Error'}
+                    </h3>
+                    <p className="text-gray-300 mb-4">
+                        {errorMessage}
+                    </p>
+                    
+                    {isPrivateRepo && (
+                        <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-4 mb-6">
+                            <p className="text-sm text-blue-300 mb-3">
+                                <strong>Note:</strong> Private repositories require GitHub authentication. For testing, try a public repository:
+                            </p>
+                            <div className="space-y-2">
+                                {suggestedRepos.slice(0, 3).map((repo, index) => (
+                                    <div key={index} className="text-xs text-blue-200">
+                                        <code className="bg-white/10 px-2 py-1 rounded">{repo.name}</code>
+                                        <span className="text-blue-300 ml-2">- {repo.description}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="text-sm text-gray-400">
+                        Update this in <strong className="text-white">Settings → GitHub Repository</strong>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderCodeViewer = () => {
+        if (!githubSettings) return null;
+        
+        const repoInfo = GitHubService.parseRepoPath(githubSettings.repo);
+        if (!repoInfo) {
+            return renderError(`Invalid repository format: "${githubSettings.repo}". Please use the format: owner/repository`);
+        }
+
+        return (
+            <div className="h-full">
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <div className="flex items-center space-x-2">
+                        <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                        </svg>
+                        <span className="text-sm font-medium text-white">
+                            {githubSettings.repo}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                            ({githubSettings.branch})
+                        </span>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                        Configure in Settings
+                    </div>
+                </div>
+                <div className="h-full">
+                    <CodeViewer
+                        owner={repoInfo.owner}
+                        repo={repoInfo.repo}
+                        branch={githubSettings.branch}
+                        onError={setError}
+                    />
+                </div>
+            </div>
+        );
+    };
+
+    if (showConfigureMessage) {
+        return renderConfigureMessage();
+    }
+
+    if (error) {
+        return renderError(error);
+    }
+
+    if (githubSettings) {
+        return renderCodeViewer();
+    }
+
+    // Fallback loading state
+    return (
+        <div className="h-full w-full flex items-center justify-center p-8">
+            <div className="text-center max-w-md mx-auto">
+                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-full flex items-center justify-center border border-white/10 backdrop-blur-lg">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-400"></div>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-4">Loading Code View</h3>
+                <p className="text-gray-300">Setting up your code environment...</p>
+            </div>
+        </div>
+    );
+};
+
+export default CodeTab; 

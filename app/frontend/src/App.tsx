@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage';
 import ProjectDashboard from './pages/ProjectDashboard';
 import LoginPage from './pages/auth/LoginPage';
 import AuthLayout from './components/auth/layout/AuthLayout';
+import './styles/prism-theme.css';
 
 
 function App() {
