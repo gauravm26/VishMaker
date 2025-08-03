@@ -69,6 +69,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
     const [editingCell, setEditingCell] = useState<{ rowIndex: number; colKey: keyof TableRowData | string } | null>(null);
     const [editingHeader, setEditingHeader] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<string>('');
+    const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
     // --- Context Menu Hook ---
     const { show } = useContextMenu({ id: NODE_CONTEXT_MENU_ID });
@@ -128,9 +129,25 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
         }
     };
 
+    const handleRowClick = (rowIndex: number) => {
+        setSelectedRowIndex(rowIndex);
+    };
+
+    const handleNodeClick = (event: React.MouseEvent) => {
+        // If clicking on the node background (not on a row), unselect the row
+        if (event.target === event.currentTarget) {
+            setSelectedRowIndex(null);
+        }
+    };
+
     const displayContextMenu = (event: React.MouseEvent, type: 'header' | 'row' | 'background', rowIndex?: number, colKey?: string) => {
         event.preventDefault();
         event.stopPropagation();
+        
+        // If right-clicking on a row, also select it
+        if (type === 'row' && rowIndex !== undefined) {
+            setSelectedRowIndex(rowIndex);
+        }
         
         // Get UIID information for rows
         let uiid: string | undefined;
@@ -161,6 +178,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
         
         // Use the parent's context menu handler if provided
         if (actions.onContextMenu) {
+            // Use the original event coordinates to show menu exactly where clicked
             actions.onContextMenu(event, {
                 nodeId,
                 type,
@@ -171,7 +189,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 isTestCase
             });
         } else {
-            // Fallback to local context menu
+            // Fallback to local context menu with original coordinates
             show({
                 event,
                 props: {
@@ -234,6 +252,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                 overflow-hidden
                 relative
             `}
+            onClick={handleNodeClick}
             onContextMenu={(e) => displayContextMenu(e, 'background')} // Context menu on whole node background
         >
             {/* Node Header */}
@@ -265,7 +284,7 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     id={`${nodeId}-target`} 
                     style={{
                         top: '50%',
-                        right: 0,
+                        left: 0,
                         width: 10, // small hit area for connections
                         height: 10,
                         background: 'transparent',
@@ -316,11 +335,21 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                         </div>
 
                         {/* Table Body */}
-                        <div>
+                        <div onClick={(e) => {
+                            // If clicking on the table body background (not on a row), unselect the row
+                            if (e.target === e.currentTarget) {
+                                setSelectedRowIndex(null);
+                            }
+                        }}>
                         {rows.map((row, rowIndex) => (
                             <div
                                 key={`row-${row.id}-${rowIndex}`}
-                                className="flex border-b border-gray-200 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group hover:bg-gray-50"
+                                className={`flex border-b border-gray-200 last:border-b-0 min-h-[32px] sm:min-h-[36px] relative group cursor-pointer transition-colors ${
+                                    selectedRowIndex === rowIndex 
+                                        ? 'bg-blue-100 border-blue-300' 
+                                        : 'hover:bg-gray-50'
+                                }`}
+                                onClick={() => handleRowClick(rowIndex)}
                                 onContextMenu={(e) => displayContextMenu(e, 'row', rowIndex)}
                                 title={`UIID: ${row.uiid || row.id}`}
                                 data-row-id={row.id}

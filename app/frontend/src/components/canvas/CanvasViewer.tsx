@@ -2003,7 +2003,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                 
                 {/* Right Panel - Slides from right, max 20% width */}
                 {rightPanelOpen && (
-                    <div className="w-1/5 max-w-80 bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                    <div className="w-[35%] max-w-80 bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
                         <div className="p-4 border-b border-white/10">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-white font-semibold text-sm">AI Coding Agent</h3>
