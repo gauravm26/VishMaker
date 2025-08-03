@@ -1416,11 +1416,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({ projectId, onToggleSidebar 
                 user_input: "",
                 metadata: {
                     request_type: "code_generation",
-                    github: {
-                        repo: "",
-                        branch: "",
-                        pr: null
-                    }
+                    github: (() => {
+                        try {
+                            const savedSettings = localStorage.getItem('appSettings');
+                            if (savedSettings) {
+                                const settings = JSON.parse(savedSettings);
+                                return {
+                                    repo: settings.github?.repo || "",
+                                    branch: settings.github?.branch || "",
+                                    pr: null
+                                };
+                            }
+                        } catch (error) {
+                            console.error('Failed to load GitHub settings:', error);
+                        }
+                        return {
+                            repo: "",
+                            branch: "",
+                            pr: null
+                        };
+                    })()
                 }
             };
             

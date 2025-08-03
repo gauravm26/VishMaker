@@ -17,12 +17,17 @@ interface SettingsData {
         secretAccessKey?: string;
         region?: string;
     };
+    github: {
+        repo?: string;
+        branch?: string;
+    };
 }
 
 const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
     const [settings, setSettings] = useState<SettingsData>({
         apiKeys: {},
-        aws: {}
+        aws: {},
+        github: {}
     });
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -73,6 +78,16 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
             ...prev,
             aws: {
                 ...prev.aws,
+                [field]: value
+            }
+        }));
+    };
+
+    const updateGitHubField = (field: string, value: string) => {
+        setSettings(prev => ({
+            ...prev,
+            github: {
+                ...prev.github,
                 [field]: value
             }
         }));
@@ -218,6 +233,46 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                                     <option value="ap-southeast-2" className="bg-gray-800">Asia Pacific (Sydney)</option>
                                     <option value="ap-northeast-1" className="bg-gray-800">Asia Pacific (Tokyo)</option>
                                 </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* GitHub Repository Section */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-white flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                            </svg>
+                            GitHub Repository
+                        </h3>
+                        
+                        <div className="space-y-4">
+                            {/* GitHub Repository Path */}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-white/90">
+                                    Repository Path
+                                </label>
+                                <input
+                                    type="text"
+                                    value={settings.github.repo || ''}
+                                    onChange={(e) => updateGitHubField('repo', e.target.value)}
+                                    placeholder="owner/repository"
+                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                />
+                            </div>
+
+                            {/* GitHub Branch */}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-white/90">
+                                    Branch
+                                </label>
+                                <input
+                                    type="text"
+                                    value={settings.github.branch || ''}
+                                    onChange={(e) => updateGitHubField('branch', e.target.value)}
+                                    placeholder="main"
+                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                />
                             </div>
                         </div>
                     </div>
