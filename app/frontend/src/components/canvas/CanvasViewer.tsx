@@ -1914,8 +1914,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 attributionPosition="bottom-right"
                 snapToGrid={true}
                 snapGrid={[15, 15]}
-                nodesConnectable={false}
-                edgesFocusable={false}
+                nodesConnectable={true}
+                edgesFocusable={true}
                 defaultEdgeOptions={{
                     type: 'smoothstep',
                     style: {

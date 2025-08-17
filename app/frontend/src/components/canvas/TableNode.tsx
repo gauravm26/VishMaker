@@ -284,14 +284,16 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                     id={`${nodeId}-target`} 
                     style={{
                         top: '50%',
-                        left: 0,
-                        width: 10, // small hit area for connections
-                        height: 10,
-                        background: 'transparent',
-                        border: 'none',
-                        opacity: 0, // Completely invisible
+                        left: -6,
+                        width: 12, // slightly larger hit area for connections
+                        height: 12,
+                        background: '#8B5CF6',
+                        border: '2px solid #8B5CF6',
+                        borderRadius: '50%',
+                        opacity: 0.8,
                         zIndex: 9999,
                         position: 'absolute',
+                        transform: 'translateY(-50%)',
                       }}
                 />
             </div>
@@ -401,13 +403,16 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                                         id={`row-handle-${row.uiid || row.id}`} // Use row UIID for stable handle ID
                                         style={{ 
                                             top: '50%',
-                                            right: 0,
-                                            width: 10, // small hit area for connections
-                                            height: 10,
-                                            background: 'transparent',
-                                            border: 'none',
+                                            right: -5,
+                                            width: 12, // slightly larger hit area for connections
+                                            height: 12,
+                                            background: '#8B5CF6',
+                                            border: '2px solid #8B5CF6',
+                                            borderRadius: '50%',
+                                            opacity: 0.8,
                                             zIndex: 9999,
                                             position: 'absolute',
+                                            transform: 'translateY(-50%)',
                                         }}
                                     />
                                 )}
@@ -447,14 +452,16 @@ const TableNode: React.FC<NodeProps<TableNodeData & { actions: TableNodeActions 
                         position={Position.Right}
                         id="minimized-rows-handle"
                         style={{
-                            bottom: '0',
-                            right: 0,
-                            width: 10, // small hit area for connections
-                            height: 10,
-                            background: 'transparent',
-                            border: 'none',
+                            bottom: '10px',
+                            right: -5,
+                            width: 12, // slightly larger hit area for connections
+                            height: 12,
+                            background: '#8B5CF6',
+                            border: '2px solid #8B5CF6',
+                            borderRadius: '50%',
+                            opacity: 0.8,
                             zIndex: 9999,
-                            position: 'relative',
+                            position: 'absolute',
                           }}
                         title={`Connection point for ${allRows.length - rows.length} hidden rows`}
                     />

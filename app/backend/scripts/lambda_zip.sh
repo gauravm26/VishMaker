@@ -12,14 +12,15 @@ print_usage() {
     echo "Usage: $0 [LAMBDA_NAME]"
     echo ""
     echo "Arguments:"
-    echo "  LAMBDA_NAME    Build specific lambda (auth, users, llm, all, or default)"
+    echo "  LAMBDA_NAME    Build specific lambda (auth, llm, projects, requirements, all, or default)"
     echo ""
     echo "Examples:"
     echo "  $0              # Build all available lambdas"
-    echo "  $0 default      # Build default lambdas (auth, llm)"
+    echo "  $0 default      # Build default lambdas (auth, llm, projects, requirements)"
     echo "  $0 auth         # Build only auth lambda"
-    echo "  $0 users        # Build only users lambda"
     echo "  $0 llm          # Build only llm lambda"
+    echo "  $0 projects     # Build only projects lambda"
+    echo "  $0 requirements # Build only requirements lambda"
     echo "  $0 all          # Build all lambdas"
     echo ""
 }
@@ -28,12 +29,12 @@ print_usage() {
 LAMBDA_TO_BUILD="${1:-all}"
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects" "requirements")
+AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements")
 DEFAULT_LAMBDAS=("auth" "llm" "projects" "requirements")  # Default lambdas to build
 
 # Validate lambda selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|projects|requirements|all|default)
+    auth|llm|projects|requirements|all|default)
         # Valid selection
         ;;
     *)
@@ -109,11 +110,7 @@ build_lambda_package() {
         "auth")
             echo -e "${YELLOW}📋 Auth lambda is self-contained - no external project dependencies needed${NC}"
             ;;
-        "users")
-            echo -e "${YELLOW}📋 Users lambda is self-contained with built-in features${NC}"
-            # Copy DynamoDB package for users lambda
-            cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
-            ;;
+
         "llm")
             echo -e "${YELLOW}📋 LLM lambda is self-contained with built-in features${NC}"
             # LLM lambda doesn't need external dependencies
@@ -164,11 +161,11 @@ build_lambda_package() {
 
 # Build Lambda packages based on selection
 case $LAMBDA_TO_BUILD in
-    auth|users|llm|projects|requirements)
+    auth|llm|projects|requirements)
         build_lambda_package "$LAMBDA_TO_BUILD"
         ;;
     default)
-        # Build default lambdas (auth and llm)
+        # Build default lambdas (auth, llm, projects, requirements)
         for lambda in "${DEFAULT_LAMBDAS[@]}"; do
             if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
                 build_lambda_package "$lambda"

@@ -26,79 +26,56 @@ print_error() {
 }
 
 print_usage() {
-    echo "Usage: $0 [OPTIONS]"
+    echo "Usage: $0 [OPTION]"
     echo ""
     echo "Options:"
-    echo "  -l, --lambda LAMBDA_NAME    Deploy specific lambda (${AVAILABLE_LAMBDAS[*]}, all, or default)"
-    echo "  -e, --environment ENV       Environment name (default: prod)"
-    echo "  -y, --yes                   Auto-confirm deployment"
-    echo "  -f, --force                 Force rebuild all components (ignore timestamps)"
+    echo "  (no args)                   Deploy everything (lambdas + frontend)"
+    echo "  lambdas                     Deploy all lambdas only"
+    echo "  frontend                    Deploy frontend only"
     echo "  -h, --help                  Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                          # Deploy all available lambdas"
-    echo "  $0 -l default               # Deploy default lambdas (${DEFAULT_LAMBDAS[*]})"
-    echo "  $0 -l auth                  # Deploy only auth lambda"
-    echo "  $0 -l users                 # Deploy only users lambda"
-    echo "  $0 -l llm                   # Deploy only llm lambda"
-    echo "  $0 -l all                   # Deploy all lambdas"
-    echo "  $0 -e dev -l auth           # Deploy auth lambda to dev environment"
-    echo "  $0 -f -l auth               # Force rebuild and deploy auth lambda"
+    echo "  $0                          # Deploy everything (lambdas + frontend)"
+    echo "  $0 lambdas                  # Deploy all lambdas only"
+    echo "  $0 frontend                 # Deploy frontend only"
     echo ""
 }
 
 # Default values
-LAMBDA_TO_DEPLOY="all"
+DEPLOY_MODE="all"  # all, lambdas, or frontend
 ENVIRONMENT="prod"
 AUTO_CONFIRM=true
 FORCE_REBUILD=false
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "users" "llm" "projects")
-DEFAULT_LAMBDAS=("auth" "llm" "projects")  # Default lambdas to deploy
+AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements")
 
 # Parse command line arguments
-while [[ $# -gt 0 ]]; do
+if [[ $# -eq 0 ]]; then
+    DEPLOY_MODE="all"
+elif [[ $# -eq 1 ]]; then
     case $1 in
-        -l|--lambda)
-            LAMBDA_TO_DEPLOY="$2"
-            shift 2
+        lambdas)
+            DEPLOY_MODE="lambdas"
             ;;
-        -e|--environment)
-            ENVIRONMENT="$2"
-            shift 2
-            ;;
-        -y|--yes)
-            AUTO_CONFIRM=true
-            shift
-            ;;
-        -f|--force)
-            FORCE_REBUILD=true
-            shift
+        frontend)
+            DEPLOY_MODE="frontend"
             ;;
         -h|--help)
             print_usage
             exit 0
             ;;
         *)
-            print_error "Unknown option: $1"
+            print_error "Invalid option: $1"
             print_usage
             exit 1
             ;;
     esac
-done
-
-# Validate lambda selection
-case $LAMBDA_TO_DEPLOY in
-    auth|users|llm|projects|frontend|all|default)
-        # Valid selection
-        ;;
-    *)
-        print_error "Invalid lambda selection: $LAMBDA_TO_DEPLOY"
-        print_error "Valid options: ${AVAILABLE_LAMBDAS[*]}, frontend, all, default"
-        exit 1
-        ;;
-esac
+else
+    print_error "Too many arguments"
+    print_usage
+    exit 1
+fi
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -115,8 +92,7 @@ TERRAFORM_DIR="$(realpath "$TERRAFORM_DIR")"
 echo -e "${GREEN}🚀 VishMaker AWS Deployment${NC}"
 echo -e "${GREEN}=================================${NC}"
 echo -e "${BLUE}Environment: ${ENVIRONMENT}${NC}"
-echo -e "${BLUE}Lambda: ${LAMBDA_TO_DEPLOY}${NC}"
-echo -e "${BLUE}Force Rebuild: ${FORCE_REBUILD}${NC}"
+echo -e "${BLUE}Deploy Mode: ${DEPLOY_MODE}${NC}"
 echo -e "${BLUE}Project Root: ${PROJECT_ROOT}${NC}"
 echo -e "${BLUE}Backend Root: ${BACKEND_ROOT}${NC}"
 echo -e "${BLUE}Terraform Dir: ${TERRAFORM_DIR}${NC}"
@@ -148,9 +124,10 @@ fi
 
 print_success "Prerequisites check passed"
 
-# Step 1: Build Lambda packages
-print_status "Building Lambda deployment packages..."
-cd "$SCRIPT_DIR"
+# Step 1: Build Lambda packages (skip if only frontend)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Building Lambda deployment packages..."
+    cd "$SCRIPT_DIR"
 
 # Function to check if lambda needs rebuilding
 lambda_needs_rebuild() {
@@ -209,43 +186,24 @@ build_lambda() {
     fi
 }
 
-# Build lambdas based on selection
-case $LAMBDA_TO_DEPLOY in
-    auth|users|llm|projects)
-        if ! build_lambda "$LAMBDA_TO_DEPLOY" "$FORCE_REBUILD"; then
-            exit 1
+# Build lambdas based on deploy mode
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Building all lambdas..."
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
+            if ! build_lambda "$lambda" "$FORCE_REBUILD"; then
+                exit 1
+            fi
+        else
+            print_warning "Lambda directory for $lambda not found, skipping..."
         fi
-        ;;
-    default)
-        # Build default lambdas (auth and llm)
-        for lambda in "${DEFAULT_LAMBDAS[@]}"; do
-            if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
-                if ! build_lambda "$lambda" "$FORCE_REBUILD"; then
-                    exit 1
-                fi
-            else
-                print_warning "Lambda directory for $lambda not found, skipping..."
-            fi
-        done
-        ;;
-    all)
-        # Build all available lambdas
-        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
-            if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
-                if ! build_lambda "$lambda" "$FORCE_REBUILD"; then
-                    exit 1
-                fi
-            else
-                print_warning "Lambda directory for $lambda not found, skipping..."
-            fi
-        done
-        ;;
-esac
+    done
+fi
 
-print_success "Lambda packages built successfully"
+    print_success "Lambda packages built successfully"
 
-# Step 2: Verify deployment packages are ready
-print_status "Verifying deployment packages..."
+    # Step 2: Verify deployment packages are ready
+    print_status "Verifying deployment packages..."
 
 # Function to verify lambda package
 verify_lambda_package() {
@@ -260,35 +218,26 @@ verify_lambda_package() {
     fi
 }
 
-# Verify packages based on selection
-case $LAMBDA_TO_DEPLOY in
-    auth|users|llm|projects)
-        verify_lambda_package "$LAMBDA_TO_DEPLOY"
-        ;;
-    default)
-        # Verify default packages
-        for lambda in "${DEFAULT_LAMBDAS[@]}"; do
-            verify_lambda_package "$lambda"
-        done
-        ;;
-    all)
-        # Verify all available packages
-        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
-            verify_lambda_package "$lambda"
-        done
-        ;;
-esac
-
-print_success "Deployment packages verified"
-
-# Step 3: Initialize Terraform
-print_status "Initializing Terraform..."
-cd "$TERRAFORM_DIR"
-if ! terraform init; then
-    print_error "Terraform initialization failed"
-    exit 1
+# Verify packages based on deploy mode
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Verifying all lambda packages..."
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        verify_lambda_package "$lambda"
+    done
 fi
-print_success "Terraform initialized"
+
+    print_success "Deployment packages verified"
+fi
+
+# Step 3: Initialize Terraform (skip if only frontend)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Initializing Terraform..."
+    cd "$TERRAFORM_DIR"
+    if ! terraform init; then
+        print_error "Terraform initialization failed"
+        exit 1
+    fi
+    print_success "Terraform initialized"
 
 # Step 4: Create terraform.tfvars if it doesn't exist
 if [ ! -f "$TERRAFORM_DIR/terraform.tfvars" ]; then
@@ -360,40 +309,69 @@ if [ "$SKIP_TERRAFORM_APPLY" = "false" ]; then
         print_error "Terraform deployment failed"
         exit 1
     fi
-    print_success "Terraform deployment completed"
-else
-    print_success "Skipped Terraform apply - no changes needed"
+            print_success "Terraform deployment completed"
+    else
+        print_success "Skipped Terraform apply - no changes needed"
+    fi
 fi
 
-# Step 8: Get outputs
-print_status "Retrieving deployment outputs..."
-API_GATEWAY_URL=$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "Not available")
-COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null || echo "Not available")
-COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id 2>/dev/null || echo "Not available")
-DB_ENDPOINT=$(terraform output -raw db_instance_endpoint 2>/dev/null || echo "Not available")
-FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "Not available")
-CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_domain_name 2>/dev/null || echo "Not available")
+# Step 8: Get outputs (skip if only frontend)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Retrieving deployment outputs..."
+    API_GATEWAY_URL=$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "Not available")
+    COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null || echo "Not available")
+    COGNITO_CLIENT_ID=$(terraform output -raw cognito_user_pool_client_id 2>/dev/null || echo "Not available")
+    DB_ENDPOINT=$(terraform output -raw db_instance_endpoint 2>/dev/null || echo "Not available")
+    FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "Not available")
+    CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_domain_name 2>/dev/null || echo "Not available")
 
-# Step 9: Update configuration file
-print_status "Updating configuration with deployment values..."
-CONFIG_FILE="$BACKEND_ROOT/config/config.json"
+    # Step 9: Update configuration file
+    print_status "Updating configuration with deployment values..."
+    CONFIG_FILE="$BACKEND_ROOT/config/config.json"
 
-if [ -f "$CONFIG_FILE" ]; then
-    # Create a backup
-    cp "$CONFIG_FILE" "$CONFIG_FILE.backup"
-    
-    # Update config file with real values (you might want to use jq for this)
-    print_warning "Please manually update $CONFIG_FILE with the following values:"
-    echo "  - user_pool_id: $COGNITO_USER_POOL_ID"
-    echo "  - client_id: $COGNITO_CLIENT_ID"
-    echo "  - api_gateway_url: $API_GATEWAY_URL"
+    if [ -f "$CONFIG_FILE" ]; then
+        # Create a backup
+        cp "$CONFIG_FILE" "$CONFIG_FILE.backup"
+        
+        # Update config file with real values (you might want to use jq for this)
+        print_warning "Please manually update $CONFIG_FILE with the following values:"
+        echo "  - user_pool_id: $COGNITO_USER_POOL_ID"
+        echo "  - client_id: $COGNITO_CLIENT_ID"
+        echo "  - api_gateway_url: $API_GATEWAY_URL"
+    else
+        print_warning "Configuration file not found at $CONFIG_FILE"
+    fi
 else
-    print_warning "Configuration file not found at $CONFIG_FILE"
+    # Initialize variables for frontend-only deployment
+    API_GATEWAY_URL=""
+    COGNITO_USER_POOL_ID=""
+    COGNITO_CLIENT_ID=""
+    DB_ENDPOINT=""
+    FRONTEND_URL=""
+    CLOUDFRONT_DOMAIN=""
 fi
 
-# Step 10: Deploy Frontend (if requested or if deploying auth)
-if [ "$LAMBDA_TO_DEPLOY" = "all" ] || [ "$LAMBDA_TO_DEPLOY" = "frontend" ] || [ "$LAMBDA_TO_DEPLOY" = "auth" ] || [ "$LAMBDA_TO_DEPLOY" = "default" ]; then
+# Step 10: Deploy Frontend (if requested)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "frontend" ]]; then
     print_status "Deploying frontend..."
+    
+    # If only frontend is being deployed, we need to get the API Gateway URL from existing Terraform state
+    if [[ "$DEPLOY_MODE" == "frontend" ]]; then
+        print_status "Getting API Gateway URL from existing Terraform state..."
+        cd "$TERRAFORM_DIR"
+        if [ -f "terraform.tfstate" ]; then
+            API_GATEWAY_URL=$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "")
+            if [ -z "$API_GATEWAY_URL" ]; then
+                print_error "Could not get API Gateway URL from Terraform state. Please run full deployment first."
+                exit 1
+            fi
+            print_success "Found API Gateway URL: $API_GATEWAY_URL"
+        else
+            print_error "No Terraform state found. Please run full deployment first."
+            exit 1
+        fi
+        cd - > /dev/null
+    fi
     
     # Navigate to frontend directory
     FRONTEND_DIR="$PROJECT_ROOT/app/frontend"
@@ -415,16 +393,16 @@ if [ "$LAMBDA_TO_DEPLOY" = "all" ] || [ "$LAMBDA_TO_DEPLOY" = "frontend" ] || [ 
         if [ ! -d "dist" ]; then
             FRONTEND_NEEDS_REBUILD=true
             print_status "Frontend dist directory not found, will rebuild"
-            else
-        # Check if any source files are newer than dist
-        dist_time=$(stat -f "%m" dist 2>/dev/null || stat -c "%Y" dist 2>/dev/null)
-        latest_source_time=$(find src -name "*.tsx" -o -name "*.ts" -o -name "*.css" -o -name "*.json" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1 2>/dev/null || find src -name "*.tsx" -o -name "*.ts" -o -name "*.css" -o -name "*.json" | xargs stat -c "%Y" 2>/dev/null | sort -n | tail -1 2>/dev/null || echo "0")
-        
-        if [ "$latest_source_time" -gt "$dist_time" ]; then
-            FRONTEND_NEEDS_REBUILD=true
-            print_status "Frontend source files have changed, will rebuild"
+        else
+            # Check if any source files are newer than dist
+            dist_time=$(stat -f "%m" dist 2>/dev/null || stat -c "%Y" dist 2>/dev/null)
+            latest_source_time=$(find src -name "*.tsx" -o -name "*.ts" -o -name "*.css" -o -name "*.json" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1 2>/dev/null || find src -name "*.tsx" -o -name "*.ts" -o -name "*.css" -o -name "*.json" | xargs stat -c "%Y" 2>/dev/null | sort -n | tail -1 2>/dev/null || echo "0")
+            
+            if [ "$latest_source_time" -gt "$dist_time" ]; then
+                FRONTEND_NEEDS_REBUILD=true
+                print_status "Frontend source files have changed, will rebuild"
+            fi
         fi
-    fi
     fi
     
     # Create environment file with API URL
@@ -488,27 +466,55 @@ fi
 echo ""
 print_success "🎉 VishMaker deployment completed successfully!"
 echo ""
-echo -e "${GREEN}📋 Deployment Summary${NC}"
-echo -e "${GREEN}======================${NC}"
-echo -e "🌐 API Gateway URL: ${BLUE}$API_GATEWAY_URL${NC}"
-echo -e "🔐 Cognito User Pool ID: ${BLUE}$COGNITO_USER_POOL_ID${NC}"
-echo -e "🔑 Cognito Client ID: ${BLUE}$COGNITO_CLIENT_ID${NC}"
-echo -e "🗄️  Database Endpoint: ${BLUE}$DB_ENDPOINT${NC}"
-echo -e "🌍 Frontend URL: ${BLUE}$FRONTEND_URL${NC}"
-echo -e "☁️  CloudFront Domain: ${BLUE}$CLOUDFRONT_DOMAIN${NC}"
-echo ""
-echo -e "${GREEN}📍 Available Endpoints${NC}"
-echo -e "======================"
-echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
-echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
-echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
-echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
-echo -e "🔗 Frontend: ${BLUE}$FRONTEND_URL${NC}"
-echo ""
-echo -e "${YELLOW}🔧 Next Steps${NC}"
-echo "=============="
-echo "1. Test the authentication flow"
-echo "2. Verify frontend is working with new backend"
-echo "3. Configure domain name and SSL certificate (optional)"
-echo ""
-print_success "Deployment completed successfully! 🎉" 
+
+# Display different summaries based on deploy mode
+if [[ "$DEPLOY_MODE" == "frontend" ]]; then
+    echo -e "${GREEN}📋 Frontend Deployment Summary${NC}"
+    echo -e "${GREEN}============================${NC}"
+    echo -e "🌍 Frontend URL: ${BLUE}$FRONTEND_URL${NC}"
+    echo -e "☁️  CloudFront Domain: ${BLUE}$CLOUDFRONT_DOMAIN${NC}"
+    echo ""
+    print_success "Frontend deployment completed successfully! 🎉"
+elif [[ "$DEPLOY_MODE" == "lambdas" ]]; then
+    echo -e "${GREEN}📋 Lambda Deployment Summary${NC}"
+    echo -e "${GREEN}==========================${NC}"
+    echo -e "🌐 API Gateway URL: ${BLUE}$API_GATEWAY_URL${NC}"
+    echo -e "🔐 Cognito User Pool ID: ${BLUE}$COGNITO_USER_POOL_ID${NC}"
+    echo -e "🔑 Cognito Client ID: ${BLUE}$COGNITO_CLIENT_ID${NC}"
+    echo -e "🗄️  Database Endpoint: ${BLUE}$DB_ENDPOINT${NC}"
+    echo ""
+    echo -e "${GREEN}📍 Available Endpoints${NC}"
+    echo -e "======================"
+    echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
+    echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
+    echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo ""
+    print_success "Lambda deployment completed successfully! 🎉"
+else
+    # Full deployment summary
+    echo -e "${GREEN}📋 Full Deployment Summary${NC}"
+    echo -e "${GREEN}========================${NC}"
+    echo -e "🌐 API Gateway URL: ${BLUE}$API_GATEWAY_URL${NC}"
+    echo -e "🔐 Cognito User Pool ID: ${BLUE}$COGNITO_USER_POOL_ID${NC}"
+    echo -e "🔑 Cognito Client ID: ${BLUE}$COGNITO_CLIENT_ID${NC}"
+    echo -e "🗄️  Database Endpoint: ${BLUE}$DB_ENDPOINT${NC}"
+    echo -e "🌍 Frontend URL: ${BLUE}$FRONTEND_URL${NC}"
+    echo -e "☁️  CloudFront Domain: ${BLUE}$CLOUDFRONT_DOMAIN${NC}"
+    echo ""
+    echo -e "${GREEN}📍 Available Endpoints${NC}"
+    echo -e "======================"
+    echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
+    echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
+    echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo -e "🔗 Frontend: ${BLUE}$FRONTEND_URL${NC}"
+    echo ""
+    echo -e "${YELLOW}🔧 Next Steps${NC}"
+    echo "=============="
+    echo "1. Test the authentication flow"
+    echo "2. Verify frontend is working with new backend"
+    echo "3. Configure domain name and SSL certificate (optional)"
+    echo ""
+    print_success "Full deployment completed successfully! 🎉"
+fi 

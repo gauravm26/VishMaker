@@ -96,28 +96,59 @@ variable "lambda_runtime" {
   default     = "python3.9"
 }
 
-variable "project_api_timeout" {
-  description = "Timeout for Project API Lambda in seconds"
-  type        = number
-  default     = 60
-}
-
-variable "project_api_memory" {
-  description = "Memory allocation for Project API Lambda in MB"
-  type        = number
-  default     = 512
-}
-
-variable "llm_api_timeout" {
-  description = "Timeout for LLM API Lambda in seconds"
+variable "lambda_timeout_seconds" {
+  description = "Default timeout for Lambda functions in seconds"
   type        = number
   default     = 300
 }
 
-variable "llm_api_memory" {
-  description = "Memory allocation for LLM API Lambda in MB"
+variable "lambda_memory_mb" {
+  description = "Default memory allocation for Lambda functions in MB"
   type        = number
   default     = 1024
+}
+
+variable "lambda_environment_variables" {
+  description = "Default environment variables for Lambda functions"
+  type        = map(string)
+  default     = {}
+}
+
+variable "config_bucket_arn" {
+  description = "ARN of the S3 configuration bucket"
+  type        = string
+  default     = ""
+}
+
+variable "api_gateway_execution_arn" {
+  description = "API Gateway execution ARN for Lambda permissions"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_client_id" {
+  description = "Cognito Client ID"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN"
+  type        = string
+  default     = ""
+}
+
+# Common DynamoDB table environment variables
+variable "common_dynamodb_env_vars" {
+  description = "Common environment variables for DynamoDB table names"
+  type        = map(string)
+  default     = {}
 }
 
 # Build Configuration

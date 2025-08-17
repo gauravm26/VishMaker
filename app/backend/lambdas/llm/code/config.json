@@ -72,27 +72,33 @@
         ]
       },
       "instruction2": {
-        "Role": "You are a expert AI that blends business, experience-design, and technical perspectives to turn a clarified project brief into a clean, sequential user-flow blueprint.",
-        "Objective": "Produce a high-level user flow that lists every essential step, interaction, and decision point the user must take to reach their goal, expressed in plain language the whole team can act on.",
+        "Role": "You are an expert AI that converts a clarified project brief into a concrete, sequential user-flow blueprint.",
+        "Objective": "Produce an explicit, step-by-step user flow that mirrors the exact path a real user would take, from entry to final goal.",
         "ConstraintsAndGuidelines": {
-          "Input": "Use only the refined user description",
-          "AnalyzeInSteps": {
-            "Business Analyst": "Identify core user objectives, success criteria, and audience segments.",
-            "UX Expert": "Lay out friction-free navigation and interaction touchpoints.",
-            "Technical Architect": "Map the technical components or services that enable each step."
-          },
-          "Output": "Return one consolidated list of user-flow steps, each paired with a single-sentence rationale.",
-          "Scope": "Stay high-level—capture major user actions and system responses; omit implementation details.",
-          "NoFeatureCreep": "Do NOT invent features or steps not explicitly required or logically implied.",
-          "Format": "IMPORTANT RULES — break **none** of these:\n1. Write EXACTLY one short introduction sentence (no headings, markdown, or role labels).\n2. Start each subsequent line with <Step Name> | <Description>. Nothing before or after.\n3. Step Name must be a single word or concise phrase (e.g., \"Landing Page\").\n4. No bullet points, numbers, tables, markdown, code fences, bold, italics, or additional commentary.\n5. End output immediately after the final step—no summaries, notes, or blank lines."
+          "Input": "Use only the refined user description.",
+          "ThinkingMethod": "Simulate the first-time end-user journey and enumerate each distinct screen, action, decision point, and visible system response in strict order.",
+          "JourneyCoverage": "Cover the complete journey from initial entry to successful completion (and immediate post-success state). Do not stop early.",
+          "StepDefinition": "Each step must represent exactly one thing: a single user action, a single page/view, a single decision, or a single visible system response.",
+          "DecisionPoints": "Represent branches with a single decision step whose description clearly states conditions and next steps (e.g., 'if A → Next Step; if B → Alternative Step').",
+          "ConditionalSteps": "If a step occurs only in one branch, include it as a separate step with '(conditional)' in the Step Name and specify its skip condition in the description.",
+          "Looping": "If users may repeat actions (e.g., adding multiple items), include one explicit loop step that returns to the earlier step and name it '(loop)'.",
+          "MutualExclusivity": "Steps must be mutually exclusive: no overlapping responsibilities, no duplicate/synonymous steps, and each Step Name appears only once.",
+          "Scope": "Stay high-level but concrete—name real pages/actions (e.g., 'Category Page', 'Item Detail', 'Cart', 'Checkout', 'Payment', 'Confirmation'); omit implementation details.",
+          "NoFeatureCreep": "Do NOT add features or steps not explicitly required or directly implied by the goal.",
+          "Format": "IMPORTANT RULES — follow strictly:\n1. Write EXACTLY one short introductory sentence (no headings, markdown, or labels).\n2. Each subsequent line: <Step Name> | <Description>. Nothing before or after.\n3. Step Name must be a single word or concise phrase (parentheses allowed only for '(conditional)' or '(loop)').\n4. No bullet points, numbers, tables, markdown, code fences, bold/italics, or extra commentary.\n5. End immediately after the final step."
         },
         "Example": [
-          "Landing Page | User arrives on an engaging homepage with one clear call-to-action.",
-          "Check-In | User authenticates or provides minimal details to continue.",
-          "Dashboard | User sees a personalized overview of available actions.",
-          "Primary Task | User performs the core action that fulfills their objective.",
-          "Review | User reviews inputs and confirms submission.",
-          "Confirmation | User receives on-screen and email confirmation, then exits."
+          "Landing Page | User arrives on the homepage with featured items and clear navigation.",
+          "Category Page | User selects a category (e.g., Cakes, Pastries) to browse products.",
+          "Item Detail | User opens a product to view images, price, options, and availability.",
+          "Add to Cart | User adds the selected item to the cart.",
+          "Continue Shopping (loop) | User may return to Category Page to add more items; repeat Item Detail → Add to Cart until ready to proceed.",
+          "Cart | User reviews items, adjusts quantities, and proceeds to checkout.",
+          "Auth Choice | User chooses Sign In or Continue as Guest; if Guest → Checkout Page; if Sign In → Login (conditional).",
+          "Login (conditional) | User signs in successfully; upon success → Checkout Page (skip if Guest).",
+          "Checkout Page | User provides shipping and contact details and proceeds to payment.",
+          "Payment | User enters payment details and submits the order.",
+          "Order Confirmation | System displays order number, summary, and next steps."
         ]
       },
       "instruction3": {
@@ -137,69 +143,123 @@
         ]
       },
       "instruction5": {
-        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
-        "Objective": "For each user flow step, create a detailed list of high-level requirements that are unique and mutually exclusive, clearly defining the functionality and features needed.",
+        "Role": "You convert a single user-flow step into build-ready, high-level requirements across UI, Security/Privacy, Architecture, Backend, and Analytics.",
+        "Objective": "For the given step, produce mutually exclusive and collectively exhaustive (MECE) requirements that specify what must exist to implement that step end-to-end.",
         "ConstraintsAndGuidelines": {
-          "Input": "User Flow step description (e.g., 'User Authentication').",
-          "AnalyzeInSteps": {
-            "Business Analyst": "Identify the core business objectives and outcomes related to the user flow step.",
-            "UX Expert": "Define the necessary user interactions, usability considerations, and interface elements.",
-            "Technical Architect": "Outline the technical components, integrations, and systems required to support the functionality."
-          },
-          "Output": "Provide a consolidated list of detailed high-level requirements for the given user flow step. Each requirement must be unique and mutually exclusive.",
-          "Scope": "Focus solely on the major functionalities implied by the user flow step without introducing unrelated features.",
-          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the user flow step.",
-          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Account Verification Page | A web page for user account verification, ensuring users can confirm their identity.' DO NOT use bullet points, numbers, or any other format."
+          "Input": "Exactly one user-flow step in the format <Step Name> | <Description> (e.g., 'Login (conditional) | User signs in successfully; upon success → Checkout Page (skip if Guest).').",
+          "CategoryOrder": "Always output requirements grouped in this strict order: UI, Security/Privacy, Architecture, Backend, Analytics.",
+          "CategoryTags": "Each requirement name MUST begin with one of these tags: [UI], [Security], [Architecture], [Backend], [Analytics].",
+          "MECE": "No overlap or duplication across requirements or categories; each requirement covers exactly one concern.",
+          "Scope": "Stay high-level but concrete enough to guide implementation. Name screens, controls, services, data flows, and events without low-level code details.",
+          "NoFeatureCreep": "Only include what is necessary or directly implied by the step’s description and its immediate transitions.",
+          "Cardinality": "Include at least 2 and at most 5 requirements per category unless the step logically requires fewer.",
+          "Format": "IMPORTANT — follow exactly:\n1. Write EXACTLY one short introductory sentence (no headings or markdown).\n2. Then, each requirement on its own line as <Requirement Name> | <Description>.\n3. Requirement Name must start with the category tag (e.g., '[UI] Login Form').\n4. Use exactly one pipe character per line to separate name and description.\n5. No bullets, numbers, tables, code fences, bold/italics, or extra commentary.\n6. End immediately after the final requirement line."
         },
-        "Example": [
-          "Account Verification Page | A web page for user account verification.",
-          "Social Login Options | Ability to login through Google, Facebook, or via user id and password.",
-          "Password Reset Functionality | Ability to reset the account when the password is forgotten.",
-          "Email Confirmation Process | Ability to confirm the email address if it is used for registration."
+        "CategoryGuidance": {
+          "UI": "Screens, views, controls, states, validations, accessibility, and forward navigation for this step.",
+          "Security/Privacy": "Transport/storage protections, auth hardening, abuse controls, data minimization, consent surfaces, and compliance signals specific to this step.",
+          "Architecture": "Identity providers, protocols, session/token strategy, routing/redirects, service boundaries, and cross-step transitions.",
+          "Backend": "APIs, domain actions, persistence updates, idempotency, integrations, and operational logging tied to this step.",
+          "Analytics": "Events, properties, funnels, KPIs, error taxonomy, and diagnostics needed to monitor and improve this step."
+        },
+        "ExampleInput": "Login (conditional) | User signs in successfully; upon success → Checkout Page (skip if Guest).",
+        "ExampleOutput": [
+          "These are the high-level requirements for the 'Login (conditional)' step.",
+          "[UI] Login Page | Responsive sign-in view with username/email and password fields, inline validation, clear errors, and a prominent Continue as Guest control.",
+          "[UI] State & Transitions | Loading/success states with deterministic redirect to Checkout Page on success and preserved return path.",
+          "[UI] Recovery Links | Visible links for Forgot Password and Create Account without disrupting the guest path.",
+          "[Security] Credential Protection | Enforce TLS in transit; hash passwords with a modern KDF (e.g., Argon2/bcrypt); never log secrets.",
+          "[Security] Auth Hardening | Bot detection, rate limiting, brute-force lockout thresholds, optional MFA prompt when configured, and CSRF protection for form posts.",
+          "[Security] Privacy Minimization | Only collect fields required for authentication; present privacy notice and consent where applicable.",
+          "[Architecture] Identity Service | Use a standards-based IdP (OIDC/SAML-capable) with redirect/callback endpoints and environment-specific config.",
+          "[Architecture] Session/Token Strategy | Issue short-lived session (httpOnly cookie) or JWT with secure/SameSite flags; define logout and refresh behavior.",
+          "[Architecture] Post-Login Routing | On success, route to Checkout Page and attach prior anonymous context (e.g., cart) via server-side handoff.",
+          "[Backend] Auth API | Verify credentials, handle MFA when enabled, create session/issue token, and return minimal user profile needed for checkout.",
+          "[Backend] Cart Association | If an anonymous cart exists, atomically reassign it to the authenticated user and ensure idempotent login.",
+          "[Backend] Auth Audit Log | Record success/failure with reason codes and privacy-safe identifiers for security review.",
+          "[Analytics] Event Instrumentation | Track login_start, login_success, login_failure, guest_continue with step timing and error categories.",
+          "[Analytics] Funnel & QoS Metrics | Monitor conversion to Checkout Page, drop-off by error reason, lockout/MFA adoption, and p95/p99 latency."
         ]
       },
       "instruction6": {
-        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
-        "Objective": "For each high-level requirement, generate a detailed list of low-level requirements that comprehensively cover all aspects including UX, UI, APIs, Database, analytics, and more. Each requirement should be unique and mutually exclusive.",
+        "Role": "You turn one high-level requirement into a build-ready, low-level specification across the whole stack (React + Tailwind frontend, FastAPI API, AWS cloud).",
+        "Objective": "Generate a mutually exclusive, collectively exhaustive set of low-level requirements that enables an engineer to implement the feature end-to-end without gaps.",
         "ConstraintsAndGuidelines": {
-          "Input": "High-Level Requirement description.",
-          "AnalyzeInSteps": {
-            "Business Analyst": "Identify the core business outcomes and measurable objectives implied by the high-level requirement.",
-            "UX Expert": "Detail the necessary user interactions, interface components, and usability considerations required to fulfill the requirement.",
-            "Technical Architect": "Outline the technical components, API integrations, database modifications, analytics tracking, and any other system-level requirements needed."
-          },
-          "Output": "Provide a consolidated list of detailed low-level requirements for the given high-level requirement. Each requirement must be unique and mutually exclusive.",
-          "Scope": "Ensure the low-level requirements comprehensively cover all facets of the requirement including UX, UI, APIs, Database, and analytics without introducing unrelated features.",
-          "NoFeatureCreep": "Do not include additional requirements that extend beyond what is directly implied by the high-level requirement.",
-          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each requirement MUST be on a new line with the requirement name and description separated by a pipe character (|). Example: 'Email Verification UI | Design an interactive form for email verification with error handling and validation.' DO NOT use bullet points, numbers, or any other format."
+          "Input": "Exactly one high-level requirement line (e.g., '[UI] Login Page | Responsive sign-in view with username/email and password fields, inline validation, clear errors, and a prominent Continue as Guest control.').",
+          "ThinkingOrder": "Always reason and output in this strict order: UI → Validation → Accessibility → Frontend State → API Contract → API Integration → Security/Privacy → Session/Token → Database → Infrastructure/Cloud → Analytics/Events → QA/Testing.",
+          "CategoryTags": "Each requirement name MUST start with one of: [UI], [Validation], [A11y], [State], [API-Contract], [API-Client], [Security], [Session], [Database], [Infra], [Analytics], [QA].",
+          "TechStackDefaults": "Frontend: React 18 + Tailwind CSS, React Router (if routing needed), React Hook Form + Zod for forms; Backend: FastAPI; Cloud: AWS (API Gateway or ALB, Lambda or EC2/ECS for FastAPI, CloudFront, WAF, Secrets Manager/SSM). Use Cognito or OIDC-capable IdP when authentication is implied, but keep it swappable.",
+          "MECE": "No overlaps or duplicates. Each line must cover one distinct concern. No requirement should partially repeat another.",
+          "Granularity": "Concrete enough to guide implementation (components, fields, states, endpoints, payloads, headers, error codes, tables/fields, events), but avoid code dumps.",
+          "Cardinality": "Aim for 2–6 lines per category when applicable to the input; if a category is not applicable, include a single explicit 'No change' or 'Not applicable' line for that category.",
+          "NoFeatureCreep": "Only include what the high-level requirement implies or what is strictly necessary to implement it correctly.",
+          "Format": "IMPORTANT — follow exactly:\n1) Write EXACTLY one short introductory sentence.\n2) Then output each requirement on its own line as <Requirement Name> | <Description>.\n3) Use exactly one pipe per line.\n4) No bullets, numbers, tables, code fences, bold/italics, or commentary.\n5) End immediately after the final line."
         },
-        "Example": [
-          "Email Verification UI | Design an interactive form for email verification, including user prompts, error handling, and validation.",
-          "OAuth API Integration | Implement API endpoints to facilitate Google and Facebook authentication with secure token management.",
-          "Database Schema Update | Modify the user table to include fields for email verification status and timestamp.",
-          "Analytics Tracking | Set up event tracking to monitor email verification success rates and user engagement."
+        "ExampleInput": "[UI] Login Page | Responsive sign-in view with username/email and password fields, inline validation, clear errors, and a prominent Continue as Guest control.",
+        "ExampleOutput": [
+          "These are the low-level requirements for the Login Page.",
+          "[UI] Layout & Components | Implement a <LoginPage> React component using Tailwind with email/username and password inputs, Submit button, Continue as Guest button, and links for Forgot Password and Create Account arranged in a responsive layout.",
+          "[UI] Visual States | Provide loading, success, and error visual states; disable inputs during submission; display non-blocking inline errors and a top-level error banner when needed.",
+          "[Validation] Client Rules | Enforce Zod schema: identifier as valid email or allowed username pattern; password non-empty with minimum length; validate onChange and onSubmit with per-field messages.",
+          "[Validation] Error Copy | Provide concise, user-friendly messages (e.g., 'Invalid email format', 'Incorrect credentials'); map API error codes to deterministic messages.",
+          "[A11y] Semantics & Navigation | Label all inputs, associate errors via aria-describedby, ensure keyboard navigation and Enter-to-submit, expose an aria-live region for async errors, and meet WCAG 2.1 AA contrast.",
+          "[A11y] Focus Management | Move focus to the first invalid field on error and to the page heading on successful login before redirect.",
+          "[State] Form Management | Use React Hook Form with Zod resolver; persist 'returnTo' query param in component state; reset form on success while preserving navigation intent.",
+          "[State] Guest Path | Implement a guest-continue handler that preserves cart/session context client-side and advances to Checkout without creating an account.",
+          "[API-Contract] Login Endpoint | Define POST /api/v1/auth/login accepting { identifier, password, mfa_code? } JSON; respond 200 with httpOnly session cookie or access_token plus minimal profile; errors: 400 validation, 401 invalid_credentials, 423 locked, 429 rate_limited.",
+          "[API-Contract] CSRF & CORS | Expose GET /api/v1/auth/csrf to fetch CSRF token if double-submit pattern is used; configure CORS to allow the SPA origin with credentials.",
+          "[API-Client] Request Handling | Call login via fetch/axios with credentials included, 10s timeout, no retries on 4xx, limited backoff on 5xx/429, and deterministic mapping of status codes to UI messages.",
+          "[API-Client] Redirect Logic | On 200, navigate to '/checkout' or 'returnTo' and attach any anonymous cart context via server-provided signal (e.g., Set-Cookie or response field).",
+          "[Security] Secret & PII Handling | Never log credentials or tokens; enforce TLS; sanitize error messages to avoid account enumeration; throttle repeated attempts on the client.",
+          "[Security] CSRF & Headers | Use SameSite=Strict and Secure for cookies; include CSRF token header on POST when applicable; add Cache-Control: no-store on auth responses.",
+          "[Session] Token Storage | Prefer server-set httpOnly cookie for session; if JWT is used, store only in httpOnly, Secure cookie; keep minimal in-memory user context in the SPA.",
+          "[Session] Cart Association | After successful login, request server-side merge of anonymous cart with user cart; reflect updated cart count in header state.",
+          "[Database] No Schema Change | UI login does not require new tables; relies on existing users, sessions, and login_attempts fields managed on the server.",
+          "[Database] Audit Signals | Ensure backend persists last_login_at and increments login_attempts/lockout counters as applicable (read-only from UI perspective).",
+          "[Infra] API Exposure | Serve FastAPI behind AWS API Gateway with WAF; enable stage variables for envs; configure CORS for credentials; set rate limiting to protect login.",
+          "[Infra] Secrets Management | Store IdP config and signing keys in AWS Secrets Manager/SSM; pass to FastAPI via environment variables; prohibit secrets in client.",
+          "[Analytics] Event Model | Emit login_view, login_submit, login_success, login_failure, and guest_continue with properties: method, identifier_type, error_reason, latency_ms, and has_cart.",
+          "[Analytics] Privacy Controls | Do not send raw identifiers or passwords; honor DNT; gate analytics on user consent if required by policy.",
+          "[QA] Component Tests | Create React Testing Library tests for validation rules, disabled submit during loading, error banner rendering, and success redirect logic.",
+          "[QA] E2E Scenarios | Add Playwright/Cypress flows for valid login, invalid credentials, locked account, network failure, guest continue, and preserved returnTo navigation."
         ]
       },
       "instruction7": {
-        "Role": "You are a highly capable LLM who synthesizes business analysis, UX expertise, and technical architecture into a single coherent output.",
-        "Objective": "For each low-level requirement, generate a comprehensive set of test cases that cover all aspects of the requirement, including UI interactions, visual changes, API responses, backend data validation, animations, and other system behaviors.",
+        "Role": "You convert a single low-level requirement into a comprehensive, testable specification.",
+        "Objective": "Generate a mutually exclusive, collectively exhaustive set of deterministic test cases that validate UI, interactions, visual states, accessibility, API behavior, backend data effects, analytics, performance, and resilience for the given low-level requirement.",
         "ConstraintsAndGuidelines": {
-          "Input": "Low-Level Requirement description.",
-          "AnalyzeInSteps": {
-            "Business Analyst": "Identify the measurable outcomes and key performance indicators relevant to the requirement.",
-            "UX Expert": "Detail the expected user interactions, visual changes, animations, and error states that must be validated.",
-            "Technical Architect": "Outline system-level validations such as API responses, data integrity in the backend, integration points, and error handling mechanisms."
-          },
-          "Output": "Provide a consolidated list of comprehensive test cases for the given low-level requirement. Each test case must be unique and mutually exclusive, covering every aspect of the functionality.",
-          "Scope": "Ensure the test cases comprehensively cover all facets including UI, UX, APIs, backend database, animations, and system integrations without adding unrelated tests.",
-          "NoFeatureCreep": "Do not include additional tests that extend beyond what is directly implied by the low-level requirement.",
-          "Format": "IMPORTANT: Your output MUST be in a specific format. After a short introduction, each test case MUST be on a new line with the test case name and description separated by a pipe character (|). Example: 'Button Click Test | Validate that clicking the submit button triggers the appropriate API call and changes button color to indicate action.' DO NOT use bullet points, numbers, or any other format."
+          "Input": "Exactly one low-level requirement line produced by instruction6.",
+          "AlignmentWithInstruction6": "Use the same domain assumptions and stack (React + Tailwind, FastAPI, AWS) and respect the intent/scope of the given low-level requirement.",
+          "CoverageModel": "Include success, failure, edge, and abuse scenarios; cover both user-visible outcomes and system effects (API calls, headers, status codes, DB writes, events).",
+          "ThinkingOrder": "Design tests in this order when applicable: UI → Validation → Accessibility → Interaction/Visual → API-Contract → API-Client → Security/Privacy → Session/Token → Database → Infrastructure → Analytics/Events → Performance → Resilience/RateLimit → Compatibility.",
+          "CategoryTags": "Each test name MUST begin with one of: [UI], [Validation], [A11y], [Interaction], [Visual], [API-Contract], [API-Client], [Security], [Session], [Database], [Infra], [Analytics], [Perf], [Resilience], [Compat].",
+          "MECE": "No overlapping assertions across tests; each test targets one primary concern.",
+          "Determinism": "Use stable fixtures and placeholders (e.g., user: test@example.com, pw: CorrectHorse1!) and explicit Given; When; Then phrasing in the description.",
+          "NoFeatureCreep": "Only test behaviors directly implied by the low-level requirement and the immediate flow context.",
+          "Cardinality": "Output at least 10 and at most 25 tests; include at least one positive and one negative test where applicable.",
+          "Format": "IMPORTANT — follow exactly:\n1. Write EXACTLY one short introductory sentence.\n2. Then each test on its own line as <Test Name> | <Description>.\n3. Test Name must start with a CategoryTag and be concise.\n4. Use exactly one pipe per line.\n5. Use 'Given …; When …; Then …' within the description with semicolons.\n6. No bullets, numbers, tables, code fences, or extra commentary.\n7. End immediately after the final test line."
         },
-        "Example": [
-          "Button Click Test | Validate that clicking the submit button triggers the correct API call and changes the button color as expected.",
-          "Animation Test | Ensure that the button animates smoothly on hover and during the click action.",
-          "API Response Test | Confirm that the API returns the correct data and error codes for valid and invalid inputs.",
-          "Database Update Test | Verify that the API response data is correctly stored in the backend database with accurate timestamps and statuses."
+        "ExampleInput": "[UI] Layout & Components | Implement a <LoginPage> React component using Tailwind with email/username and password inputs, Submit button, Continue as Guest button, and links for Forgot Password and Create Account arranged in a responsive layout.",
+        "ExampleOutput": [
+          "These are the test cases for the LoginPage layout and components.",
+          "[UI] Initial Render | Given no query params; When LoginPage mounts; Then identifier input, password input, Submit, Continue as Guest, Forgot Password, and Create Account are visible and enabled.",
+          "[UI] Responsive Layout | Given widths 360px, 768px, 1280px; When viewport resizes; Then components reflow without overlap or horizontal scroll.",
+          "[Validation] Inline Email Rules | Given identifier='not-an-email' and password='abc'; When Submit is clicked; Then email field shows 'Invalid email format' and Submit does not fire API.",
+          "[Validation] Required Fields | Given empty identifier and password; When Submit is clicked; Then both fields show required errors and no network request occurs.",
+          "[A11y] Keyboard Navigation | Given focus on identifier; When user tabs through controls; Then tab order follows inputs→Submit→Guest→links and Enter on password triggers submit.",
+          "[A11y] Screen Reader Labels | Given a screen reader; When focusing inputs; Then labels and aria-describedby for errors are announced correctly.",
+          "[Interaction] Guest Continue | Given items in anonymous cart; When Continue as Guest is clicked; Then navigation advances to Checkout and anonymous cart context persists.",
+          "[Visual] Loading State | Given valid inputs; When Submit is clicked; Then Submit shows a loading indicator and inputs are disabled until response.",
+          "[API-Contract] Request Shape | Given valid inputs; When Submit is clicked; Then client sends POST /api/v1/auth/login with {identifier, password} JSON and credentials included.",
+          "[API-Client] Error Mapping 401 | Given API returns 401 invalid_credentials; When response arrives; Then an error banner appears and fields remain populated.",
+          "[Security] CSRF & Headers | Given CSRF token exists; When Submit is clicked; Then request includes anti-CSRF header and cookies have Secure and SameSite flags.",
+          "[Session] Redirect With ReturnTo | Given URL ?returnTo=%2Fcheckout; When login succeeds; Then app navigates to /checkout and cleans the query param.",
+          "[Database] No Client Writes | Given login from UI; When interaction completes; Then no direct client-side DB writes occur (server-only persistence).",
+          "[Infra] CORS With Credentials | Given SPA origin; When preflight and login request execute; Then CORS succeeds with Access-Control-Allow-Credentials=true.",
+          "[Analytics] Event Emission | Given page mount and submit; When user views and submits; Then login_view and login_submit events fire with method='password' and identifier_type.",
+          "[Perf] Submit Latency Budget | Given healthy network; When login is submitted; Then time-to-banner-or-redirect ≤ 600ms p95 in test env.",
+          "[Resilience] Rate Limit Handling | Given API responds 429; When user retries; Then client backs off per policy and shows 'Too many attempts' without spamming requests.",
+          "[Compat] Browser Matrix | Given latest Chrome, Firefox, Safari; When page loads and submits; Then behavior, visuals, and navigation are consistent across browsers."
         ]
       },
       "instruction8": {
@@ -277,7 +337,7 @@
         "componentId": "gen_initialPrompt",
         "modelInstructions": [
           {
-            "model": "model2",
+            "model": "model1",
             "instruction": "instruction1"
           }
         ],
@@ -285,10 +345,10 @@
       },
       "component2": {
         "componentId": "gen_userflow",
-        "targetTable": "user_flows",
+        "targetTable": "user-flows",
         "modelInstructions": [
           {
-            "model": "model2",
+            "model": "model1",
             "instruction": "instruction2"
           }
         ],
@@ -296,7 +356,7 @@
       },
       "component3": {
         "componentId": "flow_genChildReq",
-        "targetTable": "high_level_requirements",
+        "targetTable": "high-level-requirements",
         "modelInstructions": [
           {
             "model": "model1",
@@ -307,7 +367,7 @@
       },
       "component4": {
         "componentId": "highlevelrequirement_genChildReq",
-        "targetTable": "low_level_requirements",
+        "targetTable": "low-level-requirements",
         "modelInstructions": [
           {
             "model": "model1",
@@ -318,7 +378,7 @@
       },
       "component5": {
         "componentId": "lowlevelrequirement_genChildReq",
-        "targetTable": "test_cases",
+        "targetTable": "test-cases",
         "modelInstructions": [
           {
             "model": "model1",

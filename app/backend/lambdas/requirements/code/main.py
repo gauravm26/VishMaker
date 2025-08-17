@@ -52,7 +52,6 @@ def get_table(table_name: str):
     # Use underscores in the table name to match the actual DynamoDB table names
     table_name_env = os.environ.get(f'{table_name.upper()}_TABLE_NAME', f'prod-vishmaker-{table_name}')
     print(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
-    print(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
     return dynamodb.Table(table_name_env)
 
 def _safe_to_userflow(obj: dict) -> "UserFlow":
@@ -66,7 +65,7 @@ def _safe_to_userflow(obj: dict) -> "UserFlow":
             return UserFlow.parse_obj(obj)
     except ValidationError as exc:
         logger.error("❌ Failed to validate UserFlow: %s\nData: %s", exc, obj)
-        raise HTTPException(status_code=500, detail="Bad data in user_flows table")
+        raise HTTPException(status_code=500, detail="Bad data in user-flows table")
 
 def _json_dump(model: BaseModel, limit: int = 10_240) -> str:
     """Dump a Pydantic model → compact JSON suitable for CloudWatch."""
@@ -111,7 +110,7 @@ def create_user_flow(project_id: str, flow: UserFlowCreate):
     """Create a new user flow for a project"""
     try:
         print("🛫 ENTER create_user_flow(project_id=%s, flow=%s)", project_id, flow)
-        table = get_table('user_flows')
+        table = get_table('user-flows')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         
@@ -138,7 +137,7 @@ def get_user_flows(project_id: str):
     """Get all user flows for a project"""
     try:
         print("🛫 ENTER get_user_flows(project_id=%s)", project_id)
-        table = get_table('user_flows')
+        table = get_table('user-flows')
         
         response = table.query(
             IndexName='project_id-index',
@@ -160,7 +159,7 @@ def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCrea
     """Create a new high-level requirement"""
     try:
         print("🛫 ENTER create_high_level_requirement(project_id=%s, hlr=%s)", project_id, hlr)
-        table = get_table('high_level_requirements')
+        table = get_table('high-level-requirements')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         
@@ -187,12 +186,12 @@ def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = No
     """Get high-level requirements for a project"""
     try:
         print("🛫 ENTER get_high_level_requirements(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
-        table = get_table('high_level_requirements')
+        table = get_table('high-level-requirements')
         
         if parent_uiid:
-            response = table.query(
-                IndexName='parent_uiid-index',
-                KeyConditionExpression='parent_uiid = :parent_uiid',
+            # Since parent_uiid is now the range key, we can scan and filter
+            response = table.scan(
+                FilterExpression='parent_uiid = :parent_uiid',
                 ExpressionAttributeValues={':parent_uiid': parent_uiid}
             )
         else:
@@ -212,7 +211,7 @@ def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate
     """Create a new low-level requirement"""
     try:
         print("🛫 ENTER create_low_level_requirement(project_id=%s, llr=%s)", project_id, llr)
-        table = get_table('low_level_requirements')
+        table = get_table('low-level-requirements')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         
@@ -239,12 +238,12 @@ def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = Non
     """Get low-level requirements for a project"""
     try:
         print("🛫 ENTER get_low_level_requirements(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
-        table = get_table('low_level_requirements')
+        table = get_table('low-level-requirements')
         
         if parent_uiid:
-            response = table.query(
-                IndexName='parent_uiid-index',
-                KeyConditionExpression='parent_uiid = :parent_uiid',
+            # Since parent_uiid is now the range key, we can scan and filter
+            response = table.scan(
+                FilterExpression='parent_uiid = :parent_uiid',
                 ExpressionAttributeValues={':parent_uiid': parent_uiid}
             )
         else:
@@ -264,7 +263,7 @@ def create_test_case(project_id: str, test_case: TestCaseCreate):
     """Create a new test case"""
     try:
         print("🛫 ENTER create_test_case(project_id=%s, test_case=%s)", project_id, test_case)
-        table = get_table('test_cases')
+        table = get_table('test-cases')
         uiid = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         
@@ -291,12 +290,12 @@ def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
     """Get test cases for a project"""
     try:
         print("🛫 ENTER get_test_cases(project_id=%s, parent_uiid=%s)", project_id, parent_uiid)
-        table = get_table('test_cases')
+        table = get_table('test-cases')
         
         if parent_uiid:
-            response = table.query(
-                IndexName='parent_uiid-index',
-                KeyConditionExpression='parent_uiid = :parent_uiid',
+            # Since parent_uiid is now the range key, we can scan and filter
+            response = table.scan(
+                FilterExpression='parent_uiid = :parent_uiid',
                 ExpressionAttributeValues={':parent_uiid': parent_uiid}
             )
         else:
@@ -318,10 +317,10 @@ def get_project_requirements(project_id: str):
     
         print("🛫 ENTER get_project_requirements(project_id=%s)", project_id)
 
-        flows_tbl = get_table("user_flows")
-        hlr_tbl   = get_table("high_level_requirements")
-        llr_tbl   = get_table("low_level_requirements")
-        tc_tbl    = get_table("test_cases")
+        flows_tbl = get_table("user-flows")
+        hlr_tbl   = get_table("high-level-requirements")
+        llr_tbl   = get_table("low-level-requirements")
+        tc_tbl    = get_table("test-cases")
 
         # ── 1️⃣ USER FLOWS ──────────────────────────────────────────────────────
         flows_raw = query_all(
@@ -333,29 +332,29 @@ def get_project_requirements(project_id: str):
         flows: list[UserFlow] = []
         for f in flows_raw:
             # ── 2️⃣ HLRs for each flow ────────────────────────────────────────
-            hlrs_raw = query_all(
-                hlr_tbl,
-                IndexName="parent_uiid-index",
-                KeyConditionExpression=Key("parent_uiid").eq(f["uiid"])
-            )
+            # Since parent_uiid is now the range key, we can scan and filter
+            hlrs_raw = hlr_tbl.scan(
+                FilterExpression='parent_uiid = :parent_uiid',
+                ExpressionAttributeValues={':parent_uiid': f["uiid"]}
+            ).get('Items', [])
             print("📦 HLRs raw → %s", _json_dump(hlrs_raw))
             hlrs: list[HighLevelRequirement] = []
             for h in hlrs_raw:
                 # ── 3️⃣ LLRs for each HLR ────────────────────────────────────
-                llrs_raw = query_all(
-                    llr_tbl,
-                    IndexName="parent_uiid-index",
-                    KeyConditionExpression=Key("parent_uiid").eq(h["uiid"])
-                )
+                # Since parent_uiid is now the range key, we can scan and filter
+                llrs_raw = llr_tbl.scan(
+                    FilterExpression='parent_uiid = :parent_uiid',
+                    ExpressionAttributeValues={':parent_uiid': h["uiid"]}
+                ).get('Items', [])
                 print("📦 LLRs raw → %s", _json_dump(llrs_raw))
                 llrs: list[LowLevelRequirement] = []
                 for l in llrs_raw:
-                    # ── 4️⃣ TC for each LLR ──────────────────────────────────
-                    tcs_raw = query_all(
-                        tc_tbl,
-                        IndexName="parent_uiid-index",
-                        KeyConditionExpression=Key("parent_uiid").eq(l["uiid"])
-                    )
+                    # ── 4️⃣ TC for each LLR ────────────────────────────────────
+                    # Since parent_uiid is now the range key, we can scan and filter
+                    tcs_raw = tc_tbl.scan(
+                        FilterExpression='parent_uiid = :parent_uiid',
+                        ExpressionAttributeValues={':parent_uiid': l["uiid"]}
+                    ).get('Items', [])
                     tcs = [TestCase(**tc) for tc in tcs_raw]
                     llrs.append(LowLevelRequirement(**l, test_case_list=tcs))
                     print("📦 TCs → %s", _json_dump(tcs))

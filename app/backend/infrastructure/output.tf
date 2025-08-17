@@ -42,7 +42,7 @@ output "config_object_key" {
 }
 
 # Cognito Outputs
-output "cognito_user_pool_id" {
+/* output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
   value       = aws_cognito_user_pool.main.id
 }
@@ -61,7 +61,7 @@ output "cognito_user_pool_domain" {
   description = "Cognito User Pool Domain"
   value       = aws_cognito_user_pool_domain.main.domain
 }
-
+ */
 # API Gateway Outputs
 output "api_gateway_id" {
   description = "API Gateway ID"
@@ -87,22 +87,37 @@ output "api_routes" {
 }
 
 
-# LLM Lambda Module Outputs
+# LLM Lambda Outputs
 output "llm_lambda_function_name" {
   description = "Name of the LLM Lambda function"
-  value       = module.llm_api_lambda.lambda_llm_function_name
+  value       = aws_lambda_function.lambda["llm_api"].function_name
 }
 
 output "llm_lambda_function_arn" {
   description = "ARN of the LLM Lambda function"
-  value       = module.llm_api_lambda.lambda_llm_function_arn
+  value       = aws_lambda_function.lambda["llm_api"].arn
 }
 
 output "llm_lambda_function_invoke_arn" {
   description = "Invoke ARN of the LLM Lambda function"
-  value       = module.llm_api_lambda.lambda_llm_function_invoke_arn
+  value       = aws_lambda_function.lambda["llm_api"].invoke_arn
 }
 
+# Auth Lambda Outputs
+output "auth_lambda_function_name" {
+  description = "Name of the Auth Lambda function"
+  value       = aws_lambda_function.lambda["auth_api"].function_name
+}
+
+output "auth_lambda_function_arn" {
+  description = "ARN of the Auth Lambda function"
+  value       = aws_lambda_function.lambda["auth_api"].arn
+}
+
+output "auth_lambda_function_invoke_arn" {
+  description = "Invoke ARN of the Auth Lambda function"
+  value       = aws_lambda_function.lambda["auth_api"].invoke_arn
+}
 
 
 # Resource Names (useful for other services)
@@ -124,33 +139,33 @@ output "common_tags" {
 # Frontend / CDN Outputs
 output "frontend_bucket_name" {
   description = "Name of the S3 bucket for frontend"
-  value       = module.cloudfront.s3_bucket_name
+  value       = data.aws_s3_bucket.existing.id
 }
 
 output "frontend_bucket_arn" {
   description = "ARN of the S3 bucket for frontend"
-  value       = module.cloudfront.s3_bucket_arn
+  value       = data.aws_s3_bucket.existing.arn
 }
 
 output "cloudfront_distribution_id" {
   description = "ID of the CloudFront distribution"
-  value       = module.cloudfront.cloudfront_distribution_id
+  value       = data.aws_cloudfront_distribution.existing.id
 }
 
 output "cloudfront_domain_name" {
   description = "Domain name of the CloudFront distribution"
-  value       = module.cloudfront.cloudfront_domain_name
+  value       = data.aws_cloudfront_distribution.existing.domain_name
 }
 
 # Domain Outputs
 output "hosted_zone_id" {
   description = "ID of the Route53 hosted zone"
-  value       = module.cloudfront.hosted_zone_id
+  value       = data.aws_route53_zone.existing.zone_id
 }
 
 output "name_servers" {
   description = "Name servers for the domain"
-  value       = module.cloudfront.name_servers
+  value       = data.aws_route53_zone.existing.name_servers
 }
 
 # Application URLs

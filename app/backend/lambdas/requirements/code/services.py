@@ -49,16 +49,16 @@ class RequirementGenerationService:
         parsed_data = self._parse_pipe_delimited_content(raw_content)
         
         # Insert data directly into the target table based on table_type
-        if table_type == "user_flow":
+        if table_type == "user-flow":
             return self._save_user_flows(db, parsed_data, project_id)
             
-        elif table_type == "high_level_requirement":
+        elif table_type == "high-level-requirements":
             return self._save_high_level_requirements(db,  parsed_data, parent_uiid)
             
-        elif table_type == "low_level_requirement":
+        elif table_type == "low-level-requirements":
             return self._save_low_level_requirements(db, parsed_data, parent_uiid)
             
-        elif table_type == "test_case":
+        elif table_type == "test-cases":
             return self._save_test_cases(db, parsed_data, parent_uiid)
             
         else:

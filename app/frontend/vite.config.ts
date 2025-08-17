@@ -9,6 +9,7 @@ export default defineConfig({
     react(),
     tsconfigPaths()
   ],
+
   // Ensure assets use relative paths for CloudFront compatibility
   base: './',
   build: {

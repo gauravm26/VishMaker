@@ -43,7 +43,7 @@ def get_table():
     if table_name is None:
         # Get table name from environment variable
         import os
-        table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'prod-vishmaker-projects')
+        table_name = os.environ.get('PROJECTS_TABLE_NAME', 'prod-vishmaker-projects')
     return dynamodb.Table(table_name)
 
 @app.get("/")
@@ -91,18 +91,14 @@ def get_projects(skip: int = 0, limit: int = 100, user_id: Optional[str] = None)
         if user_id:
             # Query by user_id if provided
             response = table.query(
-                IndexName='user_id-index',  # Assuming you have a GSI on user_id
+                IndexName='user_id-index',  # GSI on user_id for efficient user-based queries
                 KeyConditionExpression='user_id = :user_id',
                 ExpressionAttributeValues={':user_id': user_id},
                 Limit=limit
             )
         else:
-            # Scan all projects
-            scan_params = {'Limit': limit}
-            if skip > 0:
-                scan_params['ExclusiveStartKey'] = {'id': str(skip)}
-            
-            response = table.scan(**scan_params)
+            # Scan all projects (consider adding pagination for large datasets)
+            response = table.scan(Limit=limit)
         
         projects = [Project(**item) for item in response.get('Items', [])]
         logger.info(f"✅ Retrieved {len(projects)} projects")
@@ -119,8 +115,8 @@ def get_project(project_id: str):
     try:
         table = get_table()
         
-        # Since we need both keys but only have the id, we need to scan
-        # This is not ideal for performance, but works with the current setup
+        # Note: This requires a GSI on 'id' or we need to restructure the table
+        # For now, using scan but this should be optimized with proper indexing
         response = table.scan(
             FilterExpression='id = :project_id',
             ExpressionAttributeValues={':project_id': project_id}
@@ -167,11 +163,12 @@ def update_project(project_id: str, project_update: ProjectUpdate):
         # Build update expression
         update_expression = "SET updated_at = :updated_at"
         expression_attribute_values = {':updated_at': datetime.utcnow().isoformat()}
+        expression_attribute_names = {}
         
         if project_update.name is not None:
             update_expression += ", #name = :name"
             expression_attribute_values[':name'] = project_update.name
-            expression_attribute_names = {'#name': 'name'}
+            expression_attribute_names['#name'] = 'name'
         
         if project_update.initial_prompt is not None:
             update_expression += ", initial_prompt = :initial_prompt"
@@ -182,7 +179,7 @@ def update_project(project_id: str, project_update: ProjectUpdate):
             Key={'id': project_id, 'user_id': user_id},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values,
-            ExpressionAttributeNames=expression_attribute_names if 'expression_attribute_names' in locals() else None,
+            ExpressionAttributeNames=expression_attribute_names if expression_attribute_names else None,
             ReturnValues="ALL_NEW"
         )
         
@@ -199,12 +196,18 @@ def update_project(project_id: str, project_update: ProjectUpdate):
 
 @app.delete("/projects/{project_id}", status_code=204)
 def delete_project(project_id: str):
-    """Delete a project by ID"""
+    """Delete a project by ID with cascade deletion of all related data"""
     try:
-        table = get_table()
+        # Get table names from environment variables
+        import os
+        projects_table = get_table()
+        user_flows_table = dynamodb.Table(os.environ.get('USER_FLOWS_TABLE_NAME', 'prod-vishmaker-user-flows'))
+        high_level_reqs_table = dynamodb.Table(os.environ.get('HIGH_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-high-level-requirements'))
+        low_level_reqs_table = dynamodb.Table(os.environ.get('LOW_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-low-level-requirements'))
+        test_cases_table = dynamodb.Table(os.environ.get('TEST_CASES_TABLE_NAME', 'prod-vishmaker-test-cases'))
         
         # First, get the project to find the user_id
-        response = table.scan(
+        response = projects_table.scan(
             FilterExpression='id = :project_id',
             ExpressionAttributeValues={':project_id': project_id}
         )
@@ -219,10 +222,94 @@ def delete_project(project_id: str):
         if not user_id:
             raise HTTPException(status_code=400, detail="Project missing user_id")
         
-        # Delete with both hash key (id) and range key (user_id)
-        table.delete_item(Key={'id': project_id, 'user_id': user_id})
+        logger.info(f"🗑️ Starting cascade deletion for project: {project_id}")
         
-        logger.info(f"✅ Deleted project: {project_id} for user: {user_id}")
+        # Delete all items by project_id using GSIs - much simpler and faster!
+        
+        # Delete test cases
+        tc_response = test_cases_table.query(
+            IndexName='project_id-index',
+            KeyConditionExpression='project_id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        test_cases = tc_response.get('Items', [])
+        logger.info(f"Found {len(test_cases)} test cases to delete")
+        for tc in test_cases:
+            try:
+                test_cases_table.delete_item(
+                    Key={
+                        'uiid': tc.get('uiid'),
+                        'parent_uiid': tc.get('parent_uiid')
+                    }
+                )
+                logger.info(f"Deleted test case: {tc.get('uiid')}")
+            except Exception as e:
+                logger.warning(f"Failed to delete test case {tc.get('uiid')}: {str(e)}")
+        
+        # Delete low level requirements
+        llr_response = low_level_reqs_table.query(
+            IndexName='project_id-index',
+            KeyConditionExpression='project_id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        low_level_reqs = llr_response.get('Items', [])
+        logger.info(f"Found {len(low_level_reqs)} low level requirements to delete")
+        for llr in low_level_reqs:
+            try:
+                low_level_reqs_table.delete_item(
+                    Key={
+                        'uiid': llr.get('uiid'),
+                        'parent_uiid': llr.get('parent_uiid')
+                    }
+                )
+                logger.info(f"Deleted LLR: {llr.get('uiid')}")
+            except Exception as e:
+                logger.warning(f"Failed to delete LLR {llr.get('uiid')}: {str(e)}")
+        
+        # Delete high level requirements
+        hlr_response = high_level_reqs_table.query(
+            IndexName='project_id-index',
+            KeyConditionExpression='project_id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        high_level_reqs = hlr_response.get('Items', [])
+        logger.info(f"Found {len(high_level_reqs)} high level requirements to delete")
+        for hlr in high_level_reqs:
+            try:
+                high_level_reqs_table.delete_item(
+                    Key={
+                        'uiid': hlr.get('uiid'),
+                        'parent_uiid': hlr.get('parent_uiid')
+                    }
+                )
+                logger.info(f"Deleted HLR: {hlr.get('uiid')}")
+            except Exception as e:
+                logger.warning(f"Failed to delete HLR {hlr.get('uiid')}: {str(e)}")
+        
+        # Delete user flows
+        user_flows_response = user_flows_table.query(
+            IndexName='project_id-index',
+            KeyConditionExpression='project_id = :project_id',
+            ExpressionAttributeValues={':project_id': project_id}
+        )
+        user_flows = user_flows_response.get('Items', [])
+        logger.info(f"Found {len(user_flows)} user flows to delete")
+        for user_flow in user_flows:
+            try:
+                user_flows_table.delete_item(
+                    Key={
+                        'uiid': user_flow.get('uiid'),
+                        'project_id': user_flow.get('project_id')
+                    }
+                )
+                logger.info(f"Deleted user flow: {user_flow.get('uiid')}")
+            except Exception as e:
+                logger.warning(f"Failed to delete user flow {user_flow.get('uiid')}: {str(e)}")
+        
+        # Finally delete the project itself
+        projects_table.delete_item(Key={'id': project_id, 'user_id': user_id})
+        
+        logger.info(f"✅ Successfully deleted project {project_id} and all related data")
         return None
         
     except table.meta.client.exceptions.ResourceNotFoundException:

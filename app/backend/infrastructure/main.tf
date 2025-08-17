@@ -37,8 +37,17 @@ locals {
       Environment = var.environment
     })
   }
+  
+  # 🏷️ Common DynamoDB environment variables
+  common_dynamodb_env_vars = {
+    PROJECTS_TABLE_NAME                = aws_dynamodb_table.tables["projects"].name,
+    USER_FLOWS_TABLE_NAME              = aws_dynamodb_table.tables["user-flows"].name,
+    HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high-level-requirements"].name,
+    LOW_LEVEL_REQUIREMENTS_TABLE_NAME  = aws_dynamodb_table.tables["low-level-requirements"].name,
+    TEST_CASES_TABLE_NAME              = aws_dynamodb_table.tables["test-cases"].name
+  }
+  
   # 🏷️ Lambda configuration object
-
 
 }
 
@@ -108,15 +117,15 @@ resource "aws_s3_object" "app_config" {
 
 locals {
   api_gateway = {
-    name          = "${local.name_prefix}-api"
-    cors_origins  = ["https://vishmaker.com"]
-    tags          = local.common_config.tags
+    name         = "${local.name_prefix}-api"
+    cors_origins = ["https://vishmaker.com"]
+    tags         = local.common_config.tags
   }
   api_routes = {
     auth_api = {
       routes = [
         {
-          path    = ["/auth/signin", "/auth/signup", "/auth/confirm-signup", "/auth/forgot-password", "/auth/confirm-forgot-password"]  
+          path    = ["/auth/signin", "/auth/signup", "/auth/confirm-signup", "/auth/forgot-password", "/auth/confirm-forgot-password"]
           methods = ["POST"]
           auth    = "NONE"
         },
@@ -126,8 +135,8 @@ locals {
           auth    = "JWT"
         }
       ]
-      lambda_arn = module.auth_api_lambda.lambda_auth_function_invoke_arn
-      function_name = module.auth_api_lambda.lambda_auth_function_name
+      lambda_arn    = aws_lambda_function.lambda["auth_api"].invoke_arn
+      function_name = aws_lambda_function.lambda["auth_api"].function_name
     }
     projects_api = {
       routes = [
@@ -137,7 +146,7 @@ locals {
           auth    = "JWT"
         }
       ]
-      lambda_arn = aws_lambda_function.lambda["projects_api"].invoke_arn
+      lambda_arn    = aws_lambda_function.lambda["projects_api"].invoke_arn
       function_name = aws_lambda_function.lambda["projects_api"].function_name
     }
     requirements_api = {
@@ -148,7 +157,7 @@ locals {
           auth    = "JWT"
         }
       ]
-      lambda_arn = aws_lambda_function.lambda["requirements_api"].invoke_arn
+      lambda_arn    = aws_lambda_function.lambda["requirements_api"].invoke_arn
       function_name = aws_lambda_function.lambda["requirements_api"].function_name
     }
     llm_api = {
@@ -159,8 +168,8 @@ locals {
           auth    = "JWT"
         }
       ]
-      lambda_arn = module.llm_api_lambda.lambda_llm_function_invoke_arn
-      function_name = module.llm_api_lambda.lambda_llm_function_name
+      lambda_arn    = aws_lambda_function.lambda["llm_api"].invoke_arn
+      function_name = aws_lambda_function.lambda["llm_api"].function_name
     }
   }
   flattened_routes = {
@@ -169,7 +178,7 @@ locals {
         for route in api.routes : [
           for path in route.path : [
             for method in route.methods : {
-              key   = "${integration_key}-${method}-${replace(replace(path, "/", "_"), "{", "_")}"
+              key = "${integration_key}-${method}-${replace(replace(path, "/", "_"), "{", "_")}"
               value = {
                 route_key       = "${method} ${path}"
                 integration_key = integration_key
@@ -187,7 +196,7 @@ locals {
 resource "aws_apigatewayv2_api" "main" {
   name          = "${local.name_prefix}-api"
   protocol_type = "HTTP"
-  
+
   cors_configuration {
     allow_credentials = true
     allow_headers     = ["*"]
@@ -203,9 +212,9 @@ resource "aws_apigatewayv2_api" "main" {
 resource "aws_apigatewayv2_stage" "main" {
   api_id = aws_apigatewayv2_api.main.id
   name   = "$default"
-  
+
   auto_deploy = true
-  
+
   tags = local.common_config.tags
 }
 
@@ -216,17 +225,17 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   name             = "${local.common_config.project_name}-${local.common_config.environment}-cognito-authorizer"
 
   jwt_configuration {
-    audience = [aws_cognito_user_pool_client.main.id]
-    issuer   = "https://cognito-idp.${local.common_config.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+    audience = [local.cognito_user_pool_client_id]
+    issuer   = "https://cognito-idp.${local.common_config.aws_region}.amazonaws.com/${local.cognito_user_pool_id}"
   }
 }
 
 resource "aws_apigatewayv2_route" "routes" {
   for_each = local.flattened_routes
 
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = each.value.route_key
-  target = "integrations/${aws_apigatewayv2_integration.api[each.value.integration_key].id}"
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = each.value.route_key
+  target             = "integrations/${aws_apigatewayv2_integration.api[each.value.integration_key].id}"
   authorization_type = each.value.auth_type
   authorizer_id      = each.value.auth_type == "JWT" ? aws_apigatewayv2_authorizer.cognito.id : null
 }
@@ -238,11 +247,11 @@ resource "aws_apigatewayv2_integration" "api" {
     key => value.lambda_arn
   }
 
-  api_id           = aws_apigatewayv2_api.main.id
-  integration_type = "AWS_PROXY"
-  integration_uri  = each.value
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = each.value
   payload_format_version = "2.0"
-  timeout_milliseconds = 30000  # 30 seconds (maximum allowed by API Gateway v2)
+  timeout_milliseconds   = 30000 # 30 seconds (maximum allowed by API Gateway v2)
 }
 
 resource "aws_lambda_permission" "apigw_permissions" {
@@ -265,11 +274,11 @@ resource "aws_apigatewayv2_route" "cors_preflight_routes" {
     "OPTIONS /requirements/{proxy+}",
     "OPTIONS /llm/{proxy+}"
   ])
-  
+
   api_id    = aws_apigatewayv2_api.main.id
   route_key = each.value
   target    = "integrations/${aws_apigatewayv2_integration.api["auth_api"].id}"
-  
+
   # No authorization required for CORS preflight
 }
 
@@ -291,31 +300,44 @@ resource "aws_apigatewayv2_route" "root" {
 # CLOUDFRONT
 # ==================================================
 
-module "cloudfront" {
-  source = "../cloudfront/infra"
-
-  common_config              = local.common_config
-  cloudfront_distribution_id = var.cloudfront_distribution_id
+# Data source to get CloudFront distribution details using the provided ID
+data "aws_cloudfront_distribution" "existing" {
+  id = var.cloudfront_distribution_id
 }
+
+# Data source to get the S3 bucket from the CloudFront distribution's origin
+data "aws_s3_bucket" "existing" {
+  bucket = var.domain_name
+}
+
+# Data source to find existing hosted zone by domain name
+data "aws_route53_zone" "existing" {
+  name = var.domain_name
+}
+
+# Locals for easy reference to the existing resources
+locals {
+  cloudfront_distribution = data.aws_cloudfront_distribution.existing
+  s3_bucket               = data.aws_s3_bucket.existing
+  hosted_zone             = data.aws_route53_zone.existing
+}
+
 
 # ==================================================
 # ROUTE53
 # ==================================================
 
-module "route53" {
-  source = "../route53/infra"
-
-  common_config        = local.common_config
-  api_gateway_endpoint = aws_apigatewayv2_stage.main.invoke_url
+# Data source for the hosted zone
+data "aws_route53_zone" "main" {
+  name = var.domain_name
 }
-
 
 # ==================================================
 # COGNITO
 # ==================================================
 
 # Cognito User Pool
-resource "aws_cognito_user_pool" "main" {
+/* resource "aws_cognito_user_pool" "main" {
   name = "${local.common_config.name_prefix}-user-pool"
 
   # Password policy
@@ -370,12 +392,19 @@ resource "aws_cognito_user_pool" "main" {
   lifecycle {
     prevent_destroy = true  # 🔒 Protect existing users and prevent accidental deletion
   }
+} */
+
+locals {
+  cognito_user_pool_id        = "us-east-1_Hf4Ps4b4j"
+  cognito_user_pool_arn       = "arn:aws:cognito-idp:us-east-1:489270312286:userpool/us-east-1_Hf4Ps4b4j"
+  cognito_user_pool_client_id = "6vtj80n9u3916hnlpnpbi7r2v9"
+
 }
 
 # Cognito User Pool Client
-resource "aws_cognito_user_pool_client" "main" {
+/* resource "aws_cognito_user_pool_client" "main" {
   name         = "${local.common_config.name_prefix}-user-pool-client"
-  user_pool_id = aws_cognito_user_pool.main.id
+  user_pool_id = local.user_pool_id
 
   # Client settings
   generate_secret                      = false
@@ -413,20 +442,23 @@ resource "aws_cognito_user_pool_client" "main" {
     "preferred_username"
   ]
 
-  lifecycle {
-    prevent_destroy = true  # 🔒 Protect existing client configuration and prevent accidental deletion
-  }
-}
+  #lifecycle {
+  #  prevent_destroy = true  # 🔒 Protect existing client configuration and prevent accidental deletion
+  #}
+} */
 
 # Cognito User Pool Domain
+/* 
 resource "aws_cognito_user_pool_domain" "main" {
   domain       = "auth-vishmaker"
-  user_pool_id = aws_cognito_user_pool.main.id
+  user_pool_id = local.cognito_user_pool_id
 
-  lifecycle {
+/*   lifecycle {
     prevent_destroy = true  # 🔒 Protect existing domain configuration and prevent accidental deletion
-  }
-} 
+  } */
+
+
+
 
 # ==================================================
 # LAMBDAS
@@ -444,21 +476,39 @@ locals {
     log_retention_days = 1
   }
   lambdas = {
+    auth_api = {
+      lambda_name = "auth"
+      environment_variables = {
+        COGNITO_USER_POOL_ID = local.cognito_user_pool_id
+        COGNITO_CLIENT_ID    = local.cognito_user_pool_client_id
+      }
+      dynamo_access_all = false
+      timeout = 60
+      memory_size = 512
+    },
+    llm_api = {
+      lambda_name = "llm"
+      environment_variables = merge(
+        local.common_dynamodb_env_vars,
+        {
+          CONFIG_BUCKET = aws_s3_bucket.configs.id
+          CONFIG_KEY    = "config.json"
+          ENVIRONMENT  = var.environment
+          PROJECT_NAME = var.project_name
+        }
+      )
+      dynamo_access_all = true
+      timeout = var.lambda_timeout_seconds
+      memory_size = var.lambda_memory_mb
+    },
     projects_api = {
       lambda_name = "projects"
-      environment_variables = {
-        DYNAMODB_TABLE_NAME = aws_dynamodb_table.tables["projects"].name        
-      }
+      environment_variables = local.common_dynamodb_env_vars
       dynamo_access_all = true
     },
     requirements_api = {
       lambda_name = "requirements"
-      environment_variables = {
-        USER_FLOWS_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name,
-        HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high_level_requirements"].name,
-        LOW_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["low_level_requirements"].name,
-        TEST_CASES_TABLE_NAME = aws_dynamodb_table.tables["test_cases"].name
-      }
+      environment_variables = local.common_dynamodb_env_vars
       dynamo_access_all = true
     }
   }
@@ -475,71 +525,6 @@ locals {
   }
 }
 
-module "auth_api_lambda" {
-  source = "../lambdas/auth/infrastructure"
-
-  # Required variables
-  project_name = local.common_config.project_name
-  environment  = local.common_config.environment
-  aws_region   = local.common_config.aws_region
-  common_tags  = local.common_config.tags
-
-  # Lambda-specific configuration
-  lambda_runtime               = local.lambda_config.runtime
-  lambda_timeout_seconds       = 60
-  lambda_memory_mb             = 512
-  lambda_environment_variables = {}
-
-  # Integration dependencies
-  cognito_user_pool_id  = aws_cognito_user_pool.main.id
-  cognito_client_id     = aws_cognito_user_pool_client.main.id
-  cognito_user_pool_arn = aws_cognito_user_pool.main.arn
-  # api_gateway_execution_arn will be added after API Gateway is created to avoid circular dependency
-
-  depends_on = [
-    aws_cognito_user_pool.main,
-    aws_cognito_user_pool_client.main
-  ]
-}
-
-# LLM API Lambda Module
-module "llm_api_lambda" {
-  source = "../lambdas/llm/infrastructure"
-
-  # Required variables
-  project_name = local.common_config.project_name
-  environment  = local.common_config.environment
-  aws_region   = local.common_config.aws_region
-  common_tags  = local.common_config.tags
-
-  # Lambda-specific configuration
-  lambda_runtime         = local.lambda_config.runtime
-  lambda_timeout_seconds = var.llm_api_timeout
-  lambda_memory_mb       = var.llm_api_memory
-  lambda_environment_variables = {
-    CONFIG_BUCKET = aws_s3_bucket.configs.id
-    CONFIG_KEY    = "config.json"
-    ENVIRONMENT   = local.common_config.environment
-    PROJECT_NAME  = local.common_config.project_name
-    USER_FLOWS_TABLE_NAME = aws_dynamodb_table.tables["user_flows"].name
-    HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high_level_requirements"].name
-    LOW_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["low_level_requirements"].name
-    TEST_CASES_TABLE_NAME = aws_dynamodb_table.tables["test_cases"].name
-  }
-
-  # API Gateway integration (will be updated after API Gateway is created)
-  api_gateway_execution_arn = aws_apigatewayv2_api.main.execution_arn
-
-  # S3 Configuration
-  config_bucket_arn = aws_s3_bucket.configs.arn
-
-  depends_on = [
-    aws_cognito_user_pool.main,
-    aws_cognito_user_pool_client.main,
-    aws_s3_bucket.configs,
-    aws_s3_object.app_config
-  ]
-}
 
 resource "aws_lambda_function" "lambda" {
   for_each = local.lambdas
@@ -605,6 +590,85 @@ resource "aws_iam_role_policy_attachment" "attach_dynamo_policy_lambda" {
   policy_arn = aws_iam_policy.dynamodb_rw_policy.arn
 }
 
+# Cognito IAM policy for auth Lambda
+resource "aws_iam_role_policy" "auth_lambda_cognito_policy" {
+  name = "${var.environment}-${var.project_name}-auth-cognito-policy"
+  role = aws_iam_role.lambda_role["auth_api"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminInitiateAuth",
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminConfirmSignUp",
+          "cognito-idp:AdminSetUserPassword",
+          "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminDeleteUser",
+          "cognito-idp:AdminResetUserPassword",
+          "cognito-idp:AdminRespondToAuthChallenge",
+          "cognito-idp:ForgotPassword",
+          "cognito-idp:ConfirmForgotPassword",
+          "cognito-idp:RespondToAuthChallenge",
+          "cognito-idp:InitiateAuth",
+          "cognito-idp:SignUp",
+          "cognito-idp:ConfirmSignUp",
+          "cognito-idp:ResendConfirmationCode",
+          "cognito-idp:GlobalSignOut",
+          "cognito-idp:GetUser"
+        ]
+        Resource = local.cognito_user_pool_arn
+      }
+    ]
+  })
+}
+
+# S3 IAM policy for LLM Lambda
+resource "aws_iam_role_policy" "llm_lambda_s3_policy" {
+  name = "${var.environment}-${var.project_name}-llm-s3-policy"
+  role = aws_iam_role.lambda_role["llm_api"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion"
+        ]
+        Resource = "${aws_s3_bucket.configs.arn}/*"
+      }
+    ]
+  })
+}
+
+# Bedrock IAM policy for LLM Lambda
+resource "aws_iam_role_policy" "llm_lambda_bedrock_policy" {
+  name = "${var.environment}-${var.project_name}-llm-bedrock-policy"
+  role = aws_iam_role.lambda_role["llm_api"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:GetFoundationModel",
+          "bedrock:ListFoundationModels"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 
 # ==================================================
 # DYNAMODB
@@ -637,7 +701,7 @@ locals {
         }
       ]
     }
-    user_flows = {
+    "user-flows" = {
       hash_key  = "uiid"
       range_key = "project_id"
       attributes = [
@@ -653,49 +717,52 @@ locals {
       ]
     }
 
-    high_level_requirements = {
+    "high-level-requirements" = {
       hash_key  = "uiid"
       range_key = "parent_uiid"
       attributes = [
         { name = "uiid", type = "S" },
+        { name = "project_id", type = "S" },
         { name = "parent_uiid", type = "S" }
       ]
       global_secondary_indexes = [
         {
-          name            = "parent_uiid-index"
-          hash_key        = "parent_uiid"
+          name            = "project_id-index"
+          hash_key        = "project_id"
           projection_type = "ALL"
         }
       ]
     }
 
-    low_level_requirements = {
+    "low-level-requirements" = {
       hash_key  = "uiid"
       range_key = "parent_uiid"
       attributes = [
         { name = "uiid", type = "S" },
+        { name = "project_id", type = "S" },
         { name = "parent_uiid", type = "S" }
       ]
       global_secondary_indexes = [
         {
-          name            = "parent_uiid-index"
-          hash_key        = "parent_uiid"
+          name            = "project_id-index"
+          hash_key        = "project_id"
           projection_type = "ALL"
         }
       ]
     }
 
-    test_cases = {
+    "test-cases" = {
       hash_key  = "uiid"
       range_key = "parent_uiid"
       attributes = [
         { name = "uiid", type = "S" },
+        { name = "project_id", type = "S" },
         { name = "parent_uiid", type = "S" }
       ]
       global_secondary_indexes = [
         {
-          name            = "parent_uiid-index"
-          hash_key        = "parent_uiid"
+          name            = "project_id-index"
+          hash_key        = "project_id"
           projection_type = "ALL"
         }
       ]
@@ -777,5 +844,3 @@ resource "aws_iam_policy" "dynamodb_rw_policy" {
     ]
   })
 }
-
-

@@ -12,6 +12,7 @@ import boto3
 import uuid
 import time
 import random
+import re
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends
 from mangum import Mangum
@@ -354,6 +355,8 @@ LLM_CLEANUP_PATTERNS = {
         r'^Action:?$',      # Action:
         r'^User\s+Action:?$',  # User Action:
         r'^System\s+Response:?$',  # System Response:
+        r'^User\s+Action\s*&\s*System\s+Response:?$',  # User Action & System Response
+        r'^Step:?$',        # Step: (without number)
     ],
     
     # Separator patterns to ignore
@@ -385,10 +388,11 @@ LLM_CLEANUP_PATTERNS = {
         r'^The\s+.*\s+is\s+.*:$',    # The process is...
     ],
     
-    # Table formatting artifacts
+    # Table formatting artifacts - only remove empty or malformed tables
     'table_artifacts': [
-        r'^\|.*\|$',        # Table rows with pipes
-        r'^[-|]+\s*$',      # Table separators
+        r'^\|[-|]+\|$',     # Table separators like |---| or |--|--|
+        r'^\|\s*\|$',        # Empty table rows with just pipes
+        r'^\|\s*[-|]+\s*\|$',  # Table separators with spaces
     ]
 }
 
@@ -402,7 +406,6 @@ def clean_llm_response(text: str) -> str:
     Returns:
         Cleaned text with unwanted patterns removed
     """
-    import re
     
     if not text:
         return text
@@ -935,10 +938,10 @@ class LLMProcessingService:
             
             # Map table names to environment variables
             table_env_mapping = {
-                'user_flows': 'USER_FLOWS_TABLE_NAME',
-                'high_level_requirements': 'HIGH_LEVEL_REQUIREMENTS_TABLE_NAME',
-                'low_level_requirements': 'LOW_LEVEL_REQUIREMENTS_TABLE_NAME',
-                'test_cases': 'TEST_CASES_TABLE_NAME'
+                'user-flows': 'USER_FLOWS_TABLE_NAME',
+                'high-level-requirements': 'HIGH_LEVEL_REQUIREMENTS_TABLE_NAME',
+                'low-level-requirements': 'LOW_LEVEL_REQUIREMENTS_TABLE_NAME',
+                'test-cases': 'TEST_CASES_TABLE_NAME'
             }
             
             # Get table name from environment variable or use default
@@ -963,11 +966,15 @@ class LLMProcessingService:
                     'updated_at': datetime.now().isoformat()
                 }
                 
-                # Add table-specific fields
-                if target_table == 'user_flows':
-                    db_item['project_id'] = project_id
-                    print(f"🔍 DEBUG: Setting project_id for user_flows: {project_id} (type: {type(project_id)})")
-                elif target_table in ['high_level_requirement', 'high_level_requirements', 'low_level_requirement', 'low_level_requirements', 'test_cases']:
+                print(f"🔍 DEBUG: db_item: {db_item}")
+                print(f"🔍 DEBUG: target_table: {target_table}")
+                # Add table-specific fields - project_id is now required for all tables
+                db_item['project_id'] = project_id
+                print(f"🔍 DEBUG: Setting project_id for all tables: {project_id} (type: {type(project_id)})")
+                
+                # Add parent_uiid for requirements and test cases if available
+                requirement_types = ['high-level-requirements', 'low-level-requirements', 'test-cases']
+                if any(req_type in target_table for req_type in requirement_types):
                     if parent_uiid:
                         db_item['parent_uiid'] = parent_uiid
                         print(f"🔍 DEBUG: Setting parent_uiid: {parent_uiid} (type: {type(parent_uiid)})")
@@ -998,23 +1005,50 @@ class LLMProcessingService:
         Expected format:
         Name/Title | Description/Details | UIID (optional)
         
+        Also handles table format:
+        | Header1 | Header2 |
+        |---|---|
+        | Value1 | Value2 |
+        
         Returns:
         List of dictionaries with name, description, uiid, and order
         """
         if not content or not content.strip():
             raise ValueError("Content is empty")
         
+        print(f"🔍 DEBUG: Content: {content}")
         # Check if content is in pipe-delimited format and fix if needed
         if not self._validate_pipe_delimited_format(content):
             content = self._fix_output_format(content)
+            print(f"🔍 DEBUG: Fixed content: {content}")
         
         # Parse each line
         lines = content.strip().split('\n')
+        print(f"🔍 DEBUG: Lines: {lines}")
+        
+        # Remove header lines (first line and separator line) if they exist
+        if len(lines) >= 2:
+            # Check if second line is a separator (contains only dashes, pipes, and spaces)
+            if re.match(r'^[\s\-\|]+$', lines[1].strip()):
+                # Remove first two lines (header and separator)
+                lines = lines[2:]
+                print(f"🔍 DEBUG: Removed header lines, remaining lines: {lines}")
+            else:
+                # Check if first line is a header (contains pipe characters but is not actual data)
+                # If first line looks like a header (contains | but is not actual data), remove it
+                if '|' in lines[0] and not any('|' in line for line in lines[1:3]):
+                    lines = lines[1:]
+                    print(f"🔍 DEBUG: Removed header line, remaining lines: {lines}")
+        
         items = []
         
         for i, line in enumerate(lines):
             line = line.strip()
             if not line:
+                continue
+            
+            # Skip table headers and separators
+            if self._is_table_header_or_separator(line):
                 continue
                 
             if '|' not in line:
@@ -1029,11 +1063,22 @@ class LLMProcessingService:
                     line = f"Item {i+1} | {line}"
                 
             parts = line.split('|')
-            name = parts[0].strip()
-            description = parts[1].strip() if len(parts) > 1 else ""
+            # Remove empty parts and strip whitespace
+            parts = [part.strip() for part in parts if part.strip()]
             
-            # Extract UIID if present, or generate a unique one
-            uiid = parts[2].strip() if len(parts) > 2 and parts[2].strip() else f"auto-{i}-{hash(name + description) & 0xffffffff}"
+            if len(parts) < 2:
+                continue  # Skip malformed lines
+                
+            # The first column is the requirement category/name
+            # The second column is the detailed description
+            name = parts[0]
+            description = parts[1]
+            
+            # Clean up the name by removing markdown formatting
+            name = re.sub(r'\*\*(.*?)\*\*', r'\1', name)  # Remove **bold** formatting
+            
+            # Generate a proper UIID
+            uiid = self._generate_uiid("requirement", i, name + description)
             
             items.append({
                 "name": name,
@@ -1044,19 +1089,57 @@ class LLMProcessingService:
         
         return items
     
+    def _is_table_header_or_separator(self, line: str) -> bool:
+        """
+        Check if a line is a table header or separator that should be skipped.
+        """
+        
+        # Skip table headers (lines that start and end with | and contain mostly text)
+        if line.startswith('|') and line.endswith('|'):
+            # Check if it's a separator (mostly dashes, underscores, or pipes)
+            content = line[1:-1].strip()  # Remove outer pipes
+            if re.match(r'^[-|_]+$', content):
+                return True
+            # Check if it's a header row (contains words like "Category", "Specification", etc.)
+            if any(word in content.lower() for word in ['category', 'specification', 'requirement', 'name', 'description', 'requirement category']):
+                return True
+        
+        # Skip lines that are just separators
+        if re.match(r'^[-|_]+$', line.strip()):
+            return True
+            
+        return False
     
     def _validate_pipe_delimited_format(self, text: str) -> bool:
         """
         Validate that the text is in pipe-delimited format.
         Checks that most lines contain at least one pipe character.
+        Strips out header lines (first line and separator line like '---|---').
         """
         lines = text.strip().split('\n')
         valid_lines = [line for line in lines if line.strip()]
+        
+        # Remove header lines (first line and separator line)
+        if len(valid_lines) >= 2:
+            # Check if second line is a separator (contains only dashes, pipes, and spaces)
+            if re.match(r'^[\s\-\|]+$', valid_lines[1]):
+                # Remove first two lines (header and separator)
+                valid_lines = valid_lines[2:]
+            else:
+                # Check if first line is a header (contains pipe characters but is not actual data)
+                # If first line looks like a header (contains | but is not actual data), remove it
+                if '|' in valid_lines[0] and not any('|' in line for line in valid_lines[1:3]):
+                    valid_lines = valid_lines[1:]
+        
+        print(f"🔍 DEBUG: Valid lines after header removal: {valid_lines}")
         if not valid_lines:
             return False
             
         # Check if at least 70% of lines have a pipe character
         lines_with_pipe = sum(1 for line in valid_lines if '|' in line)
+        print(f"🔍 DEBUG: Lines with pipe: {lines_with_pipe}")
+        print(f"🔍 DEBUG: Total lines: {len(valid_lines)}")
+        print(f"🔍 DEBUG: Lines with pipe percentage: {lines_with_pipe / len(valid_lines)}")
         return lines_with_pipe / len(valid_lines) >= 0.7
     
     def _fix_output_format(self, text: str) -> str:
@@ -1107,14 +1190,8 @@ class LLMProcessingService:
         """
         import time
         
-        # Normalize table_type to ensure consistency
+        # Use table_type directly - no normalization needed
         normalized_table_type = table_type
-        if table_type == "high_level_requirements":
-            normalized_table_type = "high_level_requirement"
-        elif table_type == "low_level_requirements":
-            normalized_table_type = "low_level_requirement"
-        elif table_type == "test_cases":
-            normalized_table_type = "test_case"
         
         # Create a short prefix based on table type
         prefix = normalized_table_type.split('_')[0][:3]  # First 3 chars of first word

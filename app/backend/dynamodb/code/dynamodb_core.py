@@ -50,10 +50,10 @@ except Exception as e:
 # Table names (will be set from environment variables)
 TABLE_NAMES = {
     'projects': os.getenv('PROJECTS_TABLE_NAME', 'prod-vishmaker-projects'),
-    'user_flows': os.getenv('USER_FLOWS_TABLE_NAME', 'prod-vishmaker-user-flows'),
-    'high_level_requirements': os.getenv('HIGH_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-high-level-requirements'),
-    'low_level_requirements': os.getenv('LOW_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-low-level-requirements'),
-    'test_cases': os.getenv('TEST_CASES_TABLE_NAME', 'prod-vishmaker-test-cases'),
+    'user-flows': os.getenv('USER_FLOWS_TABLE_NAME', 'prod-vishmaker-user-flows'),
+    'high-level-requirements': os.getenv('HIGH_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-high-level-requirements'),
+    'low-level-requirements': os.getenv('LOW_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-low-level-requirements'),
+    'test-cases': os.getenv('TEST_CASES_TABLE_NAME', 'prod-vishmaker-test-cases'),
     'waitlist': os.getenv('WAITLIST_TABLE_NAME', 'prod-vishmaker-waitlist')
 }
 
