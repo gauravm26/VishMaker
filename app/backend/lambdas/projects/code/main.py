@@ -6,10 +6,9 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends
 from mangum import Mangum
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
-from dynamodb.code.schemas import ProjectCreate, ProjectUpdate, Project
+from dynamodb.schemas import ProjectCreate, ProjectUpdate, Project
 from shared.auth import get_current_user
 
 # Configure logging
@@ -26,15 +25,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://vishmaker.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
 # Pydantic models are now imported from dynamodb.code.schemas
 
 def get_table():
@@ -43,7 +33,10 @@ def get_table():
     if table_name is None:
         # Get table name from environment variable
         import os
-        table_name = os.environ.get('PROJECTS_TABLE_NAME', 'prod-vishmaker-projects')
+        # Convert table name with hyphens to underscores for environment variable lookup
+        # e.g., 'projects' -> 'PROJECTS_TABLE_NAME'
+        env_var_name = 'PROJECTS_TABLE_NAME'
+        table_name = os.environ.get(env_var_name, f'dev-vishmaker-projects')
     return dynamodb.Table(table_name)
 
 @app.get("/")
@@ -51,7 +44,7 @@ def root():
     """Health check endpoint"""
     return {"message": "Projects API is running", "status": "healthy"}
 
-@app.post("/projects", response_model=Project, status_code=201)
+@app.post("/api/projects", response_model=Project, status_code=201)
 def create_project(project: ProjectCreate):
     """Create a new project"""
     try:
@@ -82,7 +75,7 @@ def create_project(project: ProjectCreate):
         logger.error(f"❌ Error creating project: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
-@app.get("/projects", response_model=List[Project])
+@app.get("/api/projects", response_model=List[Project])
 def get_projects(skip: int = 0, limit: int = 100, user_id: Optional[str] = None):
     """Get all projects with optional filtering by user_id"""
     try:
@@ -109,7 +102,7 @@ def get_projects(skip: int = 0, limit: int = 100, user_id: Optional[str] = None)
         logger.error(f"❌ Error retrieving projects: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve projects: {str(e)}")
 
-@app.get("/projects/{project_id}", response_model=Project)
+@app.get("/api/projects/{project_id}", response_model=Project)
 def get_project(project_id: str):
     """Get a specific project by ID"""
     try:
@@ -138,7 +131,7 @@ def get_project(project_id: str):
         logger.error(f"❌ Error retrieving project {project_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve project: {str(e)}")
 
-@app.put("/projects/{project_id}", response_model=Project)
+@app.put("/api/projects/{project_id}", response_model=Project)
 def update_project(project_id: str, project_update: ProjectUpdate):
     """Update an existing project"""
     try:
@@ -194,17 +187,26 @@ def update_project(project_id: str, project_update: ProjectUpdate):
         logger.error(f"❌ Error updating project {project_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update project: {str(e)}")
 
-@app.delete("/projects/{project_id}", status_code=204)
+@app.delete("/api/projects/{project_id}", status_code=204)
 def delete_project(project_id: str):
     """Delete a project by ID with cascade deletion of all related data"""
     try:
         # Get table names from environment variables
         import os
         projects_table = get_table()
-        user_flows_table = dynamodb.Table(os.environ.get('USER_FLOWS_TABLE_NAME', 'prod-vishmaker-user-flows'))
-        high_level_reqs_table = dynamodb.Table(os.environ.get('HIGH_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-high-level-requirements'))
-        low_level_reqs_table = dynamodb.Table(os.environ.get('LOW_LEVEL_REQUIREMENTS_TABLE_NAME', 'prod-vishmaker-low-level-requirements'))
-        test_cases_table = dynamodb.Table(os.environ.get('TEST_CASES_TABLE_NAME', 'prod-vishmaker-test-cases'))
+        
+        # Use the same pattern as requirements lambda for consistency
+        def get_table_by_name(table_name: str):
+            """Get DynamoDB table instance by name"""
+            env_var_name = f'{table_name.replace("-", "_").upper()}_TABLE_NAME'
+            # Use dev-vishmaker as fallback to match the actual environment
+            table_name_env = os.environ.get(env_var_name, f'dev-vishmaker-{table_name}')
+            return dynamodb.Table(table_name_env)
+        
+        user_flows_table = get_table_by_name('user-flows')
+        high_level_reqs_table = get_table_by_name('high-level-requirements')
+        low_level_reqs_table = get_table_by_name('low-level-requirements')
+        test_cases_table = get_table_by_name('test-cases')
         
         # First, get the project to find the user_id
         response = projects_table.scan(

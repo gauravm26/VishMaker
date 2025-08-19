@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import InfrastructureCanvasViewer from '../canvas/InfrastructureCanvasViewer';
-import GitHubService from '../../lib/githubService';
-import TerraformParser from '../../lib/terraformParser';
+import GitHubService from '../../utils/githubService';
+import TerraformParser from '../../utils/terraformParser';
 import { InfrastructureNodeData, InfrastructureResourceType } from '../canvas/InfrastructureNode';
 
 interface ArchitectureTabProps {

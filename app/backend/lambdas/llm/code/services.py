@@ -17,7 +17,6 @@ from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends
 from mangum import Mangum
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from shared.auth import get_current_user
@@ -548,6 +547,23 @@ class LLMProcessingService:
                 target_table = component_config.get("targetTable")
                 print(f"🔍 DEBUG: Got target table from config: {target_table}")
                 logger.info(f"Got target table from config: {target_table}")
+            else:
+                print(f"🔍 DEBUG: Using provided target table: {target_table}")
+                logger.info(f"Using provided target table: {target_table}")
+            
+            print(f"🔍 DEBUG: Final target table: {target_table}")
+            logger.info(f"Final target table: {target_table}")
+            
+            # Check if we have a target table for database saving
+            if save_to_db and not target_table:
+                print(f"⚠️ DEBUG: WARNING - save_to_db is True but no target_table found!")
+                logger.warning(f"save_to_db is True but no target_table found for component {component_id}")
+            elif save_to_db and target_table:
+                print(f"✅ DEBUG: Database saving enabled - target_table: {target_table}")
+                logger.info(f"Database saving enabled - target_table: {target_table}")
+            else:
+                print(f"ℹ️ DEBUG: Database saving disabled - save_to_db: {save_to_db}")
+                logger.info(f"Database saving disabled - save_to_db: {save_to_db}")
             
             # Get model instructions
             print(f"🔍 DEBUG: Getting model instructions from component config")
@@ -946,7 +962,8 @@ class LLMProcessingService:
             
             # Get table name from environment variable or use default
             env_var = table_env_mapping.get(target_table, f'{target_table.upper()}_TABLE_NAME')
-            table_name = os.environ.get(env_var, f'prod-vishmaker-{target_table.replace("_", "-")}')
+            # Use dev-vishmaker as fallback to match the actual environment
+            table_name = os.environ.get(env_var, f'dev-vishmaker-{target_table.replace("_", "-")}')
             table = dynamodb.Table(table_name)
             
             print(f"🔍 DEBUG: Using table: {table_name}")

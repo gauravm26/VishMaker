@@ -1,7 +1,7 @@
 // app-ui/src/components/project/ProjectList.tsx
 import React, { useState, useEffect } from 'react';
 import { Project } from '../../types/project';
-import apiClient from '../../lib/apiClient';
+import apiClient from '../../utils/apiClient';
 
 interface ProjectListProps {
     onProjectSelect: (projectId: number, projectName?: string) => void;

@@ -15,15 +15,45 @@ class CognitoAdapter:
     """
 
     def __init__(self, region: str, user_pool_id: str, client_id: str):
-        self.cognito_client = boto3.client('cognito-idp', region_name=region)
-        self.user_pool_id = user_pool_id
-        self.client_id = client_id
-        logger.info(f"Initialized Cognito adapter for user pool: {user_pool_id}")
+        print("=" * 60)
+        print("COGNITO ADAPTER CONSTRUCTOR CALLED")
+        print("=" * 60)
+        print(f"Constructor parameters:")
+        print(f"  region: {region}")
+        print(f"  user_pool_id: {user_pool_id}")
+        print(f"  client_id: {client_id}")
+        
+        try:
+            print(f"Creating boto3 cognito-idp client for region: {region}")
+            self.cognito_client = boto3.client('cognito-idp', region_name=region)
+            print("boto3 cognito-idp client created successfully")
+            
+            self.user_pool_id = user_pool_id
+            self.client_id = client_id
+            
+            print(f"Initialized Cognito adapter for user pool: {user_pool_id}")
+            print("=" * 60)
+            print("COGNITO ADAPTER CONSTRUCTOR COMPLETED SUCCESSFULLY")
+            print("=" * 60)
+            
+        except Exception as e:
+            print("=" * 60)
+            print("COGNITO ADAPTER CONSTRUCTOR FAILED")
+            print("=" * 60)
+            print(f"Exception type: {type(e)}")
+            print(f"Exception message: {str(e)}")
+            print(f"Exception details: {e}")
+            
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
+            
+            print("=" * 60)
+            raise
 
     def sign_in(self, user_credentials: schemas.UserSignIn) -> dict:
         """Authenticate a user and return tokens."""
         try:
-            logger.info(f"Attempting sign-in for user: {user_credentials.email}")
+            print(f"Attempting sign-in for user: {user_credentials.email}")
             
             response = self.cognito_client.initiate_auth(
                 AuthFlow='USER_PASSWORD_AUTH',
@@ -37,7 +67,7 @@ class CognitoAdapter:
             # Check if authentication was successful or if a challenge is required
             if 'AuthenticationResult' in response:
                 auth_result = response['AuthenticationResult']
-                logger.info(f"Successful sign-in for user: {user_credentials.email}")
+                print(f"Successful sign-in for user: {user_credentials.email}")
                 
                 # Get the actual user ID from Cognito
                 user_info = self.cognito_client.get_user(
@@ -58,7 +88,7 @@ class CognitoAdapter:
             # Handle challenges
             elif 'ChallengeName' in response:
                 challenge_name = response['ChallengeName']
-                logger.warning(f"Authentication challenge required for {user_credentials.email}: {challenge_name}")
+                print(f"Authentication challenge required for {user_credentials.email}: {challenge_name}")
                 
                 # Different challenges require different handling
                 if challenge_name == 'NEW_PASSWORD_REQUIRED':
@@ -71,13 +101,13 @@ class CognitoAdapter:
                     raise Exception(f"Authentication challenge required: {challenge_name}")
             
             else:
-                logger.error(f"Unexpected response structure: {response}")
+                print(f"Unexpected response structure: {response}")
                 raise Exception("Unexpected authentication response format")
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Sign-in failed for {user_credentials.email}: {error_code} - {error_message}")
+            print(f"Sign-in failed for {user_credentials.email}: {error_code} - {error_message}")
             
             # Re-raise with more specific error information
             if error_code == 'UserNotFoundException':
@@ -92,53 +122,56 @@ class CognitoAdapter:
     def sign_up(self, user_details: schemas.UserSignUp) -> dict:
         """Register a new user."""
         try:
-            logger.info(f"Attempting sign-up for user: {user_details.email}")
+            print(f"Attempting sign-up for user: {user_details.email}")
             
             response = self.cognito_client.sign_up(
                 ClientId=self.client_id,
                 Username=user_details.email,
                 Password=user_details.password,
                 UserAttributes=[
-                    {'Name': 'email', 'Value': user_details.email}
+                    {
+                        'Name': 'email',
+                        'Value': user_details.email
+                    }
                 ]
             )
             
-            logger.info(f"Successful sign-up for user: {user_details.email}")
+            print(f"Successfully signed up user: {user_details.email}")
             return {
-                "userConfirmed": False,
-                "userId": user_details.email
+                "message": "User registered successfully. Please check your email for confirmation.",
+                "user_id": response['UserSub']
             }
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Sign-up failed for {user_details.email}: {error_code} - {error_message}")
+            print(f"Sign-up failed for {user_details.email}: {error_code} - {error_message}")
             
             if error_code == 'UsernameExistsException':
-                raise Exception("UsernameExistsException: A user with this email already exists")
+                raise Exception("UsernameExistsException: User already exists")
             elif error_code == 'InvalidPasswordException':
                 raise Exception("InvalidPasswordException: Password does not meet requirements")
             else:
                 raise Exception(f"Sign-up failed: {error_message}")
 
     def confirm_sign_up(self, credentials: schemas.ConfirmSignUp) -> dict:
-        """Confirm user sign up."""
+        """Confirm user registration."""
         try:
-            logger.info(f"Attempting to confirm sign-up for user: {credentials.email}")
+            print(f"Attempting to confirm sign-up for user: {credentials.email}")
             
-            self.cognito_client.confirm_sign_up(
+            response = self.cognito_client.confirm_sign_up(
                 ClientId=self.client_id,
                 Username=credentials.email,
-                ConfirmationCode=credentials.confirmationCode
+                ConfirmationCode=credentials.confirmation_code
             )
             
-            logger.info(f"Successfully confirmed sign-up for user: {credentials.email}")
-            return {"message": "User confirmed successfully"}
+            print(f"Successfully confirmed sign-up for user: {credentials.email}")
+            return {"message": "User account confirmed successfully"}
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Confirm sign-up failed for {credentials.email}: {error_code} - {error_message}")
+            print(f"Confirm sign-up failed for {credentials.email}: {error_code} - {error_message}")
             
             if error_code == 'CodeMismatchException':
                 raise Exception("CodeMismatchException: Invalid confirmation code")
@@ -147,72 +180,74 @@ class CognitoAdapter:
             else:
                 raise Exception(f"Confirm sign-up failed: {error_message}")
 
-    def forgot_password(self, credentials: schemas.ForgotPassword) -> dict:
-        """Initiate the forgot password flow for a user."""
+    def forgot_password(self, request: schemas.ForgotPassword) -> dict:
+        """Initiate password reset."""
         try:
-            logger.info(f"Attempting forgot password for user: {credentials.email}")
+            print(f"Attempting to initiate password reset for user: {request.email}")
             
-            self.cognito_client.forgot_password(
+            response = self.cognito_client.forgot_password(
                 ClientId=self.client_id,
-                Username=credentials.email
+                Username=request.email
             )
             
-            logger.info(f"Successfully initiated forgot password for user: {credentials.email}")
-            return {"message": "If an account with that email exists, a reset code has been sent"}
+            print(f"Password reset initiated for user: {request.email}")
+            return {"message": "Password reset code sent to your email"}
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Forgot password failed for {credentials.email}: {error_code} - {error_message}")
+            print(f"Forgot password failed for {request.email}: {error_code} - {error_message}")
             
-            # Don't reveal if user exists or not
-            return {"message": "If an account with that email exists, a reset code has been sent"}
+            if error_code == 'UserNotFoundException':
+                raise Exception("UserNotFoundException: User does not exist")
+            else:
+                raise Exception(f"Forgot password failed: {error_message}")
 
-    def confirm_forgot_password(self, credentials: schemas.ConfirmForgotPassword) -> dict:
-        """Confirm forgot password and set new password."""
+    def confirm_forgot_password(self, request: schemas.ConfirmForgotPassword) -> dict:
+        """Complete password reset."""
         try:
-            logger.info(f"Attempting to confirm forgot password for user: {credentials.email}")
+            print(f"Attempting to confirm password reset for user: {request.email}")
             
-            self.cognito_client.confirm_forgot_password(
+            response = self.cognito_client.confirm_forgot_password(
                 ClientId=self.client_id,
-                Username=credentials.email,
-                ConfirmationCode=credentials.confirmationCode,
-                Password=credentials.newPassword
+                Username=request.email,
+                ConfirmationCode=request.confirmation_code,
+                Password=request.new_password
             )
             
-            logger.info(f"Successfully confirmed forgot password for user: {credentials.email}")
+            print(f"Password reset completed for user: {request.email}")
             return {"message": "Password reset successfully"}
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Confirm forgot password failed for {credentials.email}: {error_code} - {error_message}")
+            print(f"Confirm forgot password failed for {request.email}: {error_code} - {error_message}")
             
             if error_code == 'CodeMismatchException':
-                raise Exception("CodeMismatchException: Invalid reset code")
+                raise Exception("CodeMismatchException: Invalid confirmation code")
             elif error_code == 'ExpiredCodeException':
-                raise Exception("ExpiredCodeException: Reset code has expired")
+                raise Exception("ExpiredCodeException: Confirmation code has expired")
             elif error_code == 'InvalidPasswordException':
-                raise Exception("InvalidPasswordException: Password does not meet requirements")
+                raise Exception("InvalidPasswordException: New password does not meet requirements")
             else:
                 raise Exception(f"Confirm forgot password failed: {error_message}")
 
     def sign_out(self, session_token: str) -> dict:
         """Sign out a user."""
         try:
-            logger.info("Attempting to sign out user")
+            print("Attempting to sign out user")
             
             self.cognito_client.global_sign_out(
                 AccessToken=session_token
             )
             
-            logger.info("Successfully signed out user")
+            print("Successfully signed out user")
             return {"message": "Signed out successfully"}
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Sign out failed: {error_code} - {error_message}")
+            print(f"Sign out failed: {error_code} - {error_message}")
             
             # Even if the token is invalid, we consider the sign-out successful
             return {"message": "Signed out successfully"}
@@ -220,7 +255,7 @@ class CognitoAdapter:
     def refresh_token(self, request: schemas.RefreshTokenRequest) -> dict:
         """Refresh access token using refresh token."""
         try:
-            logger.info("Attempting to refresh token")
+            print("Attempting to refresh token")
             
             response = self.cognito_client.initiate_auth(
                 AuthFlow='REFRESH_TOKEN_AUTH',
@@ -231,7 +266,7 @@ class CognitoAdapter:
             )
             
             auth_result = response['AuthenticationResult']
-            logger.info("Successfully refreshed token")
+            print("Successfully refreshed token")
             
             return {
                 "access_token": auth_result['AccessToken'],
@@ -242,7 +277,7 @@ class CognitoAdapter:
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            logger.warning(f"Token refresh failed: {error_code} - {error_message}")
+            print(f"Token refresh failed: {error_code} - {error_message}")
             
             if error_code == 'NotAuthorizedException':
                 raise Exception("NotAuthorizedException: Invalid refresh token")
@@ -254,7 +289,7 @@ class CognitoAdapter:
     def get_current_authenticated_user(self, session_token: str) -> Optional[dict]:
         """Get current authenticated user from session token."""
         try:
-            logger.info("Attempting to get current user")
+            print("Attempting to get current user")
             
             response = self.cognito_client.get_user(
                 AccessToken=session_token
@@ -265,7 +300,7 @@ class CognitoAdapter:
             email = user_attributes.get('email', '')
             user_id = response['Username']  # This is the actual Cognito user ID
             
-            logger.info(f"Successfully retrieved current user: {email} (ID: {user_id})")
+            print(f"Successfully retrieved current user: {email} (ID: {user_id})")
             return {
                 "id": user_id,  # Use the actual Cognito user ID
                 "email": email
@@ -273,7 +308,7 @@ class CognitoAdapter:
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
-            logger.warning(f"Get current user failed: {error_code}")
+            print(f"Get current user failed: {error_code}")
             return None
 
 
@@ -282,17 +317,63 @@ def get_cognito_adapter():
     """
     Factory function to create and return a Cognito authentication adapter.
     """
+    print("=" * 60)
+    print("INITIALIZING COGNITO ADAPTER")
+    print("=" * 60)
+    
     # Get Cognito configuration from environment variables
     region = os.environ.get('AWS_REGION', 'us-east-1')
     user_pool_id = os.environ.get('COGNITO_USER_POOL_ID')
     client_id = os.environ.get('COGNITO_CLIENT_ID')
+    
+    print(f"Environment variables loaded:")
+    print(f"  AWS_REGION: {region}")
+    print(f"  COGNITO_USER_POOL_ID: {user_pool_id}")
+    print(f"  COGNITO_CLIENT_ID: {client_id}")
+    
+    # Check if all required variables are present
+    missing_vars = []
+    if not region:
+        missing_vars.append("AWS_REGION")
+    if not user_pool_id:
+        missing_vars.append("COGNITO_USER_POOL_ID")
+    if not client_id:
+        missing_vars.append("COGNITO_CLIENT_ID")
+    
+    if missing_vars:
+        error_msg = f"Missing required AWS Cognito configuration in environment variables: {', '.join(missing_vars)}"
+        print("=" * 60)
+        print("COGNITO ADAPTER INITIALIZATION FAILED")
+        print("=" * 60)
+        print(error_msg)
+        print("=" * 60)
+        raise RuntimeError(error_msg)
 
-    if not all([region, user_pool_id, client_id]):
-        raise RuntimeError("Missing required AWS Cognito configuration in environment variables")
-
-    logger.info(f"Using CognitoAdapter (region: {region}, pool: {user_pool_id})")
-    return CognitoAdapter(
-        region=region,
-        user_pool_id=user_pool_id,
-        client_id=client_id
-    ) 
+    print(f"All required environment variables are present")
+    print(f"Creating CognitoAdapter with region: {region}, pool: {user_pool_id}, client: {client_id}")
+    
+    try:
+        adapter = CognitoAdapter(
+            region=region,
+            user_pool_id=user_pool_id,
+            client_id=client_id
+        )
+        print("CognitoAdapter created successfully")
+        print("=" * 60)
+        print("COGNITO ADAPTER INITIALIZATION COMPLETED")
+        print("=" * 60)
+        return adapter
+        
+    except Exception as e:
+        print("=" * 60)
+        print("COGNITO ADAPTER CREATION FAILED")
+        print("=" * 60)
+        print(f"Exception type: {type(e)}")
+        print(f"Exception message: {str(e)}")
+        print(f"Exception details: {e}")
+        
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        
+        print("=" * 60)
+        raise 

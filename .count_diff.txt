@@ -1,0 +1,75 @@
+# File Difference Report - Tue Aug 19 02:16:22 CDT 2025
+# Stage: BEFORE COMMIT
+
+## Root Directory
+### Missing Locally:
+- .gitignore
+.gitkeep
+README.md
+test.json
+
+## app/backend
+### Missing Locally:
+app/backend/BACKEND_REVIEW_REPORT.md
+app/backend/README.md
+
+## app/backend/dynamodb
+### Missing Remotely:
+- app/backend/dynamodb/dynamodb_core.py
+app/backend/dynamodb/schemas.py
+
+### Missing Locally:
+app/backend/dynamodb/__init__.py
+app/backend/dynamodb/README.md
+app/backend/dynamodb/requirements.txt
+
+## app/frontend
+### Missing Locally:
+app/frontend/.env.production
+app/frontend/.gitignore
+app/frontend/eslint.config.js
+app/frontend/index.html
+app/frontend/package.json
+app/frontend/postcss.config.js
+app/frontend/README.md
+app/frontend/tailwind.config.js
+app/frontend/tsconfig.app.json
+app/frontend/tsconfig.json
+app/frontend/tsconfig.node.json
+app/frontend/vite.config.d.ts
+app/frontend/vite.config.js
+app/frontend/vite.config.ts
+
+## app/frontend/src/utils
+## iac
+### Missing Remotely:
+- iac/.terraform.lock.hcl
+iac/import_existing_resources.sh
+iac/import_lambda_functions.sh
+iac/main_backup.tf.backup
+iac/main.tf
+iac/output.tf
+iac/terraform_08072025.tfstate.backup
+iac/terraform_08172025.tfstate.backup
+iac/terraform.tfstate
+iac/terraform.tfstate.backup
+iac/terraform.tfvars
+iac/terraform.tfvars.example
+iac/tfplan
+iac/variables.tf
+
+## scripts
+### Missing Remotely:
+- scripts/deploy.sh
+scripts/lambda_zip.sh
+
+## scripts/test
+### Missing Remotely:
+- scripts/test/projects_create.json
+scripts/test/projects_get_all.json
+scripts/test/projects_health_check.json
+scripts/test/test_lambda_payload.json
+scripts/test/test_projects_api.py
+scripts/test/test_projects_lambda_payloads.json
+
+Total file differences: 30

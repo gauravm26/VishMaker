@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CodeViewer from '../code/CodeViewer';
-import GitHubService from '../../lib/githubService';
+import GitHubService from '../../utils/githubService';
 import GitHubDemo from '../code/GitHubDemo';
 
 interface CodeTabProps {

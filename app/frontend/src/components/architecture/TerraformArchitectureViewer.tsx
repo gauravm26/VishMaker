@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import GitHubService from '../../lib/githubService';
-import TerraformParser, { TerraformData, ArchitectureDiagram } from '../../lib/terraformParser';
+import GitHubService from '../../utils/githubService';
+import TerraformParser, { TerraformData, ArchitectureDiagram } from '../../utils/terraformParser';
 
 interface TerraformArchitectureViewerProps {
   owner: string;

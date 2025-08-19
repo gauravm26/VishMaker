@@ -50,10 +50,10 @@ echo -e "${YELLOW}Target: $LAMBDA_TO_BUILD${NC}"
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-BACKEND_ROOT="$(dirname "$SCRIPT_DIR")"
-PROJECT_ROOT="$(dirname "$BACKEND_ROOT")"
-BUILD_DIR="$BACKEND_ROOT/scripts/.build"
-DIST_DIR="$BACKEND_ROOT/scripts/dist"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+BACKEND_ROOT="$PROJECT_ROOT/app/backend"
+BUILD_DIR="$SCRIPT_DIR/.build"
+DIST_DIR="$SCRIPT_DIR/dist"
 
 echo -e "${YELLOW}📁 Backend root: $BACKEND_ROOT${NC}"
 echo -e "${YELLOW}📁 Project root: $PROJECT_ROOT${NC}"
@@ -90,10 +90,47 @@ build_lambda_package() {
     python3.11 -m venv "$LAMBDA_BUILD_DIR/venv"
     source "$LAMBDA_BUILD_DIR/venv/bin/activate"
 
+    # Clean the virtual environment completely
+    echo -e "${YELLOW}🧹 Cleaning virtual environment...${NC}"
+    pip uninstall -y boto3 botocore 2>/dev/null || true
+    pip cache purge 2>/dev/null || true
+
     # Install dependencies
     echo -e "${YELLOW}📦 Installing $LAMBDA_NAME dependencies...${NC}"
     pip install --upgrade pip
-    pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+    
+    # Install packages with minimal dependencies to avoid pulling in boto3
+    # For packages that we know are self-contained, use --no-deps
+    case "$LAMBDA_NAME" in
+        "auth")
+            # Auth lambda - install with dependencies but we'll clean boto3 later
+            pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+            ;;
+        "llm")
+            # LLM lambda - install with dependencies but we'll clean boto3 later
+            pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+            ;;
+        "projects")
+            # Projects lambda - install with dependencies but we'll clean boto3 later
+            pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+            ;;
+        "requirements")
+            # Requirements lambda - install with dependencies but we'll clean boto3 later
+            pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+            ;;
+        *)
+            # Default - install with dependencies
+            pip install -r "$LAMBDA_CODE_DIR/requirements.txt" -t "$LAMBDA_BUILD_DIR/lambda_package"
+            ;;
+    esac
+    
+    # Show what packages were installed (for debugging)
+    echo -e "${YELLOW}🔍 Installed packages:${NC}"
+    ls -la "$LAMBDA_BUILD_DIR/lambda_package" | grep -E "(boto|aws)" || echo "  No boto/aws packages found initially"
+    
+    # Show package size before cleanup
+    PACKAGE_SIZE_BEFORE_CLEANUP=$(du -sh "$LAMBDA_BUILD_DIR/lambda_package" | cut -f1)
+    echo -e "${YELLOW}📏 Package size before cleanup: $PACKAGE_SIZE_BEFORE_CLEANUP${NC}"
 
     # Copy Lambda source code
     echo -e "${YELLOW}📋 Copying $LAMBDA_NAME source code...${NC}"
@@ -129,7 +166,7 @@ build_lambda_package() {
             echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"
             cp -r "$PROJECT_ROOT/features" "$LAMBDA_BUILD_DIR/lambda_package/"
             cp -r "$PROJECT_ROOT/local" "$LAMBDA_BUILD_DIR/lambda_package/"
-            cp -r "$PROJECT_ROOT/infrastructure" "$LAMBDA_BUILD_DIR/lambda_package/"
+            cp -r "$PROJECT_ROOT/iac" "$LAMBDA_BUILD_DIR/lambda_package/"
             cp -r "$PROJECT_ROOT/app-api/app" "$LAMBDA_BUILD_DIR/lambda_package/"
             ;;
     esac
@@ -142,6 +179,53 @@ build_lambda_package() {
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "test_*" -delete 2>/dev/null || true
     find "$LAMBDA_BUILD_DIR/lambda_package" -name "local_test" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Explicitly remove boto3 and botocore since they're available in Lambda runtime
+    echo -e "${YELLOW}🧹 Removing boto3 and botocore (available in Lambda runtime)...${NC}"
+    
+    # Remove boto3 and botocore packages and all related files
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*boto3*" -type f -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*botocore*" -type f -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*boto3*" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*botocore*" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Also remove any AWS SDK related packages that might be pulled in
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*aws*" -type f -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*aws*" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Remove any remaining boto3/botocore references
+    rm -rf "$LAMBDA_BUILD_DIR/lambda_package/boto3" 2>/dev/null || true
+    rm -rf "$LAMBDA_BUILD_DIR/lambda_package/botocore" 2>/dev/null || true
+    rm -rf "$LAMBDA_BUILD_DIR/lambda_package/boto3-*" 2>/dev/null || true
+    rm -rf "$LAMBDA_BUILD_DIR/lambda_package/botocore-*" 2>/dev/null || true
+    rm -rf "$LAMBDA_BUILD_DIR/lambda_package/aws-*" 2>/dev/null || true
+    
+    # Remove any Python cache files that might contain boto3 references
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "*.pyc" -delete 2>/dev/null || true
+    find "$LAMBDA_BUILD_DIR/lambda_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Verify boto3 and botocore are not in the package
+    echo -e "${YELLOW}🔍 Verifying package contents...${NC}"
+    if [ -d "$LAMBDA_BUILD_DIR/lambda_package/boto3" ]; then
+        echo -e "${RED}❌ WARNING: boto3 still found in package!${NC}"
+    else
+        echo -e "${GREEN}✅ boto3 not found in package${NC}"
+    fi
+    
+    if [ -d "$LAMBDA_BUILD_DIR/lambda_package/botocore" ]; then
+        echo -e "${RED}❌ WARNING: botocore still found in package!${NC}"
+    else
+        echo -e "${GREEN}✅ botocore not found in package${NC}"
+    fi
+    
+    # Show package size after cleanup
+    PACKAGE_SIZE_AFTER_CLEANUP=$(du -sh "$LAMBDA_BUILD_DIR/lambda_package" | cut -f1)
+    echo -e "${YELLOW}📏 Package size after cleanup: $PACKAGE_SIZE_AFTER_CLEANUP${NC}"
+    echo -e "${YELLOW}📏 Size reduction: $PACKAGE_SIZE_BEFORE_CLEANUP → $PACKAGE_SIZE_AFTER_CLEANUP${NC}"
+    
+    # Show package size before zipping
+    PACKAGE_SIZE_BEFORE=$(du -sh "$LAMBDA_BUILD_DIR/lambda_package" | cut -f1)
+    echo -e "${YELLOW}📏 Package size before zipping: $PACKAGE_SIZE_BEFORE${NC}"
 
     # Create the deployment ZIP
     echo -e "${YELLOW}📦 Creating $LAMBDA_NAME deployment package...${NC}"
@@ -150,6 +234,20 @@ build_lambda_package() {
 
     # Get package size
     PACKAGE_SIZE=$(du -h "$DIST_DIR/$LAMBDA_NAME-deployment.zip" | cut -f1)
+
+    # Final verification - check if boto3/botocore are in the ZIP
+    echo -e "${YELLOW}🔍 Final verification of ZIP contents...${NC}"
+    if unzip -l "$DIST_DIR/$LAMBDA_NAME-deployment.zip" | grep -q "boto3"; then
+        echo -e "${RED}❌ WARNING: boto3 found in ZIP file!${NC}"
+    else
+        echo -e "${GREEN}✅ boto3 not found in ZIP file${NC}"
+    fi
+    
+    if unzip -l "$DIST_DIR/$LAMBDA_NAME-deployment.zip" | grep -q "botocore"; then
+        echo -e "${RED}❌ WARNING: botocore found in ZIP file!${NC}"
+    else
+        echo -e "${GREEN}✅ botocore not found in ZIP file${NC}"
+    fi
 
     echo -e "${GREEN}✅ $LAMBDA_NAME deployment package created successfully!${NC}"
     echo -e "${GREEN}📦 Package: $DIST_DIR/$LAMBDA_NAME-deployment.zip${NC}"

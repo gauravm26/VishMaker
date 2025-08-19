@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 import schemas
 from cognito import CognitoAdapter, get_cognito_adapter
 
@@ -13,100 +13,173 @@ api_router = APIRouter()  # ← ADD THIS BACK!
 # ===============================
 # AUTHENTICATION ROUTES
 # ===============================
-auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 # Get the Cognito adapter directly
-cognito_adapter = get_cognito_adapter()
+print("Initializing Cognito adapter...")
+try:
+    cognito_adapter = get_cognito_adapter()
+    print("Cognito adapter initialized successfully")
+except Exception as e:
+    print(f"Failed to initialize Cognito adapter: {str(e)}")
+    cognito_adapter = None
 
 @auth_router.post("/signin", response_model=dict)
-async def sign_in(user_credentials: schemas.UserSignIn):
+async def sign_in(user_credentials: schemas.UserSignIn, request: Request):
     """Sign in a user via Cognito."""
+    print("=" * 60)
+    print("SIGN IN ENDPOINT CALLED")
+    print("=" * 60)
+    
+    # Log request details
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    print(f"Request headers: {dict(request.headers)}")
+    print(f"Request client: {request.client}")
+    
+    # Log user credentials (mask password for security)
+    masked_credentials = {
+        "email": user_credentials.email,
+        "password": "***" if user_credentials.password else "None"
+    }
+    print(f"User credentials received: {masked_credentials}")
+    
     try:
-        logger.info(f"Sign in attempt for user: {user_credentials.email}")
+        print(f"Sign in attempt for user: {user_credentials.email}")
+        
+        if not cognito_adapter:
+            print("Cognito adapter is not available")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Authentication service unavailable"
+            )
+        
+        print("Calling Cognito adapter sign_in method...")
         result = cognito_adapter.sign_in(user_credentials)
-        logger.info(f"Successful sign in for user: {user_credentials.email}")
+        print(f"Successful sign in for user: {user_credentials.email}")
+        print(f"Sign in result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        print(f"Sign in result: {result}")
+        
+        print("=" * 60)
+        print("SIGN IN ENDPOINT COMPLETED SUCCESSFULLY")
+        print("=" * 60)
+        
         return result
+        
     except Exception as e:
-        logger.error(f"Sign in failed for user {user_credentials.email}: {str(e)}")
+        print("=" * 60)
+        print("SIGN IN ENDPOINT FAILED")
+        print("=" * 60)
+        print(f"Exception type: {type(e)}")
+        print(f"Exception message: {str(e)}")
+        print(f"Exception details: {e}")
+        
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        
+        print("=" * 60)
+        
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 @auth_router.post("/signup", response_model=dict)
-async def sign_up(user_details: schemas.UserSignUp):
+async def sign_up(user_details: schemas.UserSignUp, request: Request):
     """Register a new user via Cognito."""
+    print(f"Sign up attempt for user: {user_details.email}")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Sign up attempt for user: {user_details.email}")
         result = cognito_adapter.sign_up(user_details)
-        logger.info(f"Successful sign up for user: {user_details.email}")
+        print(f"Successful sign up for user: {user_details.email}")
         return result
     except Exception as e:
-        logger.error(f"Sign up failed for user {user_details.email}: {str(e)}")
+        print(f"Sign up failed for user {user_details.email}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @auth_router.post("/confirm-signup", response_model=dict)
-async def confirm_sign_up(credentials: schemas.ConfirmSignUp):
+async def confirm_sign_up(credentials: schemas.ConfirmSignUp, request: Request):
     """Confirm user registration via Cognito."""
+    print(f"Sign up confirmation attempt for user: {credentials.email}")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Sign up confirmation attempt for user: {credentials.email}")
-        result = cognito_adapter.confirm_sign_up(credentials)
-        logger.info(f"Successful sign up confirmation for user: {credentials.email}")
+        result = cognito_adapter.sign_up(credentials)
+        print(f"Successful sign up confirmation for user: {credentials.email}")
         return result
     except Exception as e:
-        logger.error(f"Sign up confirmation failed for user {credentials.email}: {str(e)}")
+        print(f"Sign up confirmation failed for user {credentials.email}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @auth_router.post("/forgot-password", response_model=dict)
-async def forgot_password(request: schemas.ForgotPassword):
+async def forgot_password(request_data: schemas.ForgotPassword, request: Request):
     """Initiate password reset via Cognito."""
+    print(f"Forgot password request for user: {request_data.email}")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Forgot password request for user: {request.email}")
-        result = cognito_adapter.forgot_password(request)
-        logger.info(f"Forgot password email sent for user: {request.email}")
+        result = cognito_adapter.forgot_password(request_data)
+        print(f"Forgot password email sent for user: {request_data.email}")
         return result
     except Exception as e:
-        logger.error(f"Forgot password failed for user {request.email}: {str(e)}")
+        print(f"Forgot password failed for user {request_data.email}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @auth_router.post("/confirm-forgot-password", response_model=dict)
-async def confirm_forgot_password(request: schemas.ConfirmForgotPassword):
+async def confirm_forgot_password(request_data: schemas.ConfirmForgotPassword, request: Request):
     """Complete password reset via Cognito."""
+    print(f"Confirm forgot password attempt for user: {request_data.email}")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Confirm forgot password attempt for user: {request.email}")
-        result = cognito_adapter.confirm_forgot_password(request)
-        logger.info(f"Password successfully reset for user: {request.email}")
+        result = cognito_adapter.confirm_forgot_password(request_data)
+        print(f"Password successfully reset for user: {request_data.email}")
         return result
     except Exception as e:
-        logger.error(f"Confirm forgot password failed for user {request.email}: {str(e)}")
+        print(f"Confirm forgot password failed for user {request_data.email}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @auth_router.post("/signout", response_model=dict)
-async def sign_out(request: schemas.SignOutRequest):
+async def sign_out(request_data: schemas.SignOutRequest, request: Request):
     """Sign out user and invalidate Cognito session."""
+    print(f"Sign out request received")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Sign out request received")
-        result = cognito_adapter.sign_out(request.session_token)
-        logger.info(f"Successful sign out")
+        result = cognito_adapter.sign_out(request_data.session_token)
+        print(f"Successful sign out")
         return result
     except Exception as e:
-        logger.error(f"Sign out failed: {str(e)}")
+        print(f"Sign out failed: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @auth_router.post("/refresh-token", response_model=dict)
-async def refresh_token(request: schemas.RefreshTokenRequest):
+async def refresh_token(request_data: schemas.RefreshTokenRequest, request: Request):
     """Refresh access token via Cognito."""
+    print(f"Token refresh request")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    
     try:
-        logger.info(f"Token refresh request")
-        result = cognito_adapter.refresh_token(request)
-        logger.info(f"Successful token refresh")
+        result = cognito_adapter.refresh_token(request_data)
+        print(f"Successful token refresh")
         return result
     except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}")
+        print(f"Token refresh failed: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 @auth_router.get("/me", response_model=dict)
-async def get_current_user():
+async def get_current_user(request: Request):
     """Get current authenticated user information."""
+    print(f"Getting current user info")
+    print(f"Request method: {request.method}")
+    print(f"Request URL: {request.url}")
+    print(f"Request headers: {dict(request.headers)}")
+    
     try:
-        logger.info(f"Getting current user info")
         # Get the current user from the session token
         # In a real implementation, you'd extract the token from the request headers
         # For now, we'll use the Cognito adapter to get user info
@@ -122,10 +195,12 @@ async def get_current_user():
             }
         }
     except Exception as e:
-        logger.error(f"Get current user failed: {str(e)}")
+        print(f"Get current user failed: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 # ===============================
 # INCLUDE ALL ROUTERS
 # ===============================
-api_router.include_router(auth_router) 
+print("Including auth_router in api_router...")
+api_router.include_router(auth_router)
+print("Auth router included successfully") 

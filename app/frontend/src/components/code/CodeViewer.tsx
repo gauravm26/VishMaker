@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import GitHubService, { GitHubFile } from '../../lib/githubService';
+import GitHubService, { GitHubFile } from '../../utils/githubService';
 import SyntaxHighlighter from './SyntaxHighlighter';
 
 interface CodeViewerProps {

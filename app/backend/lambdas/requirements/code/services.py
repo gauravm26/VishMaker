@@ -7,14 +7,10 @@ from typing import List, Dict, Any, Optional
 from local.db.requirement import UserFlowEntity as UserFlow, HighLevelRequirementEntity as HighLevelRequirement, LowLevelRequirementEntity as LowLevelRequirement, TestCaseEntity as TestCase
 from local.db.requirement import ProjectEntity as Project # Need project for linking
 import sys, os
-from pathlib import Path
+
 import time
 
-# Add infrastructure to path for BedrockService import
-project_root = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.append(str(project_root))
-
-from infrastructure.llms.llm_models import BedrockService, load_config
+# Infrastructure imports removed - not used in this service
 # --- END IMPORTS ---
 
 class RequirementGenerationService:

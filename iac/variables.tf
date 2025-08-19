@@ -126,24 +126,6 @@ variable "api_gateway_execution_arn" {
   default     = ""
 }
 
-variable "cognito_user_pool_id" {
-  description = "Cognito User Pool ID"
-  type        = string
-  default     = ""
-}
-
-variable "cognito_client_id" {
-  description = "Cognito Client ID"
-  type        = string
-  default     = ""
-}
-
-variable "cognito_user_pool_arn" {
-  description = "Cognito User Pool ARN"
-  type        = string
-  default     = ""
-}
-
 # Common DynamoDB table environment variables
 variable "common_dynamodb_env_vars" {
   description = "Common environment variables for DynamoDB table names"
@@ -206,4 +188,23 @@ variable "common_tags" {
     Environment = "prod"
     ManagedBy   = "Terraform"
   }
+}
+
+# New variables for the comprehensive configuration
+variable "development_environment" {
+  description = "Development environment name"
+  type        = string
+  default     = "dev"
+}
+
+variable "deployment_type" {
+  description = "Type of deployment (migrate, new, etc.)"
+  type        = string
+  default     = "migrate"
+}
+
+variable "tags" {
+  description = "Additional tags to apply to resources"
+  type        = map(string)
+  default     = {}
 }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { IAuthService, User } from './IAuthService';
-import apiClient, { TokenManager } from '../lib/apiClient';
+import apiClient, { TokenManager } from '../utils/apiClient';
 
 interface AuthContextType {
   user: User | null;
@@ -73,7 +73,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const data = await apiClient<{ user: User; access_token: string; refresh_token: string }>(
       '/auth/signin',
       { 
-        body: { email, password },
+        method: 'POST',
+        body: { email: email, password: password },
         requireAuth: false // Don't require auth for signin
       }
     );

@@ -1,5 +1,4 @@
 fastapi==0.95.2
 mangum==0.17.0
-boto3==1.34.0
 pydantic[email]==1.10.13
 exceptiongroup==1.1.3 

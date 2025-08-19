@@ -26,18 +26,23 @@ print_error() {
 }
 
 print_usage() {
-    echo "Usage: $0 [OPTION]"
+    echo "Usage: $0 [OPTION] [--force]"
     echo ""
     echo "Options:"
     echo "  (no args)                   Deploy everything (lambdas + frontend)"
     echo "  lambdas                     Deploy all lambdas only"
     echo "  frontend                    Deploy frontend only"
+    echo "  terraform                   Deploy Terraform infrastructure only"
+    echo "  --force                     Force rebuild of components"
     echo "  -h, --help                  Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                          # Deploy everything (lambdas + frontend)"
     echo "  $0 lambdas                  # Deploy all lambdas only"
     echo "  $0 frontend                 # Deploy frontend only"
+    echo "  $0 terraform                # Deploy Terraform infrastructure only"
+    echo "  $0 frontend --force         # Force rebuild and deploy frontend"
+    echo "  $0 --force                  # Force rebuild everything"
     echo ""
 }
 
@@ -51,15 +56,23 @@ FORCE_REBUILD=false
 AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements")
 
 # Parse command line arguments
-if [[ $# -eq 0 ]]; then
-    DEPLOY_MODE="all"
-elif [[ $# -eq 1 ]]; then
+while [[ $# -gt 0 ]]; do
     case $1 in
         lambdas)
             DEPLOY_MODE="lambdas"
+            shift
             ;;
         frontend)
             DEPLOY_MODE="frontend"
+            shift
+            ;;
+        terraform)
+            DEPLOY_MODE="terraform"
+            shift
+            ;;
+        --force)
+            FORCE_REBUILD=true
+            shift
             ;;
         -h|--help)
             print_usage
@@ -71,17 +84,18 @@ elif [[ $# -eq 1 ]]; then
             exit 1
             ;;
     esac
-else
-    print_error "Too many arguments"
-    print_usage
-    exit 1
+done
+
+# If no deploy mode specified, default to all
+if [[ "$DEPLOY_MODE" == "" ]]; then
+    DEPLOY_MODE="all"
 fi
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-BACKEND_ROOT="$(dirname "$SCRIPT_DIR")"
-PROJECT_ROOT="$(dirname "$(dirname "$BACKEND_ROOT")")"
-TERRAFORM_DIR="$BACKEND_ROOT/infrastructure"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+BACKEND_ROOT="$PROJECT_ROOT/app/backend"
+TERRAFORM_DIR="$PROJECT_ROOT/iac"
 
 # Ensure all paths are absolute
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
@@ -124,70 +138,69 @@ fi
 
 print_success "Prerequisites check passed"
 
-# Step 1: Build Lambda packages (skip if only frontend)
+# Step 1: Build Lambda packages (skip if only frontend or terraform)
 if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
     print_status "Building Lambda deployment packages..."
     cd "$SCRIPT_DIR"
 
-# Function to check if lambda needs rebuilding
-lambda_needs_rebuild() {
-    local lambda_name=$1
-    local lambda_dir="$BACKEND_ROOT/lambdas/$lambda_name"
-    local package_file="$BACKEND_ROOT/scripts/dist/${lambda_name}-deployment.zip"
-    
-    # If package doesn't exist, needs rebuild
-    if [ ! -f "$package_file" ]; then
-        return 0  # true - needs rebuild
-    fi
-    
-    # Check if any source files are newer than the package
-    local package_time=$(stat -f "%m" "$package_file" 2>/dev/null || stat -c "%Y" "$package_file" 2>/dev/null)
-    local latest_source_time=0
-    
-    # Find the latest modification time of source files
-    if [ -d "$lambda_dir/code" ]; then
-        latest_source_time=$(find "$lambda_dir/code" -name "*.py" -o -name "*.txt" -o -name "*.json" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1 2>/dev/null || find "$lambda_dir/code" -name "*.py" -o -name "*.txt" -o -name "*.json" | xargs stat -c "%Y" 2>/dev/null | sort -n | tail -1 2>/dev/null || echo "0")
-    fi
-    
-    # If source files are newer than package, needs rebuild
-    if [ "$latest_source_time" -gt "$package_time" ]; then
-        return 0  # true - needs rebuild
-    fi
-    
-    return 1  # false - no rebuild needed
-}
-
-# Function to build specific lambda
-build_lambda() {
-    local lambda_name=$1
-    local force_rebuild=${2:-false}
-    
-    # Check if lambda directory exists
-    if [ ! -d "$BACKEND_ROOT/lambdas/$lambda_name" ]; then
-        print_warning "Lambda directory for $lambda_name not found, skipping..."
-        return 0
-    fi
-    
-    # Check if rebuild is needed
-    if [ "$force_rebuild" = "true" ] || lambda_needs_rebuild "$lambda_name"; then
-        print_status "Building $lambda_name lambda..."
+    # Function to check if lambda needs rebuilding
+    lambda_needs_rebuild() {
+        local lambda_name=$1
+        local lambda_dir="$BACKEND_ROOT/lambdas/$lambda_name"
+        local package_file="$SCRIPT_DIR/dist/${lambda_name}-deployment.zip"
         
-        # Build the specific lambda
-        if ./lambda_zip.sh "$lambda_name"; then
-            print_success "$lambda_name lambda built successfully"
-            return 0
-        else
-            print_error "Failed to build $lambda_name lambda"
-            return 1
+        # If package doesn't exist, needs rebuild
+        if [ ! -f "$package_file" ]; then
+            return 0  # true - needs rebuild
         fi
-    else
-        print_success "$lambda_name lambda is up to date, skipping build"
-        return 0
-    fi
-}
+        
+        # Check if any source files are newer than the package
+        local package_time=$(stat -f "%m" "$package_file" 2>/dev/null || stat -c "%Y" "$package_file" 2>/dev/null)
+        local latest_source_time=0
+        
+        # Find the latest modification time of source files
+        if [ -d "$lambda_dir/code" ]; then
+            latest_source_time=$(find "$lambda_dir/code" -name "*.py" -o -name "*.txt" -o -name "*.json" | xargs stat -f "%m" 2>/dev/null | sort -n | tail -1 2>/dev/null || find "$lambda_dir/code" -name "*.py" -o -name "*.txt" -o -name "*.json" | xargs stat -c "%Y" 2>/dev/null | sort -n | tail -1 2>/dev/null || echo "0")
+        fi
+        
+        # If source files are newer than package, needs rebuild
+        if [ "$latest_source_time" -gt "$package_time" ]; then
+            return 0  # true - needs rebuild
+        fi
+        
+        return 1  # false - no rebuild needed
+    }
 
-# Build lambdas based on deploy mode
-if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    # Function to build specific lambda
+    build_lambda() {
+        local lambda_name=$1
+        local force_rebuild=${2:-false}
+        
+        # Check if lambda directory exists
+        if [ ! -d "$BACKEND_ROOT/lambdas/$lambda_name" ]; then
+            print_warning "Lambda directory for $lambda_name not found, skipping..."
+            return 0
+        fi
+        
+        # Check if rebuild is needed
+        if [ "$force_rebuild" = "true" ] || lambda_needs_rebuild "$lambda_name"; then
+            print_status "Building $lambda_name lambda..."
+            
+            # Build the specific lambda
+            if ./lambda_zip.sh "$lambda_name"; then
+                print_success "$lambda_name lambda built successfully"
+                return 0
+            else
+                print_error "Failed to build $lambda_name lambda"
+                return 1
+            fi
+        else
+            print_success "$lambda_name lambda is up to date, skipping build"
+            return 0
+        fi
+    }
+
+    # Build lambdas based on deploy mode
     print_status "Building all lambdas..."
     for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
         if [ -d "$BACKEND_ROOT/lambdas/$lambda" ]; then
@@ -198,39 +211,36 @@ if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
             print_warning "Lambda directory for $lambda not found, skipping..."
         fi
     done
-fi
 
     print_success "Lambda packages built successfully"
 
     # Step 2: Verify deployment packages are ready
     print_status "Verifying deployment packages..."
 
-# Function to verify lambda package
-verify_lambda_package() {
-    local lambda_name=$1
-    local package_file="$BACKEND_ROOT/scripts/dist/${lambda_name}-deployment.zip"
-    
-    if [ -f "$package_file" ]; then
-        local size=$(du -h "$package_file" | cut -f1)
-        print_success "✓ $lambda_name-deployment.zip ready ($size)"
-    else
-        print_warning "⚠️ $lambda_name-deployment.zip not found"
-    fi
-}
+    # Function to verify lambda package
+    verify_lambda_package() {
+        local lambda_name=$1
+        local package_file="$SCRIPT_DIR/dist/${lambda_name}-deployment.zip"
+        
+        if [ -f "$package_file" ]; then
+            local size=$(du -h "$package_file" | cut -f1)
+            print_success "✓ $lambda_name-deployment.zip ready ($size)"
+        else
+            print_warning "⚠️ $lambda_name-deployment.zip not found"
+        fi
+    }
 
-# Verify packages based on deploy mode
-if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    # Verify packages
     print_status "Verifying all lambda packages..."
     for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
         verify_lambda_package "$lambda"
     done
-fi
 
     print_success "Deployment packages verified"
 fi
 
 # Step 3: Initialize Terraform (skip if only frontend)
-if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" || "$DEPLOY_MODE" == "terraform" ]]; then
     print_status "Initializing Terraform..."
     cd "$TERRAFORM_DIR"
     if ! terraform init; then
@@ -315,8 +325,175 @@ if [ "$SKIP_TERRAFORM_APPLY" = "false" ]; then
     fi
 fi
 
-# Step 8: Get outputs (skip if only frontend)
+# Step 8.5: Delete and recreate stuck Lambda functions (if lambdas were deployed)
 if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Checking Lambda function status and recreating if stuck..."
+    cd "$SCRIPT_DIR"
+    
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        function_name="dev-vishmaker-$lambda"
+        package_file="$SCRIPT_DIR/dist/${lambda}-deployment.zip"
+        
+        if [ -f "$package_file" ]; then
+            print_status "Checking $function_name status..."
+            
+            # Check if function is stuck in "Creating" state
+            function_status=$(aws lambda get-function --function-name "$function_name" --query 'Configuration.LastUpdateStatus' --output text 2>/dev/null || echo "NOT_FOUND")
+            
+            if [[ "$function_status" == "InProgress" || "$function_status" == "Creating" ]]; then
+                print_warning "$function_name is stuck in $function_status state, deleting and recreating..."
+                
+                # Delete the stuck function
+                if aws lambda delete-function --function-name "$function_name"; then
+                    print_success "$function_name deleted successfully"
+                    
+                    # Wait for deletion to complete
+                    print_status "Waiting for deletion to complete..."
+                    sleep 30
+                    
+                    # Check if deletion was successful
+                    if aws lambda get-function --function-name "$function_name" >/dev/null 2>&1; then
+                        print_warning "$function_name still exists, waiting longer..."
+                        sleep 60
+                    fi
+                    
+                    # Verify deletion
+                    if ! aws lambda get-function --function-name "$function_name" >/dev/null 2>&1; then
+                        print_success "$function_name successfully deleted"
+                    else
+                        print_error "Failed to delete $function_name, skipping recreation"
+                        continue
+                    fi
+                else
+                    print_error "Failed to delete $function_name, skipping recreation"
+                    continue
+                fi
+            else
+                print_success "$function_name status: $function_status (OK)"
+            fi
+        else
+            print_warning "$lambda-deployment.zip not found, skipping function check"
+        fi
+    done
+    
+    print_success "Lambda function status check completed"
+fi
+
+# Step 8.6: Recreate deleted Lambda functions (if any were deleted)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Checking if any Lambda functions need to be recreated..."
+    cd "$TERRAFORM_DIR"
+    
+    # Check if any functions are missing
+    functions_missing=false
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        function_name="dev-vishmaker-$lambda"
+        
+        if ! aws lambda get-function --function-name "$function_name" >/dev/null 2>&1; then
+            print_warning "$function_name is missing, will recreate via Terraform"
+            functions_missing=true
+        fi
+    done
+    
+    if [ "$functions_missing" = true ]; then
+        print_status "Recreating missing Lambda functions via Terraform..."
+        
+        # Run Terraform apply to recreate missing functions
+        if terraform apply -auto-approve; then
+            print_success "Lambda functions recreated successfully"
+        else
+            print_error "Failed to recreate Lambda functions via Terraform"
+            exit 1
+        fi
+        
+        # Wait for functions to be ready
+        print_status "Waiting for Lambda functions to be ready..."
+        sleep 60
+        
+        # Verify all functions are now available
+        for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+            function_name="dev-vishmaker-$lambda"
+            
+            if aws lambda get-function --function-name "$function_name" >/dev/null 2>&1; then
+                print_success "$function_name is now available"
+            else
+                print_error "$function_name is still missing after recreation"
+                exit 1
+            fi
+        done
+    else
+        print_success "All Lambda functions are available, no recreation needed"
+    fi
+fi
+
+# Step 8.7: Update Lambda function code (if lambdas were deployed)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" ]]; then
+    print_status "Updating Lambda function code..."
+    cd "$SCRIPT_DIR"
+    
+    # Phase 1: Send update requests for all Lambda functions in parallel
+    print_status "🚀 Phase 1: Initiating updates for all Lambda functions in parallel..."
+    echo "------------------------------------------------------------------"
+    
+    pids=() # Array to store process IDs of background jobs
+    
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        function_name="dev-vishmaker-$lambda"
+        package_file="$SCRIPT_DIR/dist/${lambda}-deployment.zip"
+        
+        if [ -f "$package_file" ]; then
+            print_status "  -> Starting update for ${function_name}..."
+            
+            # Run the update command in background
+            aws lambda update-function-code \
+                --function-name "$function_name" \
+                --zip-file "fileb://$package_file" > /dev/null &
+            
+            pids+=($!) # Store the Process ID of the background command
+        else
+            print_warning "$lambda-deployment.zip not found, skipping update for $function_name"
+        fi
+    done
+    
+    print_status "⏳ All update requests have been sent. Waiting for the background jobs to finish..."
+    
+    # Wait for all update API calls to complete
+    for pid in "${pids[@]}"; do
+        wait "$pid"
+    done
+    
+    print_success "✅ All update API calls have completed."
+    echo ""
+    
+    # Phase 2: Wait for all Lambda functions to reach 'Successful' update status
+    print_status "🚀 Phase 2: Waiting for all Lambda functions to reach 'Successful' update status..."
+    echo "--------------------------------------------------------------------------------"
+    
+    for lambda in "${AVAILABLE_LAMBDAS[@]}"; do
+        function_name="dev-vishmaker-$lambda"
+        package_file="$SCRIPT_DIR/dist/${lambda}-deployment.zip"
+        
+        if [ -f "$package_file" ]; then
+            print_status "  -> Waiting for ${function_name} to complete update..."
+            
+            # Wait for this function to complete its update
+            if aws lambda wait function-updated --function-name "$function_name"; then
+                print_success "  ✅ ${function_name} has been successfully updated."
+            else
+                print_error "  ❌ ${function_name} update failed or timed out."
+                exit 1
+            fi
+        else
+            print_warning "Skipping status check for $function_name (no package file)"
+        fi
+    done
+    
+    echo ""
+    print_success "🎉 SUCCESS: All Lambda functions have been deployed and updated."
+fi
+
+# Step 8: Get outputs (skip if only frontend)
+if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "lambdas" || "$DEPLOY_MODE" == "terraform" ]]; then
     print_status "Retrieving deployment outputs..."
     API_GATEWAY_URL=$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "Not available")
     COGNITO_USER_POOL_ID=$(terraform output -raw cognito_user_pool_id 2>/dev/null || echo "Not available")
@@ -407,6 +584,16 @@ if [[ "$DEPLOY_MODE" == "all" || "$DEPLOY_MODE" == "frontend" ]]; then
     
     # Create environment file with API URL
     print_status "Creating environment configuration..."
+    
+    # Check if environment has changed
+    if [ -f ".env.production" ] && [ -f "dist/index.html" ]; then
+        current_api_url=$(grep "VITE_API_BASE_URL" .env.production 2>/dev/null | cut -d'=' -f2 || echo "")
+        if [ "$current_api_url" != "$API_GATEWAY_URL" ]; then
+            FRONTEND_NEEDS_REBUILD=true
+            print_status "API URL changed from '$current_api_url' to '$API_GATEWAY_URL', will rebuild"
+        fi
+    fi
+    
     cat > .env.production << EOF
 VITE_API_BASE_URL=$API_GATEWAY_URL
 VITE_ENVIRONMENT=prod
@@ -491,6 +678,25 @@ elif [[ "$DEPLOY_MODE" == "lambdas" ]]; then
     echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
     echo ""
     print_success "Lambda deployment completed successfully! 🎉"
+elif [[ "$DEPLOY_MODE" == "terraform" ]]; then
+    echo -e "${GREEN}📋 Terraform Infrastructure Summary${NC}"
+    echo -e "${GREEN}==================================${NC}"
+    echo -e "🌐 API Gateway URL: ${BLUE}$API_GATEWAY_URL${NC}"
+    echo -e "🔐 Cognito User Pool ID: ${BLUE}$COGNITO_USER_POOL_ID${NC}"
+    echo -e "🔑 Cognito Client ID: ${BLUE}$COGNITO_CLIENT_ID${NC}"
+    echo -e "🗄️  Database Endpoint: ${BLUE}$DB_ENDPOINT${NC}"
+    echo -e "🌍 Frontend URL: ${BLUE}$FRONTEND_URL${NC}"
+    echo -e "☁️  CloudFront Domain: ${BLUE}$CLOUDFRONT_DOMAIN${NC}"
+    echo ""
+    echo -e "${GREEN}📍 Available Endpoints${NC}"
+    echo -e "======================"
+    echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
+    echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
+    echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo -e "🔗 Frontend: ${BLUE}$FRONTEND_URL${NC}"
+    echo ""
+    print_success "Terraform infrastructure deployment completed successfully! 🎉"
 else
     # Full deployment summary
     echo -e "${GREEN}📋 Full Deployment Summary${NC}"
@@ -517,4 +723,4 @@ else
     echo "3. Configure domain name and SSL certificate (optional)"
     echo ""
     print_success "Full deployment completed successfully! 🎉"
-fi 
+fi

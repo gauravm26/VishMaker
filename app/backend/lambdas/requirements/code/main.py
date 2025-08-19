@@ -1,15 +1,14 @@
 import json
 import logging
-import boto3
+import boto3  # Available in AWS Lambda runtime
 import uuid
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends
 from mangum import Mangum
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, ValidationError, VERSION as PYD_VER
-from dynamodb.code.schemas import (
+from dynamodb.schemas import (
     UserFlowCreate, HighLevelRequirementCreate, LowLevelRequirementCreate, TestCaseCreate,
     UserFlow, HighLevelRequirement, LowLevelRequirement, TestCase, ProjectRequirementsResponse
 )
@@ -19,7 +18,7 @@ from decimal import Decimal
 import os
 from pprint import pprint
 
-import inspect, pkg_resources, dynamodb.code.schemas as sch
+import inspect, pkg_resources, dynamodb.schemas as sch
 
 
 # Configure logging
@@ -35,23 +34,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://vishmaker.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
 # Pydantic models are now imported from dynamodb.code.schemas
 
 def get_table(table_name: str):
     """Get DynamoDB table instance"""
     
-    # Use underscores in the table name to match the actual DynamoDB table names
-    table_name_env = os.environ.get(f'{table_name.upper()}_TABLE_NAME', f'prod-vishmaker-{table_name}')
-    print(f"🔍 DEBUG: Getting table '{table_name}' -> '{table_name_env}'")
+    # Convert table name with hyphens to underscores for environment variable lookup
+    # e.g., 'user-flows' -> 'USER_FLOWS_TABLE_NAME'
+    env_var_name = f'{table_name.replace("-", "_").upper()}_TABLE_NAME'
+    # Use dev-vishmaker as fallback to match the actual environment
+    table_name_env = os.environ.get(env_var_name, f'dev-vishmaker-{table_name}')
+    print(f"🔍 DEBUG: Getting table '{table_name}' -> env var '{env_var_name}' -> '{table_name_env}'")
     return dynamodb.Table(table_name_env)
 
 def _safe_to_userflow(obj: dict) -> "UserFlow":
@@ -105,7 +98,7 @@ def root():
     """Health check endpoint"""
     return {"message": "Requirements API is running", "status": "healthy"}
 
-@app.post("/requirements/{project_id}/flows", response_model=UserFlow, status_code=201)
+@app.post("/api/requirements/{project_id}/flows", response_model=UserFlow, status_code=201)
 def create_user_flow(project_id: str, flow: UserFlowCreate):
     """Create a new user flow for a project"""
     try:
@@ -132,7 +125,7 @@ def create_user_flow(project_id: str, flow: UserFlowCreate):
         logger.error(f"❌ Error creating user flow: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create user flow: {str(e)}")
 
-@app.get("/requirements/{project_id}/flows", response_model=List[UserFlow])
+@app.get("/api/requirements/{project_id}/flows", response_model=List[UserFlow])
 def get_user_flows(project_id: str):
     """Get all user flows for a project"""
     try:
@@ -154,7 +147,7 @@ def get_user_flows(project_id: str):
         logger.error(f"❌ Error retrieving user flows: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve user flows: {str(e)}")
 
-@app.post("/requirements/{project_id}/high-level-requirements", response_model=HighLevelRequirement, status_code=201)
+@app.post("/api/requirements/{project_id}/high-level-requirements", response_model=HighLevelRequirement, status_code=201)
 def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCreate):
     """Create a new high-level requirement"""
     try:
@@ -181,7 +174,7 @@ def create_high_level_requirement(project_id: str, hlr: HighLevelRequirementCrea
         logger.error(f"❌ Error creating high-level requirement: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create high-level requirement: {str(e)}")
 
-@app.get("/requirements/{project_id}/high-level-requirements", response_model=List[HighLevelRequirement])
+@app.get("/api/requirements/{project_id}/high-level-requirements", response_model=List[HighLevelRequirement])
 def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = None):
     """Get high-level requirements for a project"""
     try:
@@ -206,7 +199,7 @@ def get_high_level_requirements(project_id: str, parent_uiid: Optional[str] = No
         logger.error(f"❌ Error retrieving high-level requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve high-level requirements: {str(e)}")
 
-@app.post("/requirements/{project_id}/low-level-requirements", response_model=LowLevelRequirement, status_code=201)
+@app.post("/api/requirements/{project_id}/low-level-requirements", response_model=LowLevelRequirement, status_code=201)
 def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate):
     """Create a new low-level requirement"""
     try:
@@ -233,7 +226,7 @@ def create_low_level_requirement(project_id: str, llr: LowLevelRequirementCreate
         logger.error(f"❌ Error creating low-level requirement: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create low-level requirement: {str(e)}")
 
-@app.get("/requirements/{project_id}/low-level-requirements", response_model=List[LowLevelRequirement])
+@app.get("/api/requirements/{project_id}/low-level-requirements", response_model=List[LowLevelRequirement])
 def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = None):
     """Get low-level requirements for a project"""
     try:
@@ -258,7 +251,7 @@ def get_low_level_requirements(project_id: str, parent_uiid: Optional[str] = Non
         logger.error(f"❌ Error retrieving low-level requirements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve low-level requirements: {str(e)}")
 
-@app.post("/requirements/{project_id}/test-cases", response_model=TestCase, status_code=201)
+@app.post("/api/requirements/{project_id}/test-cases", response_model=TestCase, status_code=201)
 def create_test_case(project_id: str, test_case: TestCaseCreate):
     """Create a new test case"""
     try:
@@ -285,7 +278,7 @@ def create_test_case(project_id: str, test_case: TestCaseCreate):
         logger.error(f"❌ Error creating test case: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create test case: {str(e)}")
 
-@app.get("/requirements/{project_id}/test-cases", response_model=List[TestCase])
+@app.get("/api/requirements/{project_id}/test-cases", response_model=List[TestCase])
 def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
     """Get test cases for a project"""
     try:
@@ -310,7 +303,7 @@ def get_test_cases(project_id: str, parent_uiid: Optional[str] = None):
         logger.error(f"❌ Error retrieving test cases: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve test cases: {str(e)}")
 
-@app.get("/requirements/{project_id}", response_model=ProjectRequirementsResponse)
+@app.get("/api/requirements/{project_id}", response_model=ProjectRequirementsResponse)
 def get_project_requirements(project_id: str):
     
     try:

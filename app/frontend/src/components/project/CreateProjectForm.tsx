@@ -1,8 +1,8 @@
 // app-ui/src/components/project/CreateProjectForm.tsx
 import React, { useState, useEffect } from 'react';
-import apiClient from '../../lib/apiClient';
+import apiClient from '../../utils/apiClient';
 import { ProjectCreatePayload, Project } from '../../types/project';
-import LlmService, { LlmResponse } from '../../lib/llmService';
+import LlmService, { LlmResponse } from '../../utils/llmService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface CreateProjectFormProps {

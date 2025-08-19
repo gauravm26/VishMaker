@@ -1,6 +1,6 @@
 // app-ui/src/components/Settings.tsx
 import React, { useState, useEffect } from 'react';
-import GitHubService from '../lib/githubService';
+import GitHubService from '../utils/githubService';
 
 interface SettingsProps {
     isOpen: boolean;

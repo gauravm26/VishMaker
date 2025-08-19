@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import apiClient from '../lib/apiClient';
+import apiClient from '../utils/apiClient';
 
 interface WaitlistFormProps {
   className?: string;

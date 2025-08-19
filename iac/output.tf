@@ -42,26 +42,26 @@ output "config_object_key" {
 }
 
 # Cognito Outputs
-/* output "cognito_user_pool_id" {
+output "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
-  value       = aws_cognito_user_pool.main.id
+  value       = local.cognito_user_pool_id
 }
 
 output "cognito_user_pool_arn" {
   description = "Cognito User Pool ARN"
-  value       = aws_cognito_user_pool.main.arn
+  value       = local.cognito_user_pool_arn
 }
 
 output "cognito_user_pool_client_id" {
   description = "Cognito User Pool Client ID"
-  value       = aws_cognito_user_pool_client.main.id
+  value       = local.cognito_user_pool_client_id
 }
 
 output "cognito_user_pool_domain" {
   description = "Cognito User Pool Domain"
-  value       = aws_cognito_user_pool_domain.main.domain
+  value       = local.cognito_user_pool_domain
 }
- */
+ 
 # API Gateway Outputs
 output "api_gateway_id" {
   description = "API Gateway ID"
@@ -69,8 +69,8 @@ output "api_gateway_id" {
 }
 
 output "api_gateway_endpoint" {
-  description = "API Gateway endpoint URL"
-  value       = aws_apigatewayv2_api.main.api_endpoint
+  description = "API Gateway endpoint URL (through CloudFront)"
+  value       = "https://iu5eco6xl1.execute-api.us-east-1.amazonaws.com/api"
 }
 
 output "api_gateway_execution_arn" {
@@ -90,33 +90,33 @@ output "api_routes" {
 # LLM Lambda Outputs
 output "llm_lambda_function_name" {
   description = "Name of the LLM Lambda function"
-  value       = aws_lambda_function.lambda["llm_api"].function_name
+  value       = aws_lambda_function.lambda_functions["llm_api"].function_name
 }
 
 output "llm_lambda_function_arn" {
   description = "ARN of the LLM Lambda function"
-  value       = aws_lambda_function.lambda["llm_api"].arn
+  value       = aws_lambda_function.lambda_functions["llm_api"].arn
 }
 
 output "llm_lambda_function_invoke_arn" {
   description = "Invoke ARN of the LLM Lambda function"
-  value       = aws_lambda_function.lambda["llm_api"].invoke_arn
+  value       = aws_lambda_function.lambda_functions["llm_api"].invoke_arn
 }
 
 # Auth Lambda Outputs
 output "auth_lambda_function_name" {
   description = "Name of the Auth Lambda function"
-  value       = aws_lambda_function.lambda["auth_api"].function_name
+  value       = aws_lambda_function.lambda_functions["auth_api"].function_name
 }
 
 output "auth_lambda_function_arn" {
   description = "ARN of the Auth Lambda function"
-  value       = aws_lambda_function.lambda["auth_api"].arn
+  value       = aws_lambda_function.lambda_functions["auth_api"].arn
 }
 
 output "auth_lambda_function_invoke_arn" {
   description = "Invoke ARN of the Auth Lambda function"
-  value       = aws_lambda_function.lambda["auth_api"].invoke_arn
+  value       = aws_lambda_function.lambda_functions["auth_api"].invoke_arn
 }
 
 
@@ -129,7 +129,7 @@ output "resource_name_prefix" {
 # Common Tags
 output "common_tags" {
   description = "Common tags applied to all resources"
-  value       = local.common_config.tags
+  value       = local.common_tags
 }
 
 # ==================================================
@@ -139,33 +139,33 @@ output "common_tags" {
 # Frontend / CDN Outputs
 output "frontend_bucket_name" {
   description = "Name of the S3 bucket for frontend"
-  value       = data.aws_s3_bucket.existing.id
+  value       = var.domain_name
 }
 
 output "frontend_bucket_arn" {
   description = "ARN of the S3 bucket for frontend"
-  value       = data.aws_s3_bucket.existing.arn
+  value       = "arn:aws:s3:::${var.domain_name}"
 }
 
 output "cloudfront_distribution_id" {
   description = "ID of the CloudFront distribution"
-  value       = data.aws_cloudfront_distribution.existing.id
+  value       = var.cloudfront_distribution_id
 }
 
 output "cloudfront_domain_name" {
   description = "Domain name of the CloudFront distribution"
-  value       = data.aws_cloudfront_distribution.existing.domain_name
+  value       = "vishmaker.com"  # Your domain name
 }
 
 # Domain Outputs
 output "hosted_zone_id" {
   description = "ID of the Route53 hosted zone"
-  value       = data.aws_route53_zone.existing.zone_id
+  value       = data.aws_route53_zone.main.zone_id
 }
 
 output "name_servers" {
   description = "Name servers for the domain"
-  value       = data.aws_route53_zone.existing.name_servers
+  value       = data.aws_route53_zone.main.name_servers
 }
 
 # Application URLs
@@ -178,3 +178,48 @@ output "frontend_url" {
   description = "URL for the frontend"
   value       = "https://${var.domain_name}"
 }
+
+# ==================================================
+# COMPREHENSIVE INFRASTRUCTURE OUTPUTS
+# ==================================================
+
+output "s3_bucket_name" {
+  description = "The name of the S3 bucket hosting the website"
+  value       = length(aws_s3_bucket.main) > 0 ? aws_s3_bucket.main[0].bucket : null
+}
+
+output "website_url" {
+  description = "The URL of the hosted website"
+  value       = "https://${var.domain_name}"
+}
+
+output "resource_prefix" {
+  description = "The resource naming prefix used"
+  value       = local.name_prefix
+}
+
+output "alb_dns_name" {
+  description = "The DNS name of the Application Load Balancer"
+  value       = aws_lb.api_alb.dns_name
+}
+
+output "alb_security_group_id" {
+  description = "The ID of the ALB security group"
+  value       = aws_security_group.alb_sg.id
+}
+
+output "api_gateway_url" {
+  description = "The URL of the API Gateway"
+  value       = "https://www.${var.domain_name}/api"
+}
+
+output "lambda_function_names" {
+  description = "Names of all Lambda functions"
+  value       = [for func in aws_lambda_function.lambda_functions : func.function_name]
+}
+
+output "dynamodb_table_names" {
+  description = "Names of all DynamoDB tables"
+  value       = [for func in aws_dynamodb_table.tables : func.name]
+}
+

@@ -14,6 +14,13 @@ terraform {
       version = "~> 3.4"
     }
   }
+  backend "s3" {
+    bucket         = "vish-terraform"
+    key            = "vishmaker/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "vishmaker-terraform-locks"
+  }
 }
 
 # Configure AWS Provider
@@ -37,16 +44,17 @@ locals {
       Environment = var.environment
     })
   }
-  
+
   # 🏷️ Common DynamoDB environment variables
-  common_dynamodb_env_vars = {
-    PROJECTS_TABLE_NAME                = aws_dynamodb_table.tables["projects"].name,
-    USER_FLOWS_TABLE_NAME              = aws_dynamodb_table.tables["user-flows"].name,
-    HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high-level-requirements"].name,
-    LOW_LEVEL_REQUIREMENTS_TABLE_NAME  = aws_dynamodb_table.tables["low-level-requirements"].name,
-    TEST_CASES_TABLE_NAME              = aws_dynamodb_table.tables["test-cases"].name
-  }
-  
+  # Temporarily commented out until all DynamoDB tables are imported
+  # common_dynamodb_env_vars = {
+  #   PROJECTS_TABLE_NAME                = aws_dynamodb_table.tables["projects"].name,
+  #   USER_FLOWS_TABLE_NAME              = aws_dynamodb_table.tables["user-flows"].name,
+  #   HIGH_LEVEL_REQUIREMENTS_TABLE_NAME = aws_dynamodb_table.tables["high-level-requirements"].name,
+  #   LOW_LEVEL_REQUIREMENTS_TABLE_NAME  = aws_dynamodb_table.tables["low-level-requirements"].name,
+  #   TEST_CASES_TABLE_NAME              = aws_dynamodb_table.tables["test-cases"].name
+  # }
+
   # 🏷️ Lambda configuration object
 
 }
@@ -104,10 +112,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "configs" {
 resource "aws_s3_object" "app_config" {
   bucket = aws_s3_bucket.configs.id
   key    = "config.json"
-  source = "${path.module}/../config/config.json"
-  etag   = filemd5("${path.module}/../config/config.json")
-
-  tags = local.common_config.tags
+  source = "${path.module}/../app/backend/config/config.json"
+  etag   = filemd5("${path.module}/../app/backend/config/config.json")
+  tags   = local.common_config.tags
 }
 
 
@@ -208,6 +215,23 @@ resource "aws_apigatewayv2_api" "main" {
   tags = local.common_config.tags
 }
 
+# Custom domain for API Gateway (REGIONAL)
+resource "aws_apigatewayv2_domain_name" "api" {
+  domain_name = "api.vishmaker.com"
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate_validation.api.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "api" {
+  api_id      = aws_apigatewayv2_api.main.id
+  domain_name = aws_apigatewayv2_domain_name.api.id
+  stage       = aws_apigatewayv2_stage.main.id
+}
+
 # API Gateway Stage
 resource "aws_apigatewayv2_stage" "main" {
   api_id = aws_apigatewayv2_api.main.id
@@ -266,21 +290,9 @@ resource "aws_lambda_permission" "apigw_permissions" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
-# CORS Preflight Routes (no authentication required)
-resource "aws_apigatewayv2_route" "cors_preflight_routes" {
-  for_each = toset([
-    "OPTIONS /auth/{proxy+}",
-    "OPTIONS /projects/{proxy+}",
-    "OPTIONS /requirements/{proxy+}",
-    "OPTIONS /llm/{proxy+}"
-  ])
 
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = each.value
-  target    = "integrations/${aws_apigatewayv2_integration.api["auth_api"].id}"
-
-  # No authorization required for CORS preflight
-}
+# Note: CORS routes are no longer needed since CloudFront will handle routing
+# and eliminate cross-origin issues by serving both frontend and API from the same domain
 
 # Health check route
 resource "aws_apigatewayv2_route" "health_check" {
@@ -300,20 +312,115 @@ resource "aws_apigatewayv2_route" "root" {
 # CLOUDFRONT
 # ==================================================
 
-# Data source to get CloudFront distribution details using the provided ID
+# CloudFront distribution - will import existing one
+resource "aws_cloudfront_distribution" "main" {
+  enabled = true
+
+  # S3 Origin for frontend (your existing S3 bucket)
+  origin {
+    origin_id   = "S3-vishmaker.com"
+    domain_name = "vishmaker.com.s3.us-east-1.amazonaws.com"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "match-viewer"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # ALB Origin for WebSocket and health checks (your existing ALB)
+  origin {
+    origin_id   = "ALB-API-Backend"
+    domain_name = "dev-vishkits-webhosting-api-alb-231976377.us-east-1.elb.amazonaws.com"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "match-viewer"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # API Gateway Origin for backend APIs (your existing)
+  origin {
+    origin_id   = "APIGATEWAY-API-Backend"
+    domain_name = aws_apigatewayv2_domain_name.api.domain_name
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # Minimal default cache behavior (required by Terraform)
+  default_cache_behavior {
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-vishmaker.com" # Reference your existing S3 origin
+    viewer_protocol_policy = "redirect-to-https"
+    cache_policy_id          = data.aws_cloudfront_cache_policy.Managed_Optimized.id
+  }
+
+  # WebSocket Cache Behavior (your existing)
+  ordered_cache_behavior {
+    path_pattern           = "/ws*"
+    target_origin_id       = "ALB-API-Backend"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods         = ["GET", "HEAD"] 
+    cache_policy_id          = data.aws_cloudfront_cache_policy.Managed-CachingDisabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.Managed-AllViewer.id
+  }
+
+  # Health Check Cache Behavior (your existing)
+  ordered_cache_behavior {
+    path_pattern           = "/health"
+    target_origin_id       = "ALB-API-Backend"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    cache_policy_id          = data.aws_cloudfront_cache_policy.Managed-CachingDisabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.Managed-AllViewer.id
+  }
+
+  # Note: Terraform will now manage all cache behaviors
+
+  # API Cache Behavior for backend APIs
+  ordered_cache_behavior {
+    path_pattern           = "/api/*"
+    target_origin_id       = "APIGATEWAY-API-Backend"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods         = ["GET", "HEAD"]
+    cache_policy_id          = data.aws_cloudfront_cache_policy.Managed-CachingDisabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.Managed-AllViewer.id
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+# Data source for existing CloudFront distribution
 data "aws_cloudfront_distribution" "existing" {
   id = var.cloudfront_distribution_id
 }
+
+# Note: Using existing OAC "dev-vishkits-webhosting-s3-oac" instead of creating new OAI
 
 # Data source to get the S3 bucket from the CloudFront distribution's origin
 data "aws_s3_bucket" "existing" {
   bucket = var.domain_name
 }
 
-# Data source to find existing hosted zone by domain name
-data "aws_route53_zone" "existing" {
-  name = var.domain_name
-}
+
 
 # Locals for easy reference to the existing resources
 locals {
@@ -321,6 +428,24 @@ locals {
   s3_bucket               = data.aws_s3_bucket.existing
   hosted_zone             = data.aws_route53_zone.existing
 }
+
+data "aws_cloudfront_cache_policy" "Managed_Optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+data "aws_cloudfront_cache_policy" "Managed-CachingDisabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "Managed-AllViewer" {
+  name = "Managed-AllViewer"
+}
+
+# Note: We're not creating a new CloudFront distribution
+# Instead, we'll add the API Gateway origin to your existing CloudFront
+# You'll need to manually add this origin and cache behavior to your existing CloudFront distribution
+
+
 
 
 # ==================================================
@@ -331,6 +456,39 @@ locals {
 data "aws_route53_zone" "main" {
   name = var.domain_name
 }
+
+# Data source to find existing hosted zone by domain name
+data "aws_route53_zone" "existing" {
+  name = var.domain_name
+}
+
+resource "aws_acm_certificate" "api" {
+  domain_name       = "api.vishmaker.com"
+  validation_method = "DNS"
+}
+
+resource "aws_route53_record" "api_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.api.domain_validation_options :
+    dvo.domain_name => {
+      name   = dvo.resource_record_name
+      type   = dvo.resource_record_type
+      record = dvo.resource_record_value
+    }
+  }
+
+  zone_id = data.aws_route53_zone.existing.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.record]
+}
+
+resource "aws_acm_certificate_validation" "api" {
+  certificate_arn         = aws_acm_certificate.api.arn
+  validation_record_fqdns = [for r in aws_route53_record.api_cert_validation : r.fqdn]
+}
+
 
 # ==================================================
 # COGNITO
@@ -483,33 +641,33 @@ locals {
         COGNITO_CLIENT_ID    = local.cognito_user_pool_client_id
       }
       dynamo_access_all = false
-      timeout = 60
-      memory_size = 512
+      timeout           = 60
+      memory_size       = 512
     },
     llm_api = {
       lambda_name = "llm"
       environment_variables = merge(
-        local.common_dynamodb_env_vars,
+        # local.common_dynamodb_env_vars,
         {
           CONFIG_BUCKET = aws_s3_bucket.configs.id
           CONFIG_KEY    = "config.json"
-          ENVIRONMENT  = var.environment
-          PROJECT_NAME = var.project_name
+          ENVIRONMENT   = var.environment
+          PROJECT_NAME  = var.project_name
         }
       )
       dynamo_access_all = true
-      timeout = var.lambda_timeout_seconds
-      memory_size = var.lambda_memory_mb
+      timeout           = var.lambda_timeout_seconds
+      memory_size       = var.lambda_memory_mb
     },
     projects_api = {
-      lambda_name = "projects"
-      environment_variables = local.common_dynamodb_env_vars
-      dynamo_access_all = true
+      lambda_name           = "projects"
+      environment_variables = {} # local.common_dynamodb_env_vars
+      dynamo_access_all     = true
     },
     requirements_api = {
-      lambda_name = "requirements"
-      environment_variables = local.common_dynamodb_env_vars
-      dynamo_access_all = true
+      lambda_name           = "requirements"
+      environment_variables = {} # local.common_dynamodb_env_vars
+      dynamo_access_all     = true
     }
   }
   all_dynamo_tables_arns = [
@@ -843,4 +1001,398 @@ resource "aws_iam_policy" "dynamodb_rw_policy" {
       }
     ]
   })
+}
+
+
+
+
+
+provider "aws" {
+  # This provider block is for the main resources (S3, CloudFront, etc.)
+  # It will use the region configured in your AWS CLI or environment.
+  region = var.aws_region
+}
+
+# ACM certificates must be created in us-east-1 for CloudFront
+provider "aws" {
+  alias  = "acm_provider"
+  region = var.aws_region
+}
+
+# --- Locals for consistent naming ---
+locals {
+  name_prefix = "${var.development_environment}-${var.project_name}"
+  common_tags = merge(var.tags, {
+    Name        = local.name_prefix
+    Environment = var.development_environment
+    Project     = var.project_name
+  })
+}
+
+# --- Data Sources for VPC and Subnets ---
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+# --- DNS & Certificate ---
+data "aws_route53_zone" "main" {
+  name = var.domain_name
+}
+
+resource "aws_acm_certificate" "main" {
+  provider          = aws.acm_provider
+  domain_name       = var.domain_name
+  subject_alternative_names = ["www.${var.domain_name}"]
+  validation_method = "DNS"
+  tags              = merge(local.common_tags, {
+    Name = "${local.name_prefix}-certificate"
+  })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main.zone_id
+}
+
+resource "aws_acm_certificate_validation" "main" {
+  provider        = aws.acm_provider
+  certificate_arn = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# --- S3 & CloudFront Hosting ---
+resource "aws_s3_bucket" "main" {
+  count  = var.deployment_type == "migrate" ? 1 : 0
+  bucket = var.domain_name
+  tags   = merge(local.common_tags, {
+    Name = "${local.name_prefix}-website-bucket"
+  })
+}
+
+resource "aws_cloudfront_origin_access_control" "main" {
+  name                              = "${local.name_prefix}-s3-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+  
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# CloudFront Function for SPA routing
+resource "aws_cloudfront_function" "rewrite_spa_routes" {
+  name    = "${local.name_prefix}-rewrite-spa-routes"
+  runtime = "cloudfront-js-1.0"
+  comment = "Rewrites all unknown paths to index.html for SPA routing"
+
+  publish = true
+
+  code = <<EOT
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+
+  if (!uri.includes('.') && !uri.endsWith('/')) {
+    request.uri = '/index.html';
+  }
+
+  return request;
+}
+EOT
+}
+
+resource "aws_s3_bucket_policy" "main" {
+  count  = var.deployment_type == "migrate" ? 1 : 0
+  bucket = aws_s3_bucket.main[0].id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "cloudfront.amazonaws.com" },
+      Action    = "s3:GetObject",
+      Resource  = "${aws_s3_bucket.main[0].arn}/*",
+      Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.main.arn } }
+    }]
+  })
+}
+
+# --- Application Load Balancer for API/WebSocket ---
+resource "aws_security_group" "alb_sg" {
+  name        = "${local.name_prefix}-alb-sg"
+  description = "Allow HTTPS traffic to ALB"
+  vpc_id      = data.aws_vpc.default.id
+  tags        = merge(local.common_tags, { Name = "${local.name_prefix}-alb-sg" })
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_lb" "api_alb" {
+  name               = "${local.name_prefix}-api-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = data.aws_subnets.default.ids
+  tags               = merge(local.common_tags, { Name = "${local.name_prefix}-api-alb" })
+}
+
+resource "aws_lb_target_group" "api_tg" {
+  name        = "${local.name_prefix}-api-tg"
+  port        = 8000 # Port the Docker container listens on
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "instance"
+  tags        = merge(local.common_tags, { Name = "${local.name_prefix}-api-tg" })
+
+  health_check {
+    path                = "/" # FastAPI responds to this by default
+    protocol            = "HTTP"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+  }
+}
+
+resource "aws_lb_listener" "api_listener" {
+  load_balancer_arn = aws_lb.api_alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  # The default action is to forward to our EC2 target group.
+  # Note: The listener is HTTP because CloudFront handles the HTTPS termination.
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api_tg.arn
+  }
+}
+
+resource "aws_lb_target_group_attachment" "api_attachment" {
+  target_group_arn = aws_lb_target_group.api_tg.arn
+  target_id        = "i-0bfbb3ab79c2f1c78" # Your EC2 instance ID
+  port             = 8000
+}
+
+resource "aws_cloudfront_distribution" "main" {
+  # Origin for S3 hosting (migrate deployment)
+  dynamic "origin" {
+    for_each = var.deployment_type == "migrate" ? [1] : []
+    content {
+      domain_name              = aws_s3_bucket.main[0].bucket_regional_domain_name
+      origin_id                = "S3-${var.domain_name}"
+      origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    }
+  }
+
+  # ALB origin for API/WebSocket connections
+  dynamic "origin" {
+    for_each = [1] # Always create ALB origin
+    content {
+      domain_name = aws_lb.api_alb.dns_name
+      origin_id   = "ALB-API-Backend"
+
+      custom_origin_config {
+        # CloudFront will talk to the ALB over standard HTTP.
+        # The connection from User -> CloudFront is what's encrypted.
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/ws*" # Catches /ws and /ws/logs
+    target_origin_id = "ALB-API-Backend"
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods  = ["GET", "HEAD", "OPTIONS"]
+
+    # These policies are CRITICAL for WebSockets and APIs to work correctly.
+    # It forwards all headers and query strings and disables caching.
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+     # Managed-AllViewer
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+  }
+
+  ordered_cache_behavior {
+  path_pattern     = "/health"
+  target_origin_id = "ALB-API-Backend" # Same origin as your WebSocket
+
+  allowed_methods = ["GET", "HEAD", "OPTIONS"]
+  cached_methods  = ["GET", "HEAD"]
+
+  # Use the same policies to disable caching and forward headers.
+  cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+  origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # Managed-AllViewer
+
+  viewer_protocol_policy = "redirect-to-https"
+  compress               = true
+ }
+
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+  aliases             = [var.domain_name, "www.${var.domain_name}"]
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD", "OPTIONS"]
+    target_origin_id = var.deployment_type == "migrate" ? "S3-${var.domain_name}" : "placeholder-${var.domain_name}"
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 3600
+    max_ttl     = 86400
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.rewrite_spa_routes.arn
+    }
+  }
+
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn = aws_acm_certificate_validation.main.certificate_arn
+    ssl_support_method  = "sni-only"
+  }
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-cloudfront-distribution"
+  })
+}
+
+# --- Final DNS Records ---
+resource "aws_route53_record" "root" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = var.domain_name
+  type    = "A"
+  alias {
+    name                   = aws_cloudfront_distribution.main.domain_name
+    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "www" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "www.${var.domain_name}"
+  type    = "A"
+  alias {
+    name                   = aws_cloudfront_distribution.main.domain_name
+    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# --- Outputs ---
+output "domain_name" {
+  description = "The domain name being hosted"
+  value       = var.domain_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "The ID of the CloudFront distribution"
+  value       = aws_cloudfront_distribution.main.id
+}
+
+output "cloudfront_domain_name" {
+  description = "The domain name of the CloudFront distribution"
+  value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "s3_bucket_name" {
+  description = "The name of the S3 bucket hosting the website"
+  value       = length(aws_s3_bucket.main) > 0 ? aws_s3_bucket.main[0].bucket : null
+}
+
+output "website_url" {
+  description = "The URL of the hosted website"
+  value       = "https://${var.domain_name}"
+}
+
+output "aws_region" {
+  description = "The AWS region where resources are deployed"
+  value       = var.aws_region
+}
+
+output "resource_prefix" {
+  description = "The resource naming prefix used"
+  value       = local.name_prefix
+}
+
+output "alb_dns_name" {
+  description = "The DNS name of the Application Load Balancer"
+  value       = aws_lb.api_alb.dns_name
+}
+
+output "alb_security_group_id" {
+  description = "The ID of the security group attached to the ALB."
+  value       = aws_security_group.alb_sg.id
 }

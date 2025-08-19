@@ -27,8 +27,8 @@ import 'reactflow/dist/style.css';
 import { Menu, Item, useContextMenu } from "react-contexify";
 import "react-contexify/dist/ReactContexify.css";
 
-import apiClient from '@/lib/apiClient';
-import LlmService from '@/lib/llmService';
+import apiClient from '@/utils/apiClient';
+import LlmService from '@/utils/llmService';
 import { 
     ProjectRequirementsResponse, 
     UserFlow, 
