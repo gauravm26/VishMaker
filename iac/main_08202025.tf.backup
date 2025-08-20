@@ -51,6 +51,8 @@ locals {
 
   # Common configuration from existing setup
   common_config = jsondecode(file("${path.module}/../app/backend/config/config.json"))
+
+
 }
 
 # ==================================================
@@ -92,6 +94,7 @@ data "aws_cloudfront_origin_request_policy" "Managed-AllViewer" {
   name = "Managed-AllViewer"
 }
 
+
 # ==================================================
 # ACM CERTIFICATES
 # ==================================================
@@ -120,14 +123,6 @@ resource "aws_acm_certificate" "api" {
     Name = "${local.name_prefix}-api-certificate"
   })
 }
-
-resource "aws_acm_certificate" "websocket" {
-  domain_name = "ws.vishmaker.com" # Minimal required argument
-  lifecycle {
-    ignore_changes = all
-  }
-}
-
 
 # Certificate validation records
 resource "aws_route53_record" "cert_validation" {
@@ -162,26 +157,6 @@ resource "aws_route53_record" "api_cert_validation" {
   zone_id         = data.aws_route53_zone.main.zone_id
 }
 
-resource "aws_route53_record" "websocket_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.websocket.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
-
-  lifecycle {
-    ignore_changes = all
-  }
-}
-
 # Certificate validations
 resource "aws_acm_certificate_validation" "main" {
   provider                = aws.acm_provider
@@ -193,15 +168,6 @@ resource "aws_acm_certificate_validation" "api" {
   provider                = aws.acm_provider
   certificate_arn         = aws_acm_certificate.api.arn
   validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
-}
-
-resource "aws_acm_certificate_validation" "websocket" {
-  provider                = aws.acm_provider
-  certificate_arn         = aws_acm_certificate.websocket.arn
-  validation_record_fqdns = [for record in aws_route53_record.websocket_cert_validation : record.fqdn]
-  lifecycle {
-    ignore_changes = all
-  }
 }
 
 # ==================================================
@@ -325,22 +291,20 @@ resource "aws_security_group" "alb_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  lifecycle { ignore_changes = all }
 }
 
 # ALB for API/WebSocket
-resource "aws_lb" "ws_alb" {
+resource "aws_lb" "api_alb" {
   name               = "${local.name_prefix}-api-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
   tags               = merge(local.common_tags, { Name = "${local.name_prefix}-api-alb" })
-  lifecycle { ignore_changes = all }
 }
 
 # Target group for API
-resource "aws_lb_target_group" "ws_tg" {
+resource "aws_lb_target_group" "api_tg" {
   name        = "${local.name_prefix}-api-tg"
   port        = 8000
   protocol    = "HTTP"
@@ -357,21 +321,11 @@ resource "aws_lb_target_group" "ws_tg" {
     timeout             = 5
     interval            = 30
   }
-
-  lifecycle { ignore_changes = all }
-}
-
-# Target group attachment
-resource "aws_lb_target_group_attachment" "api_attachment" {
-  target_group_arn = aws_lb_target_group.ws_tg.arn
-  target_id        = "i-0bfbb3ab79c2f1c78" # Your EC2 instance ID
-  port             = 8000
-  lifecycle { ignore_changes = all }
 }
 
 # ALB listener
 resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.ws_alb.arn
+  load_balancer_arn = aws_lb.api_alb.arn
   port              = "443"
   protocol          = "HTTPS"
 
@@ -379,127 +333,16 @@ resource "aws_lb_listener" "https" {
   certificate_arn = aws_acm_certificate_validation.api.certificate_arn
 
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "No matching rule found"
-      status_code  = "404"
-    }
-  }
-
-  lifecycle { ignore_changes = all }
-}
-
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.ws_alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "No matching rule found"
-      status_code  = "404"
-    }
-  }
-  lifecycle { ignore_changes = all }
-}
-
-resource "aws_lb_listener_rule" "websocket" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 100
-
-  action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.ws_tg.arn
+    target_group_arn = aws_lb_target_group.api_tg.arn
   }
-
-  condition {
-    path_pattern {
-      values = ["/ws*"]
-    }
-  }
-    lifecycle { ignore_changes = all }
 }
 
-resource "aws_lb_listener_rule" "health_check" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 200
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ws_tg.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/"]
-    }
-  }
-    lifecycle { ignore_changes = all }
-}
-
-# ==================================================
-# EC2 INSTANCE
-# ==================================================
-
-resource "aws_security_group" "ec2_sg" {
-  name        = "${local.name_prefix}-ec2-sg"
-  description = "Security group for EC2 instance"
-  vpc_id      = data.aws_vpc.default.id
-  tags        = merge(local.common_tags, { Name = "${local.name_prefix}-ec2-sg" })
-
-  ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  lifecycle { ignore_changes = all }
-}
-
-resource "aws_instance" "websocket_server" {
-  ami           = "ami-0c02fb55956c7d316" # Amazon Linux 2 AMI
-  instance_type = "t3.micro"
-  subnet_id     = data.aws_subnets.default.ids[0]
-
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
-
-  tags = merge(local.common_tags, { Name = "${local.name_prefix}-websocket-server" })
-  lifecycle { ignore_changes = all }
-}
-
-resource "aws_iam_role" "ec2_ecr_access_role" {
-  name = "${local.name_prefix}-ec2-ecr-access-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = local.common_tags
-  lifecycle { ignore_changes = all }
-}
-
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${local.name_prefix}-ec2-profile"
-  role = aws_iam_role.ec2_ecr_access_role.name
-  lifecycle { ignore_changes = all }
+# Target group attachment
+resource "aws_lb_target_group_attachment" "api_attachment" {
+  target_group_arn = aws_lb_target_group.api_tg.arn
+  target_id        = "i-0bfbb3ab79c2f1c78" # Your EC2 instance ID
+  port             = 8000
 }
 
 # ==================================================
@@ -1137,7 +980,7 @@ resource "aws_cloudfront_distribution" "main" {
   # ALB Origin for WebSocket and health checks
   origin {
     origin_id   = "ALB-API-Backend"
-    domain_name = aws_lb.ws_alb.dns_name
+    domain_name = aws_lb.api_alb.dns_name
     custom_origin_config {
       http_port              = 80
       https_port             = 443
@@ -1237,11 +1080,6 @@ resource "aws_cloudfront_distribution" "main" {
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-cloudfront-distribution"
   })
-
-  lifecycle {
-    # Tell Terraform to ignore just the origins block for now
-    ignore_changes = all
-  }
 }
 
 # ==================================================
@@ -1283,17 +1121,6 @@ resource "aws_route53_record" "api" {
     evaluate_target_health = true
   }
 }
-
-resource "aws_route53_record" "websocket" {
-  name = "ws.vishmaker.com"
-  type = "A"
-  zone_id = data.aws_route53_zone.main.zone_id
-  records = [aws_instance.websocket_server.public_ip]
-  ttl = 300
-  lifecycle { ignore_changes = all }
-}
-
-
 
 # ==================================================
 # END OF MAIN COMPREHENSIVE CONFIGURATION

@@ -200,7 +200,7 @@ output "resource_prefix" {
 
 output "alb_dns_name" {
   description = "The DNS name of the Application Load Balancer"
-  value       = aws_lb.api_alb.dns_name
+  value       = aws_lb.ws_alb.dns_name
 }
 
 output "alb_security_group_id" {
