@@ -1574,6 +1574,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 timestamp: new Date()
             };
             setChatMessages(prev => [...prev, userMessage]);
+
+            setTimeout(() => {}, 1000);
             
             // Add building message to chat
             const buildingMessage = {
@@ -1591,13 +1593,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             if (!buildContract) {
                 throw new Error('Failed to generate build contract');
             }
-            
-            // Update the building message to show completion
-            setChatMessages(prev => prev.map(msg => 
-                msg.id === buildingMessage.id 
-                    ? { ...msg, content: 'Contract built ✅' }
-                    : msg
-            ));
             
             // Add the contract message to chat
             const contractMessage = {
@@ -1738,9 +1733,44 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`]);
     }, []);
 
+    // Generate standardized payload for VishCoder communication
+    const generateVishCoderPayload = useCallback((
+        type: 'build_feature' | 'question_to_ai' | 'clarification_needed_from_user' | 'status_update' | 'heartbeat',
+        actor: 'System' | 'User' | 'Coder',
+        status: 'Initiated' | 'InProgress' | 'Completed' | 'Failed' | 'Error',
+        payload: any,
+        respondingToMessageId?: string,
+        respondingToActor?: 'System' | 'User' | 'Coder'
+    ) => {
+        const messageId = crypto.randomUUID();
+        const threadId = localStorage.getItem('current_thread_id') || crypto.randomUUID();
+        
+        // Store thread ID for future messages
+        if (!localStorage.getItem('current_thread_id')) {
+            localStorage.setItem('current_thread_id', threadId);
+        }
+        
+        return {
+            version: "1.0",
+            messageId: messageId,
+            threadId: threadId,
+            actor: actor,
+            type: type,
+            status: status,
+            timestamp: new Date().toISOString(),
+            origin: {
+                originMessageId: localStorage.getItem('origin_message_id') || messageId,
+                originActor: actor,
+                respondingToMessageId: respondingToMessageId || null,
+                respondingToActor: respondingToActor || null
+            },
+            payload: payload
+        };
+    }, []);
+
     // Handle AI chat
     const handleAiChat = useCallback(async () => {
-        if (!agentInput.trim() || agentProcessing) return;
+        if (!agentInput.trim() || agentProcessing || !agentSocket || agentSocket.readyState !== WebSocket.OPEN) return;
         
         const userMessage = agentInput.trim();
         setAgentInput('');
@@ -1755,20 +1785,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
         setChatMessages(prev => [...prev, userMsg]);
         
-        // Simulate AI response (in a real app, this would call an AI service)
-        setTimeout(() => {
-            const aiResponse = {
-                id: `ai-${Date.now()}`,
-                type: 'assistant' as const,
-                content: `I understand you're asking about: "${userMessage}". This is a simulated AI response. In a real implementation, this would connect to an AI service to provide intelligent assistance with your contract and requirements.`,
-                timestamp: new Date()
-            };
-            setChatMessages(prev => [...prev, aiResponse]);
-            setAgentProcessing(false);
-        }, 1000);
+        // Create standardized payload for AI chat
+        const aiChatPayload = generateVishCoderPayload(
+            'question_to_ai',
+            'User',
+            'Initiated',
+            {
+                message: {
+                    question_text: userMessage,
+                    response_text: null
+                }
+            },
+            undefined,
+            undefined
+        );
         
-        addTerminalLog(`💬 AI Chat: User asked "${userMessage}"`);
-    }, [agentInput, agentProcessing, addTerminalLog]);
+        // Send via WebSocket
+        agentSocket.send(JSON.stringify(aiChatPayload));
+        
+        addTerminalLog(`💬 AI Chat: Sent question to VishCoder: "${userMessage}"`);
+    }, [agentInput, agentProcessing, agentSocket, addTerminalLog, generateVishCoderPayload]);
 
     // Send chat message
     const sendChatMessage = useCallback(async (message: string) => {
@@ -1915,6 +1951,105 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 let logClass = 'log-system';
                 let content = '';
 
+                // Handle standardized messages from VishCoder
+                if (data.type === 'build_feature') {
+                    if (data.actor === 'Coder') {
+                        // Response from VishCoder for build feature request
+                        if (data.status === 'InProgress') {
+                            addTerminalLog('📥 Build feature request received by VishCoder');
+                            setAgentStatus('Build feature request received by VishCoder');
+                            
+                            // Add message to chat
+                            const contractReceivedMessage = {
+                                id: `contract-received-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: '📥 Build feature request received by VishCoder. Processing started...',
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, contractReceivedMessage]);
+                            
+                        } else if (data.status === 'Completed') {
+                            // Contract processing completed
+                            addTerminalLog('✅ Build feature processing completed by VishCoder');
+                            setAgentStatus('Build feature processing completed');
+                            
+                            // Add completion message to chat
+                            const contractCompletedMessage = {
+                                id: `contract-completed-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: '✅ Build feature processing completed by VishCoder!',
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, contractCompletedMessage]);
+                            
+                            setAgentProcessing(false);
+                        } else if (data.status === 'Failed' || data.status === 'Error') {
+                            // Contract processing error
+                            const errorMsg = data.payload?.error || data.payload?.message || 'Unknown error';
+                            addTerminalLog(`❌ Build feature processing error: ${errorMsg}`);
+                            setAgentStatus('Build feature processing failed');
+                            
+                            // Add error message to chat
+                            const contractErrorMessage = {
+                                id: `contract-error-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: `❌ Build feature processing failed: ${errorMsg}`,
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, contractErrorMessage]);
+                            
+                            setAgentProcessing(false);
+                        }
+                    }
+                }
+                
+                // Handle AI chat responses from VishCoder
+                if (data.type === 'question_to_ai') {
+                    if (data.actor === 'Coder') {
+                        // AI response from VishCoder
+                        const responseText = data.payload?.message?.response_text || data.payload?.response || 'Received response from VishCoder';
+                        const aiResponse = {
+                            id: `ai-${Date.now()}`,
+                            type: 'assistant' as const,
+                            content: responseText,
+                            timestamp: new Date()
+                        };
+                        setChatMessages(prev => [...prev, aiResponse]);
+                        setAgentProcessing(false);
+                        
+                        addTerminalLog('💬 AI Chat: Received response from VishCoder');
+                    }
+                }
+                
+                // Handle status updates
+                if (data.type === 'status_update') {
+                    if (data.actor === 'Coder') {
+                        addTerminalLog(`📊 Status Update: ${data.payload?.message || 'Status updated'}`);
+                        setAgentStatus(data.payload?.message || 'Status updated');
+                    }
+                }
+                
+                // Handle clarification requests
+                if (data.type === 'clarification_needed_from_user') {
+                    if (data.actor === 'Coder') {
+                        const clarificationText = data.payload?.message?.question_text || 'Clarification needed from user';
+                        const clarificationMessage = {
+                            id: `clarification-${Date.now()}`,
+                            type: 'assistant' as const,
+                            content: `❓ Clarification needed: ${clarificationText}`,
+                            timestamp: new Date(),
+                            isContract: false
+                        };
+                        setChatMessages(prev => [...prev, clarificationMessage]);
+                        
+                        addTerminalLog('❓ VishCoder needs clarification from user');
+                    }
+                }
+
+                // Handle regular AI agent messages (legacy support)
                 if(data.source === 'manager') logClass = 'log-manager';
                 if(data.source === 'coder') logClass = 'log-coder';
                 if(data.error) logClass = 'log-error';
@@ -2511,25 +2646,84 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             <div className="flex items-center space-x-2">
                                 <button
                                     onClick={() => {
-                                        // Here you would send the contract to VishCoder
+                                        // Send the contract to VishCoder via WebSocket
                                         console.log('Sending contract to VishCoder...');
                                         addTerminalLog('🚀 Sending contract to VishCoder for processing...');
                                         
-                                        // Add confirmation message to chat
-                                        const confirmationMessage = {
-                                            id: `confirmation-${Date.now()}`,
-                                            type: 'assistant' as const,
-                                            content: '✅ Contract sent to VishCoder.',
-                                            timestamp: new Date(),
-                                            isContract: false
-                                        };
-                                        setChatMessages(prev => [...prev, confirmationMessage]);
+                                        // Get the contract data from the current message
+                                        const contractData = chatMessages
+                                            .filter(msg => msg.isContract && contractPopups.has(msg.id))
+                                            .map(msg => msg.contractData)[0];
                                         
-                                        setContractPopups(new Set());
+                                        if (contractData && agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                                            // Create the standardized payload for VishCoder
+                                            const vishCoderPayload = generateVishCoderPayload(
+                                                'build_feature',
+                                                'System',
+                                                'Initiated',
+                                                {
+                                                    contract: contractData
+                                                },
+                                                undefined,
+                                                undefined
+                                            );
+                                            
+                                            // Store origin message ID for this build feature request
+                                            localStorage.setItem('origin_message_id', vishCoderPayload.messageId);
+                                            
+                                            // Send via WebSocket
+                                            agentSocket.send(JSON.stringify(vishCoderPayload));
+                                            
+                                            // Add confirmation message to chat
+                                            const confirmationMessage = {
+                                                id: `confirmation-${Date.now()}`,
+                                                type: 'assistant' as const,
+                                                content: '✅ Contract sent to VishCoder.',
+                                                timestamp: new Date(),
+                                                isContract: false
+                                            };
+                                            setChatMessages(prev => [...prev, confirmationMessage]);
+                                            
+                                            addTerminalLog('📡 Contract payload sent via WebSocket to VishCoder');
+                                            setContractPopups(new Set());
+                                        } else if (!agentSocket || agentSocket.readyState !== WebSocket.OPEN) {
+                                            // WebSocket not connected - show error
+                                            const errorMessage = {
+                                                id: `error-${Date.now()}`,
+                                                type: 'assistant' as const,
+                                                content: '❌ Failed to send contract: WebSocket not connected to VishCoder.',
+                                                timestamp: new Date(),
+                                                isContract: false
+                                            };
+                                            setChatMessages(prev => [...prev, errorMessage]);
+                                            
+                                            addTerminalLog('❌ WebSocket connection to VishCoder not available');
+                                            setError('WebSocket connection to VishCoder not available. Please ensure the connection is established.');
+                                        } else {
+                                            // No contract data found
+                                            const errorMessage = {
+                                                id: `error-${Date.now()}`,
+                                                type: 'assistant' as const,
+                                                content: '❌ Failed to send contract: No contract data found.',
+                                                timestamp: new Date(),
+                                                isContract: false
+                                            };
+                                            setChatMessages(prev => [...prev, errorMessage]);
+                                            
+                                            addTerminalLog('❌ No contract data found to send');
+                                        }
                                     }}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                                    disabled={!agentSocket || agentSocket.readyState !== WebSocket.OPEN}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    🚀 Send to VishCoder
+                                    {!agentSocket || agentSocket.readyState !== WebSocket.OPEN ? (
+                                        <span className="flex items-center space-x-2">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            <span>Connecting...</span>
+                                        </span>
+                                    ) : (
+                                        '🚀 Send to VishCoder'
+                                    )}
                                 </button>
                                 <button
                                     onClick={() => setContractPopups(new Set())}
