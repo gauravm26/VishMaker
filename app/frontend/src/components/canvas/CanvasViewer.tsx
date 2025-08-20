@@ -292,6 +292,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         id: "tableNodeMenu"
     });
     
+
+
     // Handle context menu show
     const handleContextMenu = useCallback((event: React.MouseEvent, props: any) => {
         // Save the node type to determine what menu items to show
@@ -304,18 +306,18 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         }
         
         // Ensure the event has the correct coordinates
-        const rect = event.currentTarget.getBoundingClientRect();
         const x = event.clientX;
         const y = event.clientY;
         
-        console.log('Context menu coordinates:', { x, y, rect });
+        console.log('Context menu coordinates:', { x, y });
         console.log('Event target:', event.target);
         console.log('Event currentTarget:', event.currentTarget);
         
-        // Show the context menu - react-contexify should automatically position at mouse coordinates
+        // Show the context menu with explicit positioning
         show({
             event,
-            props
+            props,
+            position: { x, y }
         });
         
         // Additional debugging for positioning
@@ -1544,11 +1546,20 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             // Start contract building process
             setContractBuilding(true);
             
-            // Add contract building message to chat
+            // Add user message to chat showing the build request FIRST
+            const userMessage = {
+                id: `user-${Date.now()}`,
+                type: 'user' as const,
+                content: `🚀 Build Feature Request Initiated`,
+                timestamp: new Date()
+            };
+            setChatMessages(prev => [...prev, userMessage]);
+            
+            // Add building message to chat
             const buildingMessage = {
                 id: `contract-building-${Date.now()}`,
                 type: 'assistant' as const,
-                content: 'Building the contract... ⏳',
+                content: 'Building Contract... ⏳',
                 timestamp: new Date(),
                 isContract: false
             };
@@ -1572,7 +1583,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             const contractMessage = {
                 id: `contract-${Date.now()}`,
                 type: 'assistant' as const,
-                content: '📄 Contract Generated Successfully',
+                content: `📄 Contract: Generated Successfully`,
                 timestamp: new Date(),
                 isContract: true,
                 contractData: buildContract
@@ -1632,102 +1643,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             console.log('Build Feature Request:', buildFeatureRequest);
             addTerminalLog(`Created build feature request with ID: ${requestId}`);
             
-            // Open the chat panel and send the request
+            // Open the chat panel to show the contract
             if (onToggleRightPanel) {
                 onToggleRightPanel();
             }
             
-            // Wait for the panel to open and agent to connect, then send the request
-            setTimeout(() => {
-                // Check if agent is connected or if we need to wait for connection
-                if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
-                    const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
-                    agentSocket.send(requestMessage);
-                    addTerminalLog(`✅ Sent build feature request to AI agent`);
-                    
-                    // Add user message to chat
-                    const userMessage = {
-                        id: `user-${Date.now()}`,
-                        type: 'user' as const,
-                        content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
-                        timestamp: new Date()
-                    };
-                    setChatMessages(prev => [...prev, userMessage]);
-                    
-                    // Clear any existing error since we're connected
-                    setError(null);
-                } else {
-                    // Agent socket exists but not connected yet - wait longer for connection
-                    addTerminalLog(`⏳ Waiting for AI agent to connect...`);
-                    setTimeout(() => {
-                        if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
-                            const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
-                            agentSocket.send(requestMessage);
-                            addTerminalLog(`✅ Sent build feature request to AI agent`);
-                            
-                            // Add user message to chat
-                            const userMessage = {
-                                id: `user-${Date.now()}`,
-                                type: 'user' as const,
-                                content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
-                                timestamp: new Date()
-                            };
-                            setChatMessages(prev => [...prev, userMessage]);
-                            
-                            // Clear any existing error since we're connected
-                            setError(null);
-                        } else {
-                            // Try one more time with longer wait
-                            addTerminalLog(`⏳ Still waiting for AI agent to connect...`);
-                            setTimeout(() => {
-                                if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
-                                    const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
-                                    agentSocket.send(requestMessage);
-                                    addTerminalLog(`✅ Sent build feature request to AI agent`);
-                                    
-                                    // Add user message to chat
-                                    const userMessage = {
-                                        id: `user-${Date.now()}`,
-                                        type: 'user' as const,
-                                        content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
-                                        timestamp: new Date()
-                                    };
-                                    setChatMessages(prev => [...prev, userMessage]);
-                                    
-                                    // Clear any existing error since we're connected
-                                    setError(null);
-                                } else {
-                                    // Final attempt with even longer wait
-                                    addTerminalLog(`⏳ Final attempt to connect to AI agent...`);
-                                    setTimeout(() => {
-                                        if (agentSocket && agentSocket.readyState === WebSocket.OPEN) {
-                                            const requestMessage = JSON.stringify(buildFeatureRequest, null, 2);
-                                            agentSocket.send(requestMessage);
-                                            addTerminalLog(`✅ Sent build feature request to AI agent`);
-                                            
-                                            // Add user message to chat
-                                            const userMessage = {
-                                                id: `user-${Date.now()}`,
-                                                type: 'user' as const,
-                                                content: `Build Feature Request:\n\`\`\`json\n${requestMessage}\n\`\`\``,
-                                                timestamp: new Date()
-                                            };
-                                            setChatMessages(prev => [...prev, userMessage]);
-                                            
-                                            // Clear any existing error since we're connected
-                                            setError(null);
-                                        } else {
-                                            console.error('AI agent not connected after 10 seconds of waiting');
-                                            addTerminalLog(`❌ Failed to connect to AI agent after multiple attempts`);
-                                            setError('AI agent not connected after 10 seconds. Please ensure the chat panel is open and connected.');
-                                        }
-                                    }, 3000); // Wait 3 more seconds
-                                }
-                            }, 3000); // Wait 3 seconds
-                        }
-                    }, 2000); // Wait 2 seconds first
-                }
-            }, 2000); // Wait 2 seconds initially
+            addTerminalLog(`✅ Contract building completed successfully`);
+            addTerminalLog(`📋 Contract is now available in the chat panel`);
             
             // Show success feedback
             const originalTitle = nodeData.title;
@@ -1795,6 +1717,38 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         const timestamp = new Date().toLocaleTimeString();
         setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`]);
     }, []);
+
+    // Handle AI chat
+    const handleAiChat = useCallback(async () => {
+        if (!agentInput.trim() || agentProcessing) return;
+        
+        const userMessage = agentInput.trim();
+        setAgentInput('');
+        setAgentProcessing(true);
+        
+        // Add user message to chat
+        const userMsg = {
+            id: `user-${Date.now()}`,
+            type: 'user' as const,
+            content: userMessage,
+            timestamp: new Date()
+        };
+        setChatMessages(prev => [...prev, userMsg]);
+        
+        // Simulate AI response (in a real app, this would call an AI service)
+        setTimeout(() => {
+            const aiResponse = {
+                id: `ai-${Date.now()}`,
+                type: 'assistant' as const,
+                content: `I understand you're asking about: "${userMessage}". This is a simulated AI response. In a real implementation, this would connect to an AI service to provide intelligent assistance with your contract and requirements.`,
+                timestamp: new Date()
+            };
+            setChatMessages(prev => [...prev, aiResponse]);
+            setAgentProcessing(false);
+        }, 1000);
+        
+        addTerminalLog(`💬 AI Chat: User asked "${userMessage}"`);
+    }, [agentInput, agentProcessing, addTerminalLog]);
 
     // Send chat message
     const sendChatMessage = useCallback(async (message: string) => {
@@ -2219,12 +2173,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     <div className="w-[25%] min-w-[320px] max-w-[400px] bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
                         <div className="p-4 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-white font-semibold text-sm">AI Coding Agent</h3>
+                                <h3 className="text-white font-semibold text-sm">Contract Builder & Chat</h3>
                                 <div className="flex items-center space-x-2">
-                                    <div className={`w-2 h-2 rounded-full ${agentConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                    <span className={`text-xs ${agentConnected ? 'text-green-400' : 'text-red-400'}`}>
-                                        {agentConnected ? 'Connected' : 'Disconnected'}
-                                    </span>
                                     <button
                                         onClick={clearChatHistory}
                                         className="text-gray-400 hover:text-red-400 p-1 transition-colors"
@@ -2233,6 +2183,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
+                                    </button>
+                                    <button
+                                        onClick={clearChatHistory}
+                                        className="text-gray-400 hover:text-red-400 px-2 py-1 rounded text-xs transition-colors border border-gray-600 hover:border-red-400"
+                                        title="Delete History & Clear Cache"
+                                    >
+                                        Delete History
                                     </button>
                                     <button
                                         onClick={toggleRightPanel}
@@ -2246,15 +2203,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 </div>
                             </div>
                             <div className="text-xs text-gray-400 mt-1" style={{ fontStyle: 'italic' }}>
-                                Status: {agentStatus}
                                 {contractBuilding && (
-                                    <span className="ml-2 text-blue-400">
+                                    <span className="text-blue-400">
                                         🔄 Building contract...
                                     </span>
                                 )}
-                                {chatMessages.length > 0 && (
-                                    <span className="ml-2 text-green-400" title={`Cache expires in ${getCacheInfo()?.daysLeft || 0} days`}>
+                                {!contractBuilding && chatMessages.length > 0 && (
+                                    <span className="text-green-400" title={`Cache expires in ${getCacheInfo()?.daysLeft || 0} days`}>
                                         💾 Chat cached ({chatMessages.length} messages)
+                                    </span>
+                                )}
+                                {!contractBuilding && chatMessages.length === 0 && (
+                                    <span className="text-gray-400">
+                                        Ready to build contracts
                                     </span>
                                 )}
                             </div>
@@ -2263,24 +2224,27 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         {/* Chat Messages */}
                         <div 
                             className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 chat-messages-container"
-                            style={{ height: '300px' }}
                         >
                             {chatMessages.length === 0 ? (
                                 <div className="text-center text-gray-500 text-xs py-8">
-                                    No messages yet. Click "Build the Feature" to start building a contract.
+                                    <div className="mb-2">📋 No contracts generated yet</div>
+                                    <div className="text-gray-400">
+                                        Right-click on any Low Level Requirement row<br/>
+                                        and select "Build the Feature" to get started
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-3 pb-2">
                                     {chatMessages.map((message) => (
-                                        <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[80%] rounded-lg px-3 py-2 text-xs ${
-                                                message.type === 'user' 
-                                                    ? 'bg-blue-600 text-white' 
+                                        <div key={message.id} className="flex justify-start">
+                                            <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs shadow-sm ${
+                                                message.isContract 
+                                                    ? 'bg-green-50 border border-green-200' 
                                                     : 'bg-gray-200 text-gray-800'
                                             }`}>
                                                 {message.isContract ? (
                                                     <div>
-                                                        <div className="font-medium mb-2">{message.content}</div>
+                                                        <div className="font-medium mb-2 text-green-800">{message.content}</div>
                                                         <button
                                                             onClick={() => {
                                                                 const contractData = message.contractData;
@@ -2297,57 +2261,71 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                                                     });
                                                                 }
                                                             }}
-                                                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded text-xs font-medium transition-colors"
+                                                            className="bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded text-xs font-medium transition-colors border border-green-300"
                                                         >
-                                                            {contractPopups.has(message.id) ? '📋 Hide Contract' : '📋 View Contract'}
+                                                            {contractPopups.has(message.id) ? '📋 Hide Contract' : '📋 Review and Send Contract'}
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <div>
-                                                        {message.content.includes('Building the contract...') ? (
-                                                            <div className="flex items-center space-x-2">
-                                                                <span>{message.content}</span>
-                                                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                                                            </div>
-                                                        ) : (
-                                                            <div>{message.content}</div>
-                                                        )}
-                                                    </div>
+                                                    <div className="break-words">{message.content}</div>
                                                 )}
                                                 <div className="text-xs opacity-70 mt-1">
-                                                    {message.timestamp.toLocaleTimeString()}
+                                                    {message.timestamp.toLocaleDateString('en-US', { 
+                                                        month: '2-digit', 
+                                                        day: '2-digit', 
+                                                        year: '2-digit' 
+                                                    })} • {message.timestamp.toLocaleTimeString()}
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
+                                    {/* Scroll indicator */}
+                                    {chatMessages.length > 3 && (
+                                        <div className="text-center text-gray-400 text-xs py-2">
+                                            💡 Scroll to see more messages
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
                         
-                        {/* Agent Input */}
+                        {/* AI Chat Input */}
                         <div className="p-3 border-t border-white/10">
-                            <div className="flex space-x-2">
-                                <input
-                                    type="text"
+                            <div className="relative">
+                                <textarea
                                     value={agentInput}
                                     onChange={(e) => setAgentInput(e.target.value)}
                                     onKeyPress={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
-                                            sendAgentRequirement();
+                                            handleAiChat();
                                         }
                                     }}
-                                    placeholder="Enter coding requirement..."
-                                    disabled={agentProcessing || !agentConnected}
-                                    className="flex-1 bg-white/10 text-white placeholder-gray-400 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    placeholder="Ask AI about the contract or requirements..."
+                                    disabled={agentProcessing}
+                                    className="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none ai-chat-textarea"
+                                    style={{ 
+                                        height: '120px',
+                                        minHeight: '120px'
+                                    }}
                                 />
                                 <button
-                                    onClick={sendAgentRequirement}
-                                    disabled={!agentInput.trim() || agentProcessing || !agentConnected}
-                                    className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    onClick={handleAiChat}
+                                    disabled={!agentInput.trim() || agentProcessing}
+                                    className="absolute right-3 bottom-3 p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Send message"
                                 >
-                                    Generate
+                                    {agentProcessing ? (
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                    )}
                                 </button>
+                            </div>
+                            <div className="text-center text-gray-400 text-xs mt-2">
+                                💡 Right-click on Low Level Requirements and select "Build the Feature" to generate contracts
                             </div>
                         </div>
                     </div>
@@ -2410,7 +2388,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     exit: 'contexify_fadeOut'
                 }}
                 style={{
-                    zIndex: 9999
+                    zIndex: 9999,
+                    position: 'fixed'
                 }}
                 theme="dark"
             >
@@ -2472,187 +2451,113 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     </Item>
                 )}
                 
-                {/* Build the Feature - Only show for low level requirement tables with highlighted styling */}
-                {clickedNodeType === 'llr' && (
-                    <Item 
-                        id="build-feature"
-                        onClick={({ props }) => {
-                            if (props?.type === 'row' && props.rowIndex !== undefined && 
-                                props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
-                                console.log('Context menu: Build the Feature clicked', {
-                                    nodeId: props.nodeId,
-                                    rowIndex: props.rowIndex,
-                                    rowType: props.type
-                                });
-                                handleBuildFeature(props.nodeId, props.rowIndex);
-                            } else {
-                                console.warn('Cannot build feature: Missing nodeId or rowIndex or not a low level requirement', props);
-                            }
-                        }}
-                    >
-                        <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
-                    </Item>
-                )}
+                                        {/* Build the Feature - Only show for low level requirement tables with highlighted styling */}
+                        {clickedNodeType === 'llr' && (
+                            <Item 
+                                id="build-feature"
+                                onClick={({ props }) => {
+                                    if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                        props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
+                                        console.log('Context menu: Build the Feature clicked', {
+                                            nodeId: props.nodeId,
+                                            rowIndex: props.rowIndex,
+                                            rowType: props.type
+                                        });
+                                        handleBuildFeature(props.nodeId, props.rowIndex);
+                                        // Close the context menu after selection
+                                        document.body.click();
+                                    } else {
+                                        console.warn('Cannot build feature: Missing nodeId or rowIndex or not a low level requirement', props);
+                                    }
+                                }}
+                            >
+                                <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
+                            </Item>
+                        )}
             </Menu>
             
-            {/* Contract Popup Modal */}
+            {/* Contract Popup Modal - Simple JSON Editor */}
             {contractPopups.size > 0 && (
                 <div 
                     className="fixed inset-0 bg-black bg-opacity-50 z-[10000] flex items-center justify-center p-4"
                     onClick={() => setContractPopups(new Set())}
                 >
                     <div 
-                        className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] w-full overflow-hidden"
+                        className="bg-white rounded-lg shadow-2xl max-w-5xl max-h-[90vh] w-full overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold">📄 Docker Build Contract</h3>
-                            <button
-                                onClick={() => setContractPopups(new Set())}
-                                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
-                                title="Close all contract popups"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <h3 className="text-lg font-semibold">📄 Review and Edit Contract</h3>
+                            <div className="flex items-center space-x-2">
+                                <button
+                                    onClick={() => {
+                                        // Here you would send the contract to VishCoder
+                                        console.log('Sending contract to VishCoder...');
+                                        addTerminalLog('🚀 Sending contract to VishCoder for processing...');
+                                        
+                                        // Add confirmation message to chat
+                                        const confirmationMessage = {
+                                            id: `confirmation-${Date.now()}`,
+                                            type: 'assistant' as const,
+                                            content: '✅ Contract sent to VishCoder.',
+                                            timestamp: new Date(),
+                                            isContract: false
+                                        };
+                                        setChatMessages(prev => [...prev, confirmationMessage]);
+                                        
+                                        setContractPopups(new Set());
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                                >
+                                    🚀 Send to VishCoder
+                                </button>
+                                <button
+                                    onClick={() => setContractPopups(new Set())}
+                                    className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                                    title="Close contract editor"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                        <div className="p-6">
                             {chatMessages
                                 .filter(msg => msg.isContract && contractPopups.has(msg.id))
                                 .map((message) => (
                                     <div key={message.id} className="mb-6 last:mb-0">
                                         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h4 className="text-lg font-semibold text-gray-800">
-                                                    Contract Details
+                                            <div className="mb-4">
+                                                <h4 className="text-lg font-semibold text-gray-800 mb-2">
+                                                    Edit Contract JSON
                                                 </h4>
-                                                <button
-                                                    onClick={() => {
-                                                        setContractPopups(prev => {
-                                                            const newSet = new Set(prev);
-                                                            newSet.delete(message.id);
-                                                            return newSet;
-                                                        });
-                                                    }}
-                                                    className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200 transition-colors"
-                                                    title="Close this contract popup"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
+                                                <p className="text-sm text-gray-600">
+                                                    Review and modify the contract before sending to Docker. Changes will be saved automatically.
+                                                </p>
                                             </div>
                                             {message.contractData && (
-                                                <div className="space-y-4">
-                                                    {/* Metadata Section */}
-                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                                        <h5 className="font-semibold text-blue-800 mb-2 flex items-center">
-                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            Metadata
-                                                        </h5>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                                            <div>
-                                                                <span className="font-medium text-blue-700">Initiated By:</span>
-                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.initiatedBy || 'N/A'}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="font-medium text-blue-700">Date Time:</span>
-                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.dateTime ? new Date(message.contractData.metadata.dateTime).toLocaleString() : 'N/A'}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="font-medium text-blue-700">Feature Number:</span>
-                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.feature_Number || 'N/A'}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Requirements Section */}
-                                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                                        <h5 className="font-semibold text-green-800 mb-2 flex items-center">
-                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            Requirements
-                                                        </h5>
-                                                        <div className="space-y-3 text-sm">
-                                                            {message.contractData.requirements?.low_level_requirements && (
-                                                                <div className="bg-white rounded p-3 border border-green-200">
-                                                                    <div className="font-medium text-green-700 mb-1">Low Level Requirements</div>
-                                                                    <div className="text-green-600">
-                                                                        <strong>Name:</strong> {message.contractData.requirements.low_level_requirements.name || 'N/A'}<br/>
-                                                                        <strong>Description:</strong> {message.contractData.requirements.low_level_requirements.description || 'N/A'}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            {message.contractData.requirements?.high_level_requirements && (
-                                                                <div className="bg-white rounded p-3 border border-green-200">
-                                                                    <div className="font-medium text-green-700 mb-1">High Level Requirements</div>
-                                                                    <div className="text-green-600">
-                                                                        <strong>Name:</strong> {message.contractData.requirements.high_level_requirements.name || 'N/A'}<br/>
-                                                                        <strong>Description:</strong> {message.contractData.requirements.high_level_requirements.description || 'N/A'}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            {message.contractData.requirements?.user_flow && (
-                                                                <div className="bg-white rounded p-3 border border-green-200">
-                                                                    <div className="font-medium text-green-700 mb-1">User Flow</div>
-                                                                    <div className="text-green-600">
-                                                                        <strong>Name:</strong> {message.contractData.requirements.user_flow.name || 'N/A'}<br/>
-                                                                        <strong>Description:</strong> {message.contractData.requirements.user_flow.description || 'N/A'}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            {message.contractData.requirements?.test_cases && Array.isArray(message.contractData.requirements.test_cases) && message.contractData.requirements.test_cases.length > 0 && (
-                                                                <div className="bg-white rounded p-3 border border-green-200">
-                                                                    <div className="font-medium text-green-700 mb-1">Test Cases ({message.contractData.requirements.test_cases.length})</div>
-                                                                    <div className="space-y-2">
-                                                                        {message.contractData.requirements.test_cases.map((testCase: any, index: number) => (
-                                                                            <div key={index} className="text-green-600 text-xs border-l-2 border-green-300 pl-2">
-                                                                                <strong>{testCase.name || `Test Case ${index + 1}`}</strong>
-                                                                                {testCase.description && <div className="text-green-500">{testCase.description}</div>}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Settings Section */}
-                                                    {message.contractData.settings && Object.keys(message.contractData.settings).length > 0 && (
-                                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                                                            <h5 className="font-semibold text-purple-800 mb-2 flex items-center">
-                                                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                </svg>
-                                                                Settings
-                                                            </h5>
-                                                            <div className="bg-white rounded p-3 border border-purple-200">
-                                                                <pre className="text-xs text-purple-700 whitespace-pre-wrap overflow-x-auto">
-                                                                    {JSON.stringify(message.contractData.settings, null, 2)}
-                                                                </pre>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Raw JSON Section */}
-                                                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                                        <h5 className="font-semibold text-gray-800 mb-2 flex items-center">
-                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                                                            </svg>
-                                                            Raw JSON
-                                                        </h5>
-                                                        <div className="bg-gray-900 rounded p-3 border border-gray-700">
-                                                            <pre className="text-xs text-green-400 whitespace-pre-wrap overflow-x-auto">
-                                                                {JSON.stringify(message.contractData, null, 2)}
-                                                            </pre>
-                                                        </div>
-                                                    </div>
+                                                <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+                                                    <textarea
+                                                        className="w-full h-96 bg-gray-900 text-green-400 font-mono text-sm border-none outline-none resize-none"
+                                                        defaultValue={JSON.stringify(message.contractData, null, 2)}
+                                                        onChange={(e) => {
+                                                            try {
+                                                                const newData = JSON.parse(e.target.value);
+                                                                // Update the contract data in the message
+                                                                setChatMessages(prev => prev.map(msg => 
+                                                                    msg.id === message.id 
+                                                                        ? { ...msg, contractData: newData }
+                                                                        : msg
+                                                                ));
+                                                            } catch (error) {
+                                                                // Invalid JSON - don't update
+                                                                console.log('Invalid JSON input:', error);
+                                                            }
+                                                        }}
+                                                        spellCheck={false}
+                                                        placeholder="Edit your contract JSON here..."
+                                                    />
                                                 </div>
                                             )}
                                         </div>

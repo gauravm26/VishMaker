@@ -40,3 +40,125 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Context Menu Positioning Fixes */
+.contexify {
+  position: fixed !important;
+  z-index: 9999 !important;
+  transform: none !important;
+}
+
+.contexify_wrapper {
+  position: fixed !important;
+  z-index: 9999 !important;
+}
+
+.contexify_submenu {
+  position: fixed !important;
+  z-index: 9999 !important;
+}
+
+.contexify_item {
+  position: relative !important;
+}
+
+/* Ensure context menu appears above React Flow elements */
+.react-flow__container .contexify,
+.react-flow__viewport .contexify {
+  position: fixed !important;
+  z-index: 9999 !important;
+  transform: none !important;
+}
+
+/* Chat Messages Scrolling */
+.chat-messages-container {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+  /* Ensure proper viewport height handling */
+  box-sizing: border-box;
+  /* Responsive height adjustments */
+  height: 60vh;
+  min-height: 300px;
+  max-height: 70vh;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-height: 600px) {
+  .chat-messages-container {
+    height: 50vh;
+    min-height: 250px;
+    max-height: 60vh;
+  }
+}
+
+@media (max-height: 500px) {
+  .chat-messages-container {
+    height: 45vh;
+    min-height: 200px;
+    max-height: 55vh;
+  }
+}
+
+/* Responsive width adjustments for the right panel */
+@media (max-width: 1200px) {
+  .chat-messages-container {
+    height: 55vh;
+    min-height: 280px;
+    max-height: 65vh;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-messages-container {
+    height: 50vh;
+    min-height: 250px;
+    max-height: 60vh;
+  }
+}
+
+/* Responsive textarea height adjustments */
+@media (max-height: 800px) {
+  .ai-chat-textarea {
+    height: 100px !important;
+    min-height: 100px !important;
+  }
+}
+
+@media (max-height: 600px) {
+  .ai-chat-textarea {
+    height: 80px !important;
+    min-height: 80px !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .ai-chat-textarea {
+    height: 100px !important;
+    min-height: 100px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .ai-chat-textarea {
+    height: 80px !important;
+    min-height: 80px !important;
+  }
+}
+
+.chat-messages-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages-container::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 3px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
