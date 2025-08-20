@@ -1,4 +1,4 @@
-# File Difference Report - Wed Aug 20 14:05:33 CDT 2025
+# File Difference Report - Wed Aug 20 14:09:15 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -9,4 +9,60 @@
 README.md
 test.json
 
-Total file differences: 1
+## app
+### Missing Remotely:
+app/.DS_Store
+
+## app/backend
+### Missing Remotely:
+app/backend/.DS_Store
+
+## app/frontend
+### Missing Locally:
+app/frontend/.env.production
+app/frontend/.gitignore
+app/frontend/eslint.config.js
+app/frontend/index.html
+app/frontend/package.json
+app/frontend/postcss.config.js
+app/frontend/README.md
+app/frontend/tailwind.config.js
+app/frontend/tsconfig.app.json
+app/frontend/tsconfig.json
+app/frontend/tsconfig.node.json
+app/frontend/vite.config.d.ts
+app/frontend/vite.config.js
+app/frontend/vite.config.ts
+
+## app/frontend/src
+### Missing Locally:
+app/frontend/src/App.css
+app/frontend/src/App.tsx
+app/frontend/src/index.css
+app/frontend/src/main.tsx
+app/frontend/src/react-app-env.d.ts
+app/frontend/src/vite-env.d.ts
+
+## app/frontend/src/components
+### Missing Locally:
+app/frontend/src/components/Settings.tsx
+app/frontend/src/components/WaitlistForm.tsx
+
+## iac
+### Missing Locally:
+iac/import_existing_resources.sh
+iac/import_lambda_functions.sh
+iac/main_08202025.tf.backup
+iac/main_backup.tf.backup
+iac/main.tf
+iac/output.tf
+iac/terraform_08072025.tfstate.backup
+iac/terraform_08172025.tfstate.backup
+iac/terraform_08202025.tfstate.backup
+iac/terraform.tfstate
+iac/terraform.tfvars
+iac/terraform.tfvars.example
+iac/tfplan
+iac/variables.tf
+
+Total file differences: 10
