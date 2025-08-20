@@ -202,6 +202,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [chatLoading, setChatLoading] = useState<boolean>(false);
     const [contractBuilding, setContractBuilding] = useState<boolean>(false);
     const [expandedContracts, setExpandedContracts] = useState<Set<string>>(new Set());
+    const [contractPopups, setContractPopups] = useState<Set<string>>(new Set());
     
     // Chat history cache management
     const CHAT_CACHE_KEY = 'vishmaker_chat_history';
@@ -378,6 +379,18 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         
         return () => clearInterval(cleanupInterval);
     }, []);
+    
+    // Handle Escape key to close contract popups
+    useEffect(() => {
+        const handleEscapeKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && contractPopups.size > 0) {
+                setContractPopups(new Set());
+            }
+        };
+        
+        document.addEventListener('keydown', handleEscapeKey);
+        return () => document.removeEventListener('keydown', handleEscapeKey);
+    }, [contractPopups.size]);
     
     // Toggle table minimize/maximize state
     const toggleTableSize = useCallback((nodeId: string) => {
@@ -1559,7 +1572,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             const contractMessage = {
                 id: `contract-${Date.now()}`,
                 type: 'assistant' as const,
-                content: '📄 Contract: {contract.json}',
+                content: '📄 Contract Generated Successfully',
                 timestamp: new Date(),
                 isContract: true,
                 contractData: buildContract
@@ -2268,42 +2281,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                                 {message.isContract ? (
                                                     <div>
                                                         <div className="font-medium mb-2">{message.content}</div>
-                                                        {expandedContracts.has(message.id) ? (
-                                                            <div className="text-green-600 text-xs font-medium mb-2">
-                                                                ✅ Contract expanded
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => {
-                                                                    const contractData = message.contractData;
-                                                                    if (contractData) {
-                                                                        console.log('=== EXPANDED CONTRACT ===');
-                                                                        console.log(JSON.stringify(contractData, null, 2));
-                                                                        console.log('=== END EXPANDED CONTRACT ===');
-                                                                        
-                                                                        // Mark this contract as expanded
-                                                                        setExpandedContracts(prev => new Set(prev).add(message.id));
-                                                                        
-                                                                        // Update message to show expanded content
-                                                                        setChatMessages(prev => prev.map(msg => 
-                                                                            msg.id === message.id 
-                                                                                ? { ...msg, content: `📄 Contract:\n\`\`\`json\n${JSON.stringify(contractData, null, 2)}\n\`\`\`` }
-                                                                            : msg
-                                                                        ));
-                                                                    }
-                                                                }}
-                                                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded text-xs font-medium transition-colors"
-                                                            >
-                                                                📋 Expand JSON
-                                                            </button>
-                                                        )}
-                                                        {expandedContracts.has(message.id) && message.contractData && (
-                                                            <div className="bg-gray-100 p-3 rounded border text-xs font-mono overflow-x-auto">
-                                                                <pre className="whitespace-pre-wrap text-gray-800">
-                                                                    {JSON.stringify(message.contractData, null, 2)}
-                                                                </pre>
-                                                            </div>
-                                                        )}
+                                                        <button
+                                                            onClick={() => {
+                                                                const contractData = message.contractData;
+                                                                if (contractData) {
+                                                                    // Toggle popup for this contract
+                                                                    setContractPopups(prev => {
+                                                                        const newSet = new Set(prev);
+                                                                        if (newSet.has(message.id)) {
+                                                                            newSet.delete(message.id);
+                                                                        } else {
+                                                                            newSet.add(message.id);
+                                                                        }
+                                                                        return newSet;
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded text-xs font-medium transition-colors"
+                                                        >
+                                                            {contractPopups.has(message.id) ? '📋 Hide Contract' : '📋 View Contract'}
+                                                        </button>
                                                     </div>
                                                 ) : (
                                                     <div>
@@ -2497,6 +2494,174 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     </Item>
                 )}
             </Menu>
+            
+            {/* Contract Popup Modal */}
+            {contractPopups.size > 0 && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 z-[10000] flex items-center justify-center p-4"
+                    onClick={() => setContractPopups(new Set())}
+                >
+                    <div 
+                        className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] w-full overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between">
+                            <h3 className="text-lg font-semibold">📄 Docker Build Contract</h3>
+                            <button
+                                onClick={() => setContractPopups(new Set())}
+                                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-gray-700 transition-colors"
+                                title="Close all contract popups"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                            {chatMessages
+                                .filter(msg => msg.isContract && contractPopups.has(msg.id))
+                                .map((message) => (
+                                    <div key={message.id} className="mb-6 last:mb-0">
+                                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h4 className="text-lg font-semibold text-gray-800">
+                                                    Contract Details
+                                                </h4>
+                                                <button
+                                                    onClick={() => {
+                                                        setContractPopups(prev => {
+                                                            const newSet = new Set(prev);
+                                                            newSet.delete(message.id);
+                                                            return newSet;
+                                                        });
+                                                    }}
+                                                    className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200 transition-colors"
+                                                    title="Close this contract popup"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {message.contractData && (
+                                                <div className="space-y-4">
+                                                    {/* Metadata Section */}
+                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                                        <h5 className="font-semibold text-blue-800 mb-2 flex items-center">
+                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            Metadata
+                                                        </h5>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                                            <div>
+                                                                <span className="font-medium text-blue-700">Initiated By:</span>
+                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.initiatedBy || 'N/A'}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="font-medium text-blue-700">Date Time:</span>
+                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.dateTime ? new Date(message.contractData.metadata.dateTime).toLocaleString() : 'N/A'}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="font-medium text-blue-700">Feature Number:</span>
+                                                                <span className="ml-2 text-blue-600">{message.contractData.metadata?.feature_Number || 'N/A'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Requirements Section */}
+                                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                                        <h5 className="font-semibold text-green-800 mb-2 flex items-center">
+                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            Requirements
+                                                        </h5>
+                                                        <div className="space-y-3 text-sm">
+                                                            {message.contractData.requirements?.low_level_requirements && (
+                                                                <div className="bg-white rounded p-3 border border-green-200">
+                                                                    <div className="font-medium text-green-700 mb-1">Low Level Requirements</div>
+                                                                    <div className="text-green-600">
+                                                                        <strong>Name:</strong> {message.contractData.requirements.low_level_requirements.name || 'N/A'}<br/>
+                                                                        <strong>Description:</strong> {message.contractData.requirements.low_level_requirements.description || 'N/A'}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {message.contractData.requirements?.high_level_requirements && (
+                                                                <div className="bg-white rounded p-3 border border-green-200">
+                                                                    <div className="font-medium text-green-700 mb-1">High Level Requirements</div>
+                                                                    <div className="text-green-600">
+                                                                        <strong>Name:</strong> {message.contractData.requirements.high_level_requirements.name || 'N/A'}<br/>
+                                                                        <strong>Description:</strong> {message.contractData.requirements.high_level_requirements.description || 'N/A'}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {message.contractData.requirements?.user_flow && (
+                                                                <div className="bg-white rounded p-3 border border-green-200">
+                                                                    <div className="font-medium text-green-700 mb-1">User Flow</div>
+                                                                    <div className="text-green-600">
+                                                                        <strong>Name:</strong> {message.contractData.requirements.user_flow.name || 'N/A'}<br/>
+                                                                        <strong>Description:</strong> {message.contractData.requirements.user_flow.description || 'N/A'}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {message.contractData.requirements?.test_cases && Array.isArray(message.contractData.requirements.test_cases) && message.contractData.requirements.test_cases.length > 0 && (
+                                                                <div className="bg-white rounded p-3 border border-green-200">
+                                                                    <div className="font-medium text-green-700 mb-1">Test Cases ({message.contractData.requirements.test_cases.length})</div>
+                                                                    <div className="space-y-2">
+                                                                        {message.contractData.requirements.test_cases.map((testCase: any, index: number) => (
+                                                                            <div key={index} className="text-green-600 text-xs border-l-2 border-green-300 pl-2">
+                                                                                <strong>{testCase.name || `Test Case ${index + 1}`}</strong>
+                                                                                {testCase.description && <div className="text-green-500">{testCase.description}</div>}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Settings Section */}
+                                                    {message.contractData.settings && Object.keys(message.contractData.settings).length > 0 && (
+                                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                                            <h5 className="font-semibold text-purple-800 mb-2 flex items-center">
+                                                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                </svg>
+                                                                Settings
+                                                            </h5>
+                                                            <div className="bg-white rounded p-3 border border-purple-200">
+                                                                <pre className="text-xs text-purple-700 whitespace-pre-wrap overflow-x-auto">
+                                                                    {JSON.stringify(message.contractData.settings, null, 2)}
+                                                                </pre>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Raw JSON Section */}
+                                                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                                        <h5 className="font-semibold text-gray-800 mb-2 flex items-center">
+                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                                            </svg>
+                                                            Raw JSON
+                                                        </h5>
+                                                        <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                                                            <pre className="text-xs text-green-400 whitespace-pre-wrap overflow-x-auto">
+                                                                {JSON.stringify(message.contractData, null, 2)}
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                </div>
+            )}
             
             {/* Add custom styles for the Build Feature menu item */}
             <style>
