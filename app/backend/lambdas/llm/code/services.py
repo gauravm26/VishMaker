@@ -1066,6 +1066,7 @@ class LLMProcessingService:
             
             # Skip table headers and separators
             if self._is_table_header_or_separator(line):
+                print(f"🔍 DEBUG: Skipping line as header/separator: {line}")
                 continue
                 
             if '|' not in line:
@@ -1111,20 +1112,40 @@ class LLMProcessingService:
         Check if a line is a table header or separator that should be skipped.
         """
         
+        print(f"🔍 DEBUG: Checking if line is header/separator: {line}")
+        
         # Skip table headers (lines that start and end with | and contain mostly text)
         if line.startswith('|') and line.endswith('|'):
             # Check if it's a separator (mostly dashes, underscores, or pipes)
             content = line[1:-1].strip()  # Remove outer pipes
             if re.match(r'^[-|_]+$', content):
+                print(f"🔍 DEBUG: Line is separator")
                 return True
             # Check if it's a header row (contains words like "Category", "Specification", etc.)
+            # Only skip if it's actually a header, not if it contains actual data
             if any(word in content.lower() for word in ['category', 'specification', 'requirement', 'name', 'description', 'requirement category']):
+                print(f"🔍 DEBUG: Line contains header words: {content}")
+                # Additional check: if the line has substantial content (more than just header words), it's data
+                if len(content) > 50:  # If content is substantial, it's likely data, not just a header
+                    print(f"🔍 DEBUG: Line has substantial content ({len(content)} chars), treating as data")
+                    return False
+                # Check if this is just a header row (like "| Category | Requirements |")
+                # vs actual data (like "| UI Requirements | Display logout button...")
+                if '|' in content and len(content.split('|')) == 2:
+                    # If it has exactly 2 columns and both are short, it's likely a header
+                    columns = content.split('|')
+                    if all(len(col.strip()) < 30 for col in columns):
+                        print(f"🔍 DEBUG: Line has short columns, treating as header")
+                        return True
+                print(f"🔍 DEBUG: Line treated as header")
                 return True
         
         # Skip lines that are just separators
         if re.match(r'^[-|_]+$', line.strip()):
+            print(f"🔍 DEBUG: Line is separator pattern")
             return True
             
+        print(f"🔍 DEBUG: Line is NOT header/separator")
         return False
     
     def _validate_pipe_delimited_format(self, text: str) -> bool:

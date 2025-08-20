@@ -83,3 +83,19 @@ export interface BuildFeatureResponse {
   error?: string;
   test_metadata?: Record<string, any>;
 }
+
+// Docker build contract interface
+export interface DockerBuildContract {
+  metadata: {
+    initiatedBy: string;
+    dateTime: string;
+    feature_Number: string;
+  };
+  settings: Record<string, any>;
+  requirements: {
+    low_level_requirements: Record<string, any>;
+    test_cases: any[]; // Can be empty array or array of test case objects
+    high_level_requirements: Record<string, any>;
+    user_flow: Record<string, any>;
+  };
+}

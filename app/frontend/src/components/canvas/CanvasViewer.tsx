@@ -33,7 +33,8 @@ import {
     ProjectRequirementsResponse, 
     UserFlow, 
     BuildFeatureRequest, 
-    BuildFeatureResponse 
+    BuildFeatureResponse,
+    DockerBuildContract
 } from '@/types/project';
 import { CustomNode, TableNodeData, TableRowData, ColumnDef } from '@/types/canvas';
 import TableNode from './TableNode';
@@ -196,9 +197,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [logConnected, setLogConnected] = useState<boolean>(false);
     
     // Chat state
-    const [chatMessages, setChatMessages] = useState<Array<{id: string, type: 'user' | 'assistant', content: string, timestamp: Date}>>([]);
+    const [chatMessages, setChatMessages] = useState<Array<{id: string, type: 'user' | 'assistant', content: string, timestamp: Date, isContract?: boolean, contractData?: any}>>([]);
     const [chatInput, setChatInput] = useState<string>('');
     const [chatLoading, setChatLoading] = useState<boolean>(false);
+    const [contractBuilding, setContractBuilding] = useState<boolean>(false);
+    const [expandedContracts, setExpandedContracts] = useState<Set<string>>(new Set());
     
     // AI Agent state
     const [agentSocket, setAgentSocket] = useState<WebSocket | null>(null);
@@ -1179,32 +1182,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
     // Build requirements object by traversing the hierarchy
     const buildRequirementsObject = async (llrUiid: string, llrData: TableRowData, nodeData: any, nodeId: string) => {
-        const requirements = {
+        const requirements: any = {
             user_flow: {},
             high_level_requirements: {},
             low_level_requirements: {},
-            test_cases: {},
-            tech_stack: {
-                frontend_language: "TypeScript",
-                frontend_framework: "React (.tsx)",
-                css_framework: "Tailwind CSS",
-                backend_architecture: "Serverless Functions",
-                backend_language: "Python",
-                cloud_provider: "AWS",
-                infrastructure_as_code: "AWS CDK (Python)",
-                aws_services: [
-                    "API Gateway",
-                    "Lambda",
-                    "DynamoDB",
-                    "S3",
-                    "Cognito",
-                    "CloudWatch",
-                    "Step Functions",
-                    "IAM",
-                    "SSM Parameter Store",
-                    "Secrets Manager"
-                ]
-            }
+            test_cases: {}
         };
         
         try {
@@ -1409,8 +1391,53 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             console.log(`Row UIID: ${rowUiid}`);
             console.log(`Original data:`, rowData.originalData);
             
-            // Build the requirements object by traversing the hierarchy
+            // Start contract building process
+            setContractBuilding(true);
+            
+            // Add contract building message to chat
+            const buildingMessage = {
+                id: `contract-building-${Date.now()}`,
+                type: 'assistant' as const,
+                content: 'Building the contract... ⏳',
+                timestamp: new Date(),
+                isContract: false
+            };
+            setChatMessages(prev => [...prev, buildingMessage]);
+            
+            // Generate the build contract for Docker
+            const buildContract = await generateBuildContract(rowUiid, rowData, nodeData, nodeId);
+            
+            if (!buildContract) {
+                throw new Error('Failed to generate build contract');
+            }
+            
+            // Update the building message to show completion
+            setChatMessages(prev => prev.map(msg => 
+                msg.id === buildingMessage.id 
+                    ? { ...msg, content: 'Contract built ✅' }
+                    : msg
+            ));
+            
+            // Add the contract message to chat
+            const contractMessage = {
+                id: `contract-${Date.now()}`,
+                type: 'assistant' as const,
+                content: '📄 Contract: {contract.json}',
+                timestamp: new Date(),
+                isContract: true,
+                contractData: buildContract
+            };
+            setChatMessages(prev => [...prev, contractMessage]);
+            
+            addTerminalLog(`✅ Generated build contract for Docker with ${Object.keys(buildContract.requirements).length} requirement types`);
+            addTerminalLog(`📋 Contract includes: LLR=${(buildContract.requirements.low_level_requirements as any)?.name || 'N/A'}, HLR=${(buildContract.requirements.high_level_requirements as any)?.name || 'N/A'}, User Flow=${(buildContract.requirements.user_flow as any)?.name || 'N/A'}, Test Cases=${Array.isArray(buildContract.requirements.test_cases) ? buildContract.requirements.test_cases.length : 0}`);
+            addTerminalLog(`📄 Full contract logged to console for Docker processing`);
+            
+            // Get requirements object for tech_stack
             const requirementsObject = await buildRequirementsObject(rowUiid, rowData, nodeData, nodeId);
+            
+            // Contract building completed
+            setContractBuilding(false);
             
             // Create the request JSON object
             const requestId = crypto.randomUUID();
@@ -1420,10 +1447,10 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 request_id: requestId,
                 timestamp: timestamp,
                 payload: {
-                    user_flow: requirementsObject.user_flow,
-                    high_level_requirement: requirementsObject.high_level_requirements,
-                    low_level_requirement: requirementsObject.low_level_requirements,
-                    test_cases: requirementsObject.test_cases,
+                    user_flow: buildContract.requirements.user_flow,
+                    high_level_requirement: buildContract.requirements.high_level_requirements,
+                    low_level_requirement: buildContract.requirements.low_level_requirements,
+                    test_cases: buildContract.requirements.test_cases,
                     tech_stack: requirementsObject.tech_stack
                 },
                 user_input: "",
@@ -1937,6 +1964,51 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         );
     };
 
+    // Generate contract for Docker build
+    const generateBuildContract = async (llrUiid: string, rowData: TableRowData, nodeData: any, nodeId: string): Promise<DockerBuildContract | null> => {
+        try {
+            // Get the requirements object
+            const requirementsObject = await buildRequirementsObject(llrUiid, rowData, nodeData, nodeId);
+            
+            // Get the parsed settings from localStorage
+            let parsedSettings = {};
+            try {
+                const savedSettings = localStorage.getItem('appSettings');
+                if (savedSettings) {
+                    parsedSettings = JSON.parse(savedSettings);
+                }
+            } catch (error) {
+                console.error('Failed to parse app settings:', error);
+            }
+            
+            // Create the final contract for Docker processing
+            const contract: DockerBuildContract = {
+                metadata: {
+                    initiatedBy: "user",
+                    dateTime: new Date().toISOString(),
+                    feature_Number: "0.0.1"
+                },
+                settings: parsedSettings,
+                requirements: {
+                    low_level_requirements: requirementsObject.low_level_requirements,
+                    test_cases: requirementsObject.test_cases,
+                    high_level_requirements: requirementsObject.high_level_requirements,
+                    user_flow: requirementsObject.user_flow
+                }
+            };
+            
+            // Log the complete contract for Docker processing
+            console.log('=== BUILD CONTRACT FOR DOCKER ===');
+            console.log(JSON.stringify(contract, null, 2));
+            console.log('=== END BUILD CONTRACT ===');
+            
+            return contract;
+        } catch (error) {
+            console.error('Error generating build contract:', error);
+            return null;
+        }
+    };
+
     return (
         <div className="h-full flex flex-col">
             {/* Add CSS for animations */}
@@ -2016,18 +2088,92 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             </div>
                             <div className="text-xs text-gray-400 mt-1" style={{ fontStyle: 'italic' }}>
                                 Status: {agentStatus}
+                                {contractBuilding && (
+                                    <span className="ml-2 text-blue-400">
+                                        🔄 Building contract...
+                                    </span>
+                                )}
                             </div>
                         </div>
                         
-                        {/* Agent Logs */}
+                        {/* Chat Messages */}
                         <div 
-                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 agent-logs-container"
+                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 chat-messages-container"
                             style={{ height: '300px' }}
                         >
-                            <div 
-                                className="text-xs whitespace-pre-wrap text-gray-800"
-                                dangerouslySetInnerHTML={{ __html: agentLogs }}
-                            />
+                            {chatMessages.length === 0 ? (
+                                <div className="text-center text-gray-500 text-xs py-8">
+                                    No messages yet. Click "Build the Feature" to start building a contract.
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {chatMessages.map((message) => (
+                                        <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] rounded-lg px-3 py-2 text-xs ${
+                                                message.type === 'user' 
+                                                    ? 'bg-blue-600 text-white' 
+                                                    : 'bg-gray-200 text-gray-800'
+                                            }`}>
+                                                {message.isContract ? (
+                                                    <div>
+                                                        <div className="font-medium mb-2">{message.content}</div>
+                                                        {expandedContracts.has(message.id) ? (
+                                                            <div className="text-green-600 text-xs font-medium mb-2">
+                                                                ✅ Contract expanded
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const contractData = message.contractData;
+                                                                    if (contractData) {
+                                                                        console.log('=== EXPANDED CONTRACT ===');
+                                                                        console.log(JSON.stringify(contractData, null, 2));
+                                                                        console.log('=== END EXPANDED CONTRACT ===');
+                                                                        
+                                                                        // Mark this contract as expanded
+                                                                        setExpandedContracts(prev => new Set(prev).add(message.id));
+                                                                        
+                                                                        // Update message to show expanded content
+                                                                        setChatMessages(prev => prev.map(msg => 
+                                                                            msg.id === message.id 
+                                                                                ? { ...msg, content: `📄 Contract:\n\`\`\`json\n${JSON.stringify(contractData, null, 2)}\n\`\`\`` }
+                                                                            : msg
+                                                                        ));
+                                                                    }
+                                                                }}
+                                                                className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded text-xs font-medium transition-colors"
+                                                            >
+                                                                📋 Expand JSON
+                                                            </button>
+                                                        )}
+                                                        {expandedContracts.has(message.id) && message.contractData && (
+                                                            <div className="bg-gray-100 p-3 rounded border text-xs font-mono overflow-x-auto">
+                                                                <pre className="whitespace-pre-wrap text-gray-800">
+                                                                    {JSON.stringify(message.contractData, null, 2)}
+                                                                </pre>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        {message.content.includes('Building the contract...') ? (
+                                                            <div className="flex items-center space-x-2">
+                                                                <span>{message.content}</span>
+                                                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                                            </div>
+                                                        ) : (
+                                                            <div>{message.content}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <div className="text-xs opacity-70 mt-1">
+                                                    {message.timestamp.toLocaleTimeString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         
                         {/* Agent Input */}
