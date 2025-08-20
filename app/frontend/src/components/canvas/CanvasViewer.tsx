@@ -1393,19 +1393,23 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 const hlrData = hlrNode.data;
                 const hlrRows = hlrData.allRows || hlrData.rows || [];
                 
-                hlrRows.forEach((hlr: any) => {
-                    const hlrUiid = hlr.uiid || hlr.id;
-                    console.log(`Checking HLR ${hlrUiid}: uiid=${hlrUiid}, LLR.parent_uiid=${llr.parent_uiid}`);
-                    
-                    if (llr.parent_uiid === hlrUiid) {
-                        parentHlr = hlr;
-                        console.log(`✅ Found parent HLR: ${hlrUiid} - ${hlr.name}`);
-                    }
-                });
+                            hlrRows.forEach((hlr: any) => {
+                const hlrUiid = hlr.uiid || hlr.id;
+                console.log(`Checking HLR ${hlrUiid}: uiid=${hlrUiid}, LLR.parent_uiid=${llr.parent_uiid}`);
+                console.log(`HLR data:`, hlr);
+                
+                if (llr.parent_uiid === hlrUiid) {
+                    parentHlr = hlr;
+                    console.log(`✅ Found parent HLR: ${hlrUiid} - ${hlr.name}`);
+                }
+            });
             });
             
             if (parentHlr) {
                 const hlrUiid = parentHlr.uiid || parentHlr.id;
+                console.log('HLR full data:', parentHlr);
+                console.log('HLR parent_uiid from data:', parentHlr.parent_uiid);
+                
                 requirements.high_level_requirements = {
                     uiid: hlrUiid,
                     name: parentHlr.name,
@@ -1414,46 +1418,62 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 };
                 console.log(`Step 3 - Added HLR: ${hlrUiid} - ${parentHlr.name}`);
                 console.log('HLR parent_uiid:', parentHlr.parent_uiid);
+                console.log('HLR parent_uiid type:', typeof parentHlr.parent_uiid);
             } else {
                 console.log('❌ No parent HLR found for LLR:', llrUiid);
             }
             
             // Step 4: Find User Flow where HLR.parent_uiid == User_Flow.uiid
             let parentFlow: any = null;
-            if (parentHlr) {
-                const flowNodes = nodes.filter(n => n.id.startsWith('flow_genChildReq_'));
+            if (parentHlr && parentHlr.parent_uiid) {
+                // First try to find in the userFlows state (from API)
+                parentFlow = userFlows.find(flow => flow.uiid === parentHlr.parent_uiid);
                 
-                flowNodes.forEach(flowNode => {
-                    const flowData = flowNode.data;
-                    const flowRows = flowData.allRows || flowData.rows || [];
+                if (parentFlow) {
+                    console.log(`✅ Found parent User Flow in userFlows: ${parentFlow.uiid} - ${parentFlow.name}`);
+                } else {
+                    // Fallback: try to find in flow nodes
+                    const flowNodes = nodes.filter(n => n.id.startsWith('flow_genChildReq_'));
                     
-                    flowRows.forEach((flow: any) => {
-                        const flowUiid = flow.uiid || flow.id;
-                        console.log(`Checking User Flow ${flowUiid}: uiid=${flowUiid}, HLR.parent_uiid=${parentHlr.parent_uiid}`);
+                    flowNodes.forEach(flowNode => {
+                        const flowData = flowNode.data;
+                        const flowRows = flowData.allRows || flowData.rows || [];
                         
-                        if (parentHlr.parent_uiid === flowUiid) {
-                            parentFlow = flow;
-                            console.log(`✅ Found parent User Flow: ${flowUiid} - ${flow.name}`);
-                        }
+                        flowRows.forEach((flow: any) => {
+                            const flowUiid = flow.uiid || flow.id;
+                            console.log(`Checking User Flow ${flowUiid}: uiid=${flowUiid}, HLR.parent_uiid=${parentHlr.parent_uiid}`);
+                            
+                            if (parentHlr.parent_uiid === flowUiid) {
+                                parentFlow = flow;
+                                console.log(`✅ Found parent User Flow in nodes: ${flowUiid} - ${flow.name}`);
+                            }
+                        });
                     });
-                });
+                }
                 
                 if (parentFlow) {
                     const flowUiid = parentFlow.uiid || parentFlow.id;
                     requirements.user_flow = {
                         uiid: flowUiid,
                         name: parentFlow.name,
-                        description: parentFlow.desc || '',
+                        description: parentFlow.desc || parentFlow.description || '',
                         parent_uiid: parentFlow.parent_uiid
                     };
                     console.log(`Step 4 - Added User Flow: ${flowUiid} - ${parentFlow.name}`);
                 } else {
                     console.log('❌ No parent User Flow found for HLR:', parentHlr.uiid);
+                    console.log('HLR parent_uiid:', parentHlr.parent_uiid);
+                    console.log('Available userFlows:', userFlows.map(f => ({ uiid: f.uiid, name: f.name })));
                 }
+            } else {
+                console.log('❌ Cannot find User Flow: HLR has no parent_uiid');
+                console.log('HLR data:', parentHlr);
             }
             
             console.log('Final requirements object:', requirements);
             console.log(`Summary: LLR=${llrUiid}, HLR=${parentHlr ? parentHlr.uiid : 'Not found'}, User Flow=${parentFlow ? parentFlow.uiid : 'Not found'}, Test Cases=${testCasesForLlr.length}`);
+            console.log('Available userFlows:', userFlows.map(f => ({ uiid: f.uiid, name: f.name })));
+            console.log('All nodes:', nodes.map(n => ({ id: n.id, type: n.type })));
             
             return requirements;
             
