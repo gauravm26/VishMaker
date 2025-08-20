@@ -1,0 +1,18 @@
+# File Difference Report - Wed Aug 20 12:57:04 CDT 2025
+# Stage: BEFORE COMMIT
+
+## Root Directory
+### Missing Locally:
+deploy.sh
+lambda_zip.sh
+
+## test
+### Missing Remotely:
+test/projects_create.json
+test/projects_get_all.json
+test/projects_health_check.json
+test/test_lambda_payload.json
+test/test_projects_api.py
+test/test_projects_lambda_payloads.json
+
+Total file differences: 7
