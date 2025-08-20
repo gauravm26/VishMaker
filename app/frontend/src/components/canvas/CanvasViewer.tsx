@@ -203,6 +203,81 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [contractBuilding, setContractBuilding] = useState<boolean>(false);
     const [expandedContracts, setExpandedContracts] = useState<Set<string>>(new Set());
     
+    // Chat history cache management
+    const CHAT_CACHE_KEY = 'vishmaker_chat_history';
+    const CHAT_CACHE_EXPIRY_DAYS = 5;
+    
+    // Load chat history from cache
+    const loadChatHistory = useCallback(() => {
+        try {
+            const cached = localStorage.getItem(CHAT_CACHE_KEY);
+            if (cached) {
+                const { messages, timestamp } = JSON.parse(cached);
+                const now = new Date().getTime();
+                const expiryTime = timestamp + (CHAT_CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+                
+                if (now < expiryTime) {
+                    // Cache is still valid, load messages
+                    const parsedMessages = messages.map((msg: any) => ({
+                        ...msg,
+                        timestamp: new Date(msg.timestamp)
+                    }));
+                    setChatMessages(parsedMessages);
+                    console.log(`Loaded ${parsedMessages.length} chat messages from cache`);
+                } else {
+                    // Cache expired, remove it
+                    localStorage.removeItem(CHAT_CACHE_KEY);
+                    console.log('Chat cache expired, starting fresh');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load chat history from cache:', error);
+            localStorage.removeItem(CHAT_CACHE_KEY);
+        }
+    }, []);
+    
+    // Save chat history to cache
+    const saveChatHistory = useCallback((messages: any[]) => {
+        try {
+            const cacheData = {
+                messages: messages.map(msg => ({
+                    ...msg,
+                    timestamp: msg.timestamp.toISOString()
+                })),
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(cacheData));
+            console.log(`Saved ${messages.length} chat messages to cache`);
+        } catch (error) {
+            console.error('Failed to save chat history to cache:', error);
+        }
+    }, []);
+    
+    // Clear chat history cache
+    const clearChatHistory = useCallback(() => {
+        localStorage.removeItem(CHAT_CACHE_KEY);
+        setChatMessages([]);
+        setExpandedContracts(new Set());
+        console.log('Chat history cache cleared');
+    }, []);
+    
+    // Get cache info for display
+    const getCacheInfo = useCallback(() => {
+        try {
+            const cached = localStorage.getItem(CHAT_CACHE_KEY);
+            if (cached) {
+                const { timestamp } = JSON.parse(cached);
+                const now = new Date().getTime();
+                const expiryTime = timestamp + (CHAT_CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+                const daysLeft = Math.ceil((expiryTime - now) / (24 * 60 * 60 * 1000));
+                return { daysLeft, timestamp: new Date(timestamp) };
+            }
+        } catch (error) {
+            console.error('Failed to get cache info:', error);
+        }
+        return null;
+    }, []);
+    
     // AI Agent state
     const [agentSocket, setAgentSocket] = useState<WebSocket | null>(null);
     const [agentConnected, setAgentConnected] = useState<boolean>(false);
@@ -227,11 +302,36 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             setClickedNodeType(null);
         }
         
-        // Show the context menu
+        // Ensure the event has the correct coordinates
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = event.clientX;
+        const y = event.clientY;
+        
+        console.log('Context menu coordinates:', { x, y, rect });
+        console.log('Event target:', event.target);
+        console.log('Event currentTarget:', event.currentTarget);
+        
+        // Show the context menu - react-contexify should automatically position at mouse coordinates
         show({
             event,
             props
         });
+        
+        // Additional debugging for positioning
+        setTimeout(() => {
+            const menuElement = document.querySelector('.contexify');
+            if (menuElement) {
+                const menuRect = menuElement.getBoundingClientRect();
+                console.log('Context menu element position:', {
+                    left: menuRect.left,
+                    top: menuRect.top,
+                    width: menuRect.width,
+                    height: menuRect.height
+                });
+            } else {
+                console.log('Context menu element not found');
+            }
+        }, 100);
     }, [show]);
     
     // Track context menu reference to pass to TableNode
@@ -241,6 +341,43 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     useEffect(() => {
         contextMenuHandlerRef.current = handleContextMenu;
     }, [handleContextMenu]);
+    
+    // Load chat history from cache on component mount
+    useEffect(() => {
+        loadChatHistory();
+    }, [loadChatHistory]);
+    
+    // Save chat history to cache whenever messages change
+    useEffect(() => {
+        if (chatMessages.length > 0) {
+            saveChatHistory(chatMessages);
+        }
+    }, [chatMessages, saveChatHistory]);
+    
+    // Clean up expired cache entries periodically
+    useEffect(() => {
+        const cleanupInterval = setInterval(() => {
+            try {
+                const cached = localStorage.getItem(CHAT_CACHE_KEY);
+                if (cached) {
+                    const { timestamp } = JSON.parse(cached);
+                    const now = new Date().getTime();
+                    const expiryTime = timestamp + (CHAT_CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+                    
+                    if (now >= expiryTime) {
+                        localStorage.removeItem(CHAT_CACHE_KEY);
+                        setChatMessages([]);
+                        setExpandedContracts(new Set());
+                        console.log('Expired chat cache cleaned up automatically');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to clean up expired cache:', error);
+            }
+        }, 60000); // Check every minute
+        
+        return () => clearInterval(cleanupInterval);
+    }, []);
     
     // Toggle table minimize/maximize state
     const toggleTableSize = useCallback((nodeId: string) => {
@@ -2064,9 +2201,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     {getCanvasContent()}
                 </div>
                 
-                {/* Right Panel - Slides from right, max 20% width */}
+                {/* Right Panel - Slides from right, percentage-based width */}
                 {rightPanelOpen && (
-                    <div className="w-[35%] max-w-80 bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
+                    <div className="w-[25%] min-w-[320px] max-w-[400px] bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
                         <div className="p-4 border-b border-white/10">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-white font-semibold text-sm">AI Coding Agent</h3>
@@ -2076,12 +2213,21 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                         {agentConnected ? 'Connected' : 'Disconnected'}
                                     </span>
                                     <button
+                                        onClick={clearChatHistory}
+                                        className="text-gray-400 hover:text-red-400 p-1 transition-colors"
+                                        title="Clear Chat History"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                    <button
                                         onClick={toggleRightPanel}
                                         className="text-gray-400 hover:text-white p-1"
                                         title="Close Panel"
                                     >
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L6 6M6 6l12 12" />
                                         </svg>
                                     </button>
                                 </div>
@@ -2091,6 +2237,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 {contractBuilding && (
                                     <span className="ml-2 text-blue-400">
                                         🔄 Building contract...
+                                    </span>
+                                )}
+                                {chatMessages.length > 0 && (
+                                    <span className="ml-2 text-green-400" title={`Cache expires in ${getCacheInfo()?.daysLeft || 0} days`}>
+                                        💾 Chat cached ({chatMessages.length} messages)
                                     </span>
                                 )}
                             </div>
@@ -2255,7 +2406,17 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             )}
             
             {/* Context Menu */}
-            <Menu id="tableNodeMenu">
+            <Menu 
+                id="tableNodeMenu"
+                animation={{
+                    enter: 'contexify_fadeIn',
+                    exit: 'contexify_fadeOut'
+                }}
+                style={{
+                    zIndex: 9999
+                }}
+                theme="dark"
+            >
                 {/* Table manipulation items */}
                 <Item onClick={({ props }) => {
                     if (props?.type === 'row' && props.rowIndex !== undefined) {
@@ -2340,6 +2501,36 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             {/* Add custom styles for the Build Feature menu item */}
             <style>
                 {`
+                /* Ensure context menu appears at correct position */
+                .contexify {
+                    position: fixed !important;
+                    z-index: 9999 !important;
+                }
+                
+                .contexify_wrapper {
+                    position: fixed !important;
+                }
+                
+                /* Ensure context menu is positioned relative to viewport, not parent containers */
+                .contexify_submenu {
+                    position: fixed !important;
+                }
+                
+                /* Override any transform positioning that might interfere */
+                .contexify_item {
+                    position: relative !important;
+                }
+                
+                /* Handle React Flow container transforms */
+                .react-flow__container .contexify {
+                    transform: none !important;
+                }
+                
+                /* Ensure context menu is above React Flow elements */
+                .react-flow__viewport .contexify {
+                    z-index: 10000 !important;
+                }
+                
                 /* Make the text white when the menu item is highlighted */
                 .contexify_item:hover .build-feature-text { 
                     color: white !important; 
