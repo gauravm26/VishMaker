@@ -1987,7 +1987,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             setAgentProcessing(false);
                         } else if (data.status === 'Failed' || data.status === 'Error') {
                             // Contract processing error
-                            const errorMsg = data.payload?.error || data.payload?.message || 'Unknown error';
+                            const errorMsg = data.body?.messages?.error || data.body?.messages?.message || 'Unknown error';
                             addTerminalLog(`❌ Build feature processing error: ${errorMsg}`);
                             setAgentStatus('Build feature processing failed');
                             
@@ -2003,6 +2003,30 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             
                             setAgentProcessing(false);
                         }
+                        
+                        // Handle status_details from VishCoder for all build_feature responses
+                        if (data.body?.contract?.statusDetails) {
+                            const statusDetails = data.body.contract.statusDetails;
+                            const agent = statusDetails.agent || 'Unknown Agent';
+                            const llm = statusDetails.LLM || 'Unknown LLM';
+                            const details = statusDetails.details || 'No details provided';
+                            
+                            // Format message as: agent(LLM) : details
+                            const statusMessage = `${agent}(${llm}) : ${details}`;
+                            
+                            // Add status message to chat
+                            const statusUpdateMessage = {
+                                id: `status-update-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: `📊 ${statusMessage}`,
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, statusUpdateMessage]);
+                            
+                            // Also log to terminal
+                            addTerminalLog(`📊 Status Update: ${statusMessage}`);
+                        }
                     }
                 }
                 
@@ -2010,7 +2034,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 if (data.type === 'question_to_ai') {
                     if (data.actor === 'Coder') {
                         // AI response from VishCoder
-                        const responseText = data.payload?.message?.response_text || data.payload?.response || 'Received response from VishCoder';
+                        const responseText = data.body?.messages?.response_text || data.body?.messages?.response || 'Received response from VishCoder';
                         const aiResponse = {
                             id: `ai-${Date.now()}`,
                             type: 'assistant' as const,
@@ -2027,15 +2051,42 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 // Handle status updates
                 if (data.type === 'status_update') {
                     if (data.actor === 'Coder') {
-                        addTerminalLog(`📊 Status Update: ${data.payload?.message || 'Status updated'}`);
-                        setAgentStatus(data.payload?.message || 'Status updated');
+                        // Check if status_details is available in the body
+                        if (data.body?.statusDetails) {
+                            const statusDetails = data.body.statusDetails;
+                            const agent = statusDetails.agent || 'Unknown Agent';
+                            const llm = statusDetails.LLM || 'Unknown LLM';
+                            const details = statusDetails.details || 'No details provided';
+                            
+                            // Format message as: agent(LLM) : details
+                            const statusMessage = `${agent}(${llm}) : ${details}`;
+                            
+                            // Add status message to chat
+                            const statusUpdateMessage = {
+                                id: `status-update-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: `📊 ${statusMessage}`,
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, statusUpdateMessage]);
+                            
+                            // Update agent status and log to terminal
+                            setAgentStatus(statusMessage);
+                            addTerminalLog(`📊 Status Update: ${statusMessage}`);
+                        } else {
+                            // Fallback to regular message handling
+                            const message = data.body?.messages?.message || 'Status updated';
+                            addTerminalLog(`📊 Status Update: ${message}`);
+                            setAgentStatus(message);
+                        }
                     }
                 }
                 
                 // Handle clarification requests
                 if (data.type === 'clarification_needed_from_user') {
                     if (data.actor === 'Coder') {
-                        const clarificationText = data.payload?.message?.question_text || 'Clarification needed from user';
+                        const clarificationText = data.body?.messages?.question_text || 'Clarification needed from user';
                         const clarificationMessage = {
                             id: `clarification-${Date.now()}`,
                             type: 'assistant' as const,
@@ -2048,6 +2099,32 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         addTerminalLog('❓ VishCoder needs clarification from user');
                     }
                 }
+                
+                // General handler for status_details in any message from VishCoder
+                if (data.actor === 'Coder' && data.body?.statusDetails) {
+                    const statusDetails = data.body.statusDetails;
+                    const agent = statusDetails.agent || 'Unknown Agent';
+                    const llm = statusDetails.LLM || 'Unknown LLM';
+                    const details = statusDetails.details || 'No details provided';
+                    
+                    // Format message as: agent(LLM) : details
+                    const statusMessage = `${agent}(${llm}) : ${details}`;
+                    
+                    // Only add to chat if it's not already handled by specific message types
+                    if (data.type !== 'build_feature' && data.type !== 'status_update') {
+                        const generalStatusMessage = {
+                            id: `general-status-${Date.now()}`,
+                                type: 'assistant' as const,
+                                content: `📊 ${statusMessage}`,
+                                timestamp: new Date(),
+                                isContract: false
+                            };
+                            setChatMessages(prev => [...prev, generalStatusMessage]);
+                        }
+                        
+                        // Always log to terminal for debugging
+                        addTerminalLog(`📊 General Status Update: ${statusMessage}`);
+                    }
 
                 // Handle regular AI agent messages (legacy support)
                 if(data.source === 'manager') logClass = 'log-manager';
