@@ -1,4 +1,4 @@
-# File Difference Report - Thu Aug 21 01:41:29 CDT 2025
+# File Difference Report - Thu Aug 21 02:52:53 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -48,14 +48,6 @@ app/frontend/src/vite-env.d.ts
 app/frontend/src/components/Settings.tsx
 app/frontend/src/components/WaitlistForm.tsx
 
-## app/frontend/src/utils
-### Missing Locally:
-app/frontend/src/utils/apiClient.ts
-app/frontend/src/utils/githubService.ts
-app/frontend/src/utils/llmService.ts
-app/frontend/src/utils/terraformParser.ts
-app/frontend/src/utils/validation.ts
-
 ## iac
 ### Missing Locally:
 iac/import_existing_resources.sh
@@ -73,4 +65,4 @@ iac/terraform.tfvars.example
 iac/tfplan
 iac/variables.tf
 
-Total file differences: 11
+Total file differences: 10

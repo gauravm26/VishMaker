@@ -1605,6 +1605,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             };
             setChatMessages(prev => [...prev, contractMessage]);
             
+            // Log the current chat state to help debug panel closing issues
+            console.log('Contract message added to chat. Current chat messages count:', chatMessages.length + 1);
+            console.log('Contract message details:', contractMessage);
+            console.log('AI Chat panel should remain open. Current right panel state:', isRightPanelOpen);
+            
+            // Ensure the AI Chat panel remains open by logging a clear message
+            console.log('🚀 BUILD FEATURE COMPLETED: AI Chat panel should remain open for user interaction');
+            console.log('📋 Contract is available in chat messages. User can view and send to VishCoder.');
+            
             addTerminalLog(`✅ Generated build contract for Docker with ${Object.keys(buildContract.requirements).length} requirement types`);
             addTerminalLog(`📋 Contract includes: LLR=${(buildContract.requirements.low_level_requirements as any)?.name || 'N/A'}, HLR=${(buildContract.requirements.high_level_requirements as any)?.name || 'N/A'}, User Flow=${(buildContract.requirements.user_flow as any)?.name || 'N/A'}, Test Cases=${Array.isArray(buildContract.requirements.test_cases) ? buildContract.requirements.test_cases.length : 0}`);
             addTerminalLog(`📄 Full contract logged to console for Docker processing`);
@@ -1614,6 +1623,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             
             // Contract building completed
             setContractBuilding(false);
+            
+            // Ensure we don't interfere with the AI Chat panel state
+            console.log('Contract building state set to false. AI Chat panel should remain open.');
+            console.log('Current right panel open state:', isRightPanelOpen);
+            console.log('Current chat messages count:', chatMessages.length);
             
             // Create the request JSON object
             const requestId = crypto.randomUUID();
@@ -1658,13 +1672,13 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             console.log('Build Feature Request:', buildFeatureRequest);
             addTerminalLog(`Created build feature request with ID: ${requestId}`);
             
-            // Open the chat panel to show the contract
-            if (onToggleRightPanel) {
-                onToggleRightPanel();
-            }
+            // Note: Contract is now available in the chat panel
+            // User can manually open the right panel to view it
+            // IMPORTANT: AI Chat panel should remain open and not be automatically closed
             
             addTerminalLog(`✅ Contract building completed successfully`);
             addTerminalLog(`📋 Contract is now available in the chat panel`);
+            addTerminalLog(`💡 TIP: The AI Chat panel should remain open. You can view the contract and send it to VishCoder.`);
             
             // Show success feedback
             const originalTitle = nodeData.title;
