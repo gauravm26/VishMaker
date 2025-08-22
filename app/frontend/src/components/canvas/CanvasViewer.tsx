@@ -208,6 +208,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [logSocket, setLogSocket] = useState<WebSocket | null>(null);
     const [logConnected, setLogConnected] = useState<boolean>(false);
     
+    // Log filtering and beautification state
+    const [lastHealthCheckTime, setLastHealthCheckTime] = useState<number>(0);
+    const [healthCheckCount, setHealthCheckCount] = useState<number>(0);
+    const [processedLogs, setProcessedLogs] = useState<string>('');
+    
     // Chat state
     const [chatMessages, setChatMessages] = useState<Array<{id: string, type: 'user' | 'assistant', content: string, timestamp: Date, isContract?: boolean, contractData?: any}>>([]);
     const [chatInput, setChatInput] = useState<string>('');
@@ -273,6 +278,89 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         setExpandedContracts(new Set());
         console.log('Chat history cache cleared');
     }, []);
+    
+    // Process and beautify Docker logs
+    const processDockerLogs = useCallback((rawLogs: string) => {
+        const lines = rawLogs.split('\n');
+        const processedLines: string[] = [];
+        const now = Date.now();
+        
+        for (const line of lines) {
+            // Skip empty lines
+            if (!line.trim()) continue;
+            
+            // Check if this is a health check log
+            if (line.includes('Health check result')) {
+                // Only show health check every minute (60000ms)
+                if (now - lastHealthCheckTime > 60000) {
+                    // Beautify health check logs with HTML
+                    const healthCheckLine = line.replace(
+                        /Health check result: status='([^']+)' anthropic_manager_model='([^']+)' timestamp='([^']+)'/,
+                        '<div class="docker-log-line docker-log-health">🏥 Health Check: <span class="docker-log-separator">|</span> Status: $1 <span class="docker-log-separator">|</span> Model: $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$3</span></div>'
+                    );
+                    processedLines.push(healthCheckLine);
+                    setLastHealthCheckTime(now);
+                    setHealthCheckCount(0);
+                } else {
+                    // Increment count but don't show
+                    setHealthCheckCount(prev => prev + 1);
+                }
+                continue;
+            }
+            
+            // Check if this is an endpoint access log
+            if (line.includes('GET /') || line.includes('POST /')) {
+                // Beautify endpoint logs with HTML
+                const endpointLine = line.replace(
+                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - INFO - (GET|POST) (\/[^ ]*) - ([^-]+)/,
+                    '<div class="docker-log-line docker-log-endpoint">🌐 $2 $3 <span class="docker-log-separator">|</span> $4 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
+                );
+                processedLines.push(endpointLine);
+                continue;
+            }
+            
+            // Beautify other INFO logs with HTML
+            if (line.includes(' - INFO - ')) {
+                const infoLine = line.replace(
+                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - INFO - (.+)/,
+                    '<div class="docker-log-line docker-log-info">ℹ️ $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
+                );
+                processedLines.push(infoLine);
+                continue;
+            }
+            
+            // Beautify ERROR logs with HTML
+            if (line.includes(' - ERROR - ')) {
+                const errorLine = line.replace(
+                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - ERROR - (.+)/,
+                    '<div class="docker-log-line docker-log-error">❌ $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
+                );
+                processedLines.push(errorLine);
+                continue;
+            }
+            
+            // Beautify WARNING logs with HTML
+            if (line.includes(' - WARNING - ')) {
+                const warningLine = line.replace(
+                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - WARNING - (.+)/,
+                    '<div class="docker-log-line docker-log-warning">⚠️ $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
+                );
+                processedLines.push(warningLine);
+                continue;
+            }
+            
+            // For any other lines, just add them as-is with basic styling
+            processedLines.push(`<div class="docker-log-line">${line}</div>`);
+        }
+        
+        // Add health check summary if we have suppressed some
+        if (healthCheckCount > 0) {
+            const summaryLine = `<div class="docker-log-line docker-log-health">🏥 Health Check: ${healthCheckCount} checks suppressed (showing every minute)</div>`;
+            processedLines.push(summaryLine);
+        }
+        
+        return processedLines.join('');
+    }, [lastHealthCheckTime, healthCheckCount]);
     
     // Get cache info for display
     const getCacheInfo = useCallback(() => {
@@ -1856,7 +1944,16 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
 
         socket.onmessage = (event) => {
-            setDockerLogs(prev => prev + event.data);
+            const newLogs = event.data;
+            const processedNewLogs = processDockerLogs(newLogs);
+            
+            setDockerLogs(prev => {
+                const combinedLogs = prev + processedNewLogs;
+                const processedCombinedLogs = processDockerLogs(combinedLogs);
+                setProcessedLogs(processedCombinedLogs);
+                return combinedLogs;
+            });
+            
             // Auto-scroll to bottom
             setTimeout(() => {
                 const terminal = document.getElementById('docker-terminal');
@@ -2100,7 +2197,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     const statusDetails = parsedResponse.body.statusDetails;
                     const agent = statusDetails.agent || 'Unknown Agent';
                     const llm = statusDetails.LLM || 'Unknown LLM';
-                    const details = statusDetails.details || 'No details provided';
+                    let details = statusDetails.details || 'No details provided';
                     
                     // Format message as: agent(LLM) : details
                     const statusMessage = `${agent}(${llm}) : ${details}`;
@@ -2403,7 +2500,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     <div className="w-[25%] min-w-[320px] max-w-[400px] bg-gray-900 border-l border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out">
                         <div className="p-4 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-white font-semibold text-sm">Contract Builder & Chat</h3>
+                                <h3 className="text-white font-semibold text-sm">VishCoder</h3>
                                 <div className="flex items-center space-x-2">
                                     <button
                                         onClick={clearChatHistory}
@@ -2531,7 +2628,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                             handleAiChat();
                                         }
                                     }}
-                                    placeholder="Ask AI about the contract or requirements..."
+                                    placeholder="Chat with VishCoder..."
                                     disabled={agentProcessing}
                                     className="w-full bg-white/10 text-white placeholder-gray-400 rounded-lg px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed resize-none ai-chat-textarea"
                                     style={{ 
@@ -2575,7 +2672,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         </div>
                         <div className="flex items-center space-x-2">
                             <button
-                                onClick={() => setDockerLogs('Connecting to log stream...')}
+                                onClick={() => {
+                                    setDockerLogs('Connecting to log stream...');
+                                    setProcessedLogs('');
+                                    setLastHealthCheckTime(0);
+                                    setHealthCheckCount(0);
+                                }}
                                 className="text-gray-400 hover:text-white text-xs"
                             >
                                 Clear
@@ -2601,12 +2703,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             </button>
                         </div>
                     </div>
+
                     <div 
                         id="docker-terminal" 
-                        className="flex-1 overflow-y-auto p-3 font-mono text-xs bg-[#1e1e1e] text-[#d4d4d4] whitespace-pre-wrap"
-                    >
-                        {dockerLogs}
-                    </div>
+                        className="flex-1 overflow-y-auto p-3 font-mono text-xs bg-[#1e1e1e] text-[#d4d4d4]"
+                        dangerouslySetInnerHTML={{ __html: processedLogs || dockerLogs }}
+                    />
                 </div>
             )}
             

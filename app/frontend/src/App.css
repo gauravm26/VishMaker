@@ -99,6 +99,53 @@
   }
 }
 
+/* Docker Log Beautification */
+.docker-log-line {
+  padding: 2px 0;
+  border-left: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.docker-log-line:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-left-color: rgba(255, 255, 255, 0.2);
+}
+
+.docker-log-health {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.docker-log-endpoint {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.docker-log-info {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.docker-log-error {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.docker-log-warning {
+  color: #f97316;
+  font-weight: 500;
+}
+
+.docker-log-timestamp {
+  color: #6b7280;
+  font-size: 0.75em;
+}
+
+.docker-log-separator {
+  color: #4b5563;
+  margin: 0 8px;
+}
+
 /* Responsive width adjustments for the right panel */
 @media (max-width: 1200px) {
   .chat-messages-container {

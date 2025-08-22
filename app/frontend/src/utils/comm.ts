@@ -174,7 +174,7 @@ export class CommunicationManager {
             body: body
         };
         
-        console.log(`🔄 Creating VishCoderPayload (${status}):`, finalPayload);
+        console.log(`🔄 Creating VishCoderPayload (${status}):`, JSON.stringify(finalPayload, null, 2));
 
         return finalPayload;
     }
@@ -359,9 +359,11 @@ export class CommunicationManager {
             }
             
             // Check if body has the required structure
-            if (!("contract" in body) || !("messages" in body) || !("statusDetails" in body)) {
-                return [false, "Body must contain 'contract', 'messages', and 'statusDetails'"];
+            if (!("contract" in body) || !("messages" in body)) {
+                return [false, "Body must contain 'contract' and 'messages'"];
             }
+            
+            // statusDetails is optional and can come from root level
             
             return [true, null];
             
@@ -378,10 +380,14 @@ export class CommunicationManager {
          * 
          * @returns Parsed VishCoderPayload or null if invalid
          */
+        // Log the raw response from VishCoder
+        console.log(`📥 Received Response from VishCoder (${responseData.status || 'Unknown'}):`, JSON.stringify(responseData, null, 2));
+        
         const [isValid, errorMessage] = this.validateResponse(responseData);
         
         if (!isValid) {
-            console.error(`Invalid response: ${errorMessage}`);
+            console.error(`❌ Invalid response: ${errorMessage}`);
+            console.error(`📋 Raw response data:`, JSON.stringify(responseData, null, 2));
             return null;
         }
         
@@ -398,14 +404,26 @@ export class CommunicationManager {
             // Parse body based on type
             const bodyData = responseData["body"];
             
+            // Extract status_details from root level if it exists
+            const rootStatusDetails = responseData["status_details"] || responseData["statusDetails"];
+            
+            // Log where status details are found
+            if (rootStatusDetails) {
+                console.log(`🔍 Found status details in root:`, JSON.stringify(rootStatusDetails, null, 2));
+            } else if (bodyData.statusDetails) {
+                console.log(`🔍 Found status details in body:`, JSON.stringify(bodyData.statusDetails, null, 2));
+            } else {
+                console.log(`🔍 No status details found in response`);
+            }
+            
             // Always create the standardized body structure
             const body = {
                 contract: bodyData.contract || {},
                 messages: bodyData.messages || {},
-                statusDetails: bodyData.statusDetails || {}
+                statusDetails: rootStatusDetails || bodyData.statusDetails || {}
             };
             
-            return {
+            const parsedPayload = {
                 version: responseData["version"],
                 messageId: responseData["messageId"],
                 threadId: responseData["threadId"],
@@ -416,6 +434,16 @@ export class CommunicationManager {
                 origin: origin,
                 body: body
             };
+            
+            // Log the parsed and validated response
+            console.log(`✅ Parsed Response from VishCoder (${parsedPayload.status}):`, JSON.stringify(parsedPayload, null, 2));
+            
+            // Log status details if available
+            if (parsedPayload.body.statusDetails && Object.keys(parsedPayload.body.statusDetails).length > 0) {
+                console.log(`📊 Status Details:`, JSON.stringify(parsedPayload.body.statusDetails, null, 2));
+            }
+            
+            return parsedPayload;
             
         } catch (error) {
             console.error(`Error parsing response: ${error instanceof Error ? error.message : String(error)}`);
@@ -445,12 +473,15 @@ export function createContractPayload(
     statusDetails: Record<string, any>
 ): ContractPayload {
     /** Create a contract payload with the given data */
-    return {
+    const payload = {
         metadata,
         settings,
         requirements,
         statusDetails
     };
+    
+    console.log(`📋 Created ContractPayload:`, JSON.stringify(payload, null, 2));
+    return payload;
 }
 
 export function createMessagePayload(
@@ -460,12 +491,15 @@ export function createMessagePayload(
     clarificationNeeded?: boolean
 ): MessagePayload {
     /** Create a message payload with the given data */
-    return {
+    const payload = {
         question_text: questionText,
         response_text: responseText,
         context: context,
         clarification_needed: clarificationNeeded
     };
+    
+    console.log(`💬 Created MessagePayload:`, JSON.stringify(payload, null, 2));
+    return payload;
 }
 
 
