@@ -1,4 +1,4 @@
-# File Difference Report - Fri Aug 22 04:03:49 CDT 2025
+# File Difference Report - Fri Aug 22 12:06:06 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -34,6 +34,57 @@ app/frontend/vite.config.d.ts
 app/frontend/vite.config.js
 app/frontend/vite.config.ts
 
+## app/frontend/assets/aws
+### Missing Remotely:
+app/frontend/assets/aws/acm.svg
+app/frontend/assets/aws/apigatewayv2.svg
+app/frontend/assets/aws/cloudfront.svg
+app/frontend/assets/aws/cloudwatch.svg
+app/frontend/assets/aws/cognito.svg
+app/frontend/assets/aws/default.svg
+app/frontend/assets/aws/dynamodb.svg
+app/frontend/assets/aws/iam.svg
+app/frontend/assets/aws/instance.svg
+app/frontend/assets/aws/lambda.svg
+app/frontend/assets/aws/lb.svg
+app/frontend/assets/aws/route53.svg
+app/frontend/assets/aws/s3.svg
+app/frontend/assets/aws/security.svg
+
+### Missing Locally:
+app/frontend/assets/aws/apigateway.svg
+app/frontend/assets/aws/cognito.svg
+app/frontend/assets/aws/dynamodb.svg
+app/frontend/assets/aws/iam.svg
+app/frontend/assets/aws/lambda.svg
+app/frontend/assets/aws/s3.svg
+
+## app/frontend/public/assets/aws
+### Missing Remotely:
+app/frontend/public/assets/aws/acm.svg
+app/frontend/public/assets/aws/apigateway.svg
+app/frontend/public/assets/aws/apigatewayv2.svg
+app/frontend/public/assets/aws/cloudfront.svg
+app/frontend/public/assets/aws/cloudwatch.svg
+app/frontend/public/assets/aws/cognito.svg
+app/frontend/public/assets/aws/default.svg
+app/frontend/public/assets/aws/dynamodb.svg
+app/frontend/public/assets/aws/iam.svg
+app/frontend/public/assets/aws/instance.svg
+app/frontend/public/assets/aws/lambda.svg
+app/frontend/public/assets/aws/lb.svg
+app/frontend/public/assets/aws/route53.svg
+app/frontend/public/assets/aws/s3.svg
+app/frontend/public/assets/aws/security.svg
+
+### Missing Locally:
+app/frontend/public/assets/aws/apigateway.svg
+app/frontend/public/assets/aws/cognito.svg
+app/frontend/public/assets/aws/dynamodb.svg
+app/frontend/public/assets/aws/iam.svg
+app/frontend/public/assets/aws/lambda.svg
+app/frontend/public/assets/aws/s3.svg
+
 ## app/frontend/src
 ### Missing Locally:
 app/frontend/src/App.css
@@ -47,6 +98,13 @@ app/frontend/src/vite-env.d.ts
 ### Missing Locally:
 app/frontend/src/components/Settings.tsx
 app/frontend/src/components/WaitlistForm.tsx
+
+## app/frontend/src/components/canvas
+### Missing Locally:
+app/frontend/src/components/canvas/CanvasViewer.tsx
+app/frontend/src/components/canvas/InfrastructureCanvasViewer.tsx
+app/frontend/src/components/canvas/InfrastructureNode.tsx
+app/frontend/src/components/canvas/TableNode.tsx
 
 ## iac
 ### Missing Locally:
@@ -65,4 +123,22 @@ iac/terraform.tfvars.example
 iac/tfplan
 iac/variables.tf
 
-Total file differences: 10
+## scripts/test
+### Missing Remotely:
+scripts/test/projects_create.json
+scripts/test/projects_get_all.json
+scripts/test/projects_health_check.json
+scripts/test/test_lambda_payload.json
+scripts/test/test_projects_api.py
+scripts/test/test_projects_lambda_payloads.json
+scripts/test/test.json
+
+### Missing Locally:
+scripts/test/projects_create.json
+scripts/test/projects_get_all.json
+scripts/test/projects_health_check.json
+scripts/test/test_lambda_payload.json
+scripts/test/test_projects_api.py
+scripts/test/test_projects_lambda_payloads.json
+
+Total file differences: 29

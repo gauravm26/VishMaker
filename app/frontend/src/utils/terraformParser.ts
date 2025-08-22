@@ -2,7 +2,32 @@
 // Provides methods for parsing .tf files, terraform state, and building architecture diagrams
 // Based on terraform state list parsing approach for better resource discovery
 
+// Utility function to generate UUID
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// Map AWS services to icon paths dynamically
+function getServiceIcon(service: string): string {
+  // Normalize service name to match SVG filename
+  const normalizedService = service.toLowerCase().trim();
+  
+  // Use the public assets path that Vite can resolve at build time
+  // The assets are in /public/assets/aws/ so they'll be available at runtime
+  const dynamicPath = `/assets/aws/${normalizedService}.svg`;
+  
+  // Return dynamic path with default fallback
+  // If the specific service SVG doesn't exist, it will fall back to default.svg
+  return dynamicPath;
+}
+
 export interface ParsedResource {
+  /** Unique identifier for the node */
+  uuid: string;
   /** Full TF address as returned by `terraform state list` */
   address: string;                        // e.g., module.net.aws_eip.app_eip
   /** Type token (e.g., aws_eip) */
@@ -20,9 +45,15 @@ export interface ParsedResource {
   /** True if this looks like a data source */
   isData: boolean;
   /** Resource attributes from configuration */
-  attributes?: Record<string, any>;
+  attributes: Record<string, any>;
   /** Dependencies between resources */
-  dependencies?: string[];
+  dependencies: string[];
+  /** UI elements for display on screen */
+  onScreenElements: {
+    icon: string;                         // Path to the icon file
+    label: string;                        // Display label (service.category format)
+    connectedNodes: string[];             // UUIDs of dependent nodes
+  };
 }
 
 export interface TerraformResource {
@@ -54,23 +85,33 @@ export interface ArchitectureDiagram {
   connections: Array<{ from: string; to: string; type: string }>;
 }
 
+export interface GroupedResource {
+  uuid: string;
+  group_key: 'service' | 'category';
+  child_uuids: string[];
+  onScreenElements: {
+    icon: string;
+    label: string;
+    connectionNodes: string[];
+  };
+}
+
 export interface GroupedResources {
-  [key: string]: ParsedResource[];
+  [key: string]: GroupedResource;
 }
 
 export interface FilterOptions {
-  provider?: string;
   service?: string;
   category?: string;
-  modules?: string[];
   isData?: boolean;
 }
 
-export type GroupKey = "provider" | "service" | "category" | "modules";
+
 
 // Enhanced Terraform Parser class
 class TerraformParserClass {
   private cache: Map<string, ParsedResource[]> = new Map();
+  private groupedCache: Map<string, GroupedResources> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -104,6 +145,7 @@ class TerraformParserClass {
     // Now we expect: <type>.<name>[.indexing...]
     if (parts.length < 2) {
       return {
+        uuid: generateUUID(),
         address,
         type: parts[0] || "",
         name: parts[1] || "",
@@ -112,6 +154,13 @@ class TerraformParserClass {
         service: "",
         category: "",
         isData,
+        attributes: {},
+        dependencies: [],
+        onScreenElements: {
+          icon: getServiceIcon(""),
+          label: ".",
+          connectedNodes: []
+        }
       };
     }
 
@@ -125,7 +174,24 @@ class TerraformParserClass {
     const service = segs[1] || "";
     const category = segs.slice(2).join("_"); // may be ""
 
-    return { address, type, name, modules, provider, service, category, isData };
+    return { 
+      uuid: generateUUID(),
+      address, 
+      type, 
+      name, 
+      modules, 
+      provider, 
+      service, 
+      category, 
+      isData,
+      attributes: {},
+      dependencies: [],
+      onScreenElements: {
+        icon: getServiceIcon(service),
+        label: `${service}.${category}`,
+        connectedNodes: []
+      }
+    };
   }
 
   /**
@@ -224,33 +290,66 @@ class TerraformParserClass {
    * @param groupBy - Key to group by
    * @returns Grouped resources
    */
-  groupResources(resources: ParsedResource[], groupBy: GroupKey): GroupedResources {
-    return resources.reduce((acc, resource) => {
-      let key: string;
-      
-      switch (groupBy) {
-        case 'provider':
-          key = resource.provider || 'unknown';
-          break;
-        case 'service':
-          key = resource.service || 'unknown';
-          break;
-        case 'category':
-          key = resource.category || 'general';
-          break;
-        case 'modules':
-          key = resource.modules.length > 0 ? resource.modules.join('.') : 'root';
-          break;
-        default:
-          key = 'unknown';
+  groupResources(resources: ParsedResource[]): GroupedResources {
+    const result: GroupedResources = {};
+    
+    // Group by service
+    const serviceGroups: Record<string, string[]> = {};
+    resources.forEach(resource => {
+      const service = resource.service || 'unknown';
+      if (!serviceGroups[service]) {
+        serviceGroups[service] = [];
       }
-      
-      if (!acc[key]) {
-        acc[key] = [];
+      serviceGroups[service].push(resource.uuid);
+    });
+    
+    // Create service group resources
+    Object.entries(serviceGroups).forEach(([service, childUuids]) => {
+      const serviceKey = `service_${service}`;
+      result[serviceKey] = {
+        uuid: generateUUID(),
+        group_key: 'service',
+        child_uuids: childUuids,
+        onScreenElements: {
+          icon: getServiceIcon(service),
+          label: service,
+          connectionNodes: []
+        }
+      };
+    });
+    
+    // Group by category
+    const categoryGroups: Record<string, string[]> = {};
+    resources.forEach(resource => {
+      const category = resource.category || 'general';
+      if (!categoryGroups[category]) {
+        categoryGroups[category] = [];
       }
-      acc[key].push(resource);
-      return acc;
-    }, {} as GroupedResources);
+      categoryGroups[category].push(resource.uuid);
+    });
+    
+    // Create category group resources
+    Object.entries(categoryGroups).forEach(([category, childUuids]) => {
+      const categoryKey = `category_${category}`;
+      result[categoryKey] = {
+        uuid: generateUUID(),
+        group_key: 'category',
+        child_uuids: childUuids,
+        onScreenElements: {
+          icon: getServiceIcon('iam'), // Default icon for category groups
+          label: category,
+          connectionNodes: []
+        }
+      };
+    });
+    
+
+    // Populate connection nodes between groups
+    this.populateGroupConnections(result, resources);
+    
+
+    console.log('Grouped resources:', result);
+    return result;
   }
 
   /**
@@ -261,149 +360,14 @@ class TerraformParserClass {
    */
   filterResources(resources: ParsedResource[], filters: FilterOptions): ParsedResource[] {
     return resources.filter(resource => {
-      if (filters.provider && resource.provider !== filters.provider) return false;
       if (filters.service && resource.service !== filters.service) return false;
       if (filters.category && !resource.category.includes(filters.category)) return false;
       if (filters.isData !== undefined && resource.isData !== filters.isData) return false;
-      if (filters.modules && filters.modules.length > 0) {
-        const hasMatchingModule = filters.modules.some(module => 
-          resource.modules.includes(module)
-        );
-        if (!hasMatchingModule) return false;
-      }
       return true;
     });
   }
 
-  /**
-   * Get resource category based on Terraform resource type (enhanced)
-   * @param resourceType - The Terraform resource type
-   * @returns Category string
-   */
-  getResourceCategory(resourceType: string): string {
-    const categoryMap: Record<string, string> = {
-      // Compute
-      'aws_lambda_function': 'compute',
-      'aws_ec2_instance': 'compute',
-      'aws_ecs_cluster': 'compute',
-      'aws_ecs_service': 'compute',
-      'aws_ecs_task_definition': 'compute',
-      'aws_ecr_repository': 'compute',
-      'aws_ecr_image': 'compute',
-      'aws_batch_job_definition': 'compute',
-      'aws_batch_compute_environment': 'compute',
-      
-      // Database
-      'aws_dynamodb_table': 'database',
-      'aws_rds_cluster': 'database',
-      'aws_rds_instance': 'database',
-      'aws_elasticache_cluster': 'database',
-      'aws_elasticache_subnet_group': 'database',
-      'aws_elasticache_parameter_group': 'database',
-      'aws_docdb_cluster': 'database',
-      'aws_docdb_cluster_instance': 'database',
-      'aws_neptune_cluster': 'database',
-      'aws_neptune_cluster_instance': 'database',
-      
-      // Storage
-      'aws_s3_bucket': 'storage',
-      'aws_s3_bucket_versioning': 'storage',
-      'aws_s3_bucket_lifecycle_configuration': 'storage',
-      'aws_efs_file_system': 'storage',
-      'aws_efs_mount_target': 'storage',
-      'aws_ebs_volume': 'storage',
-      'aws_ebs_snapshot': 'storage',
-      'aws_glacier_vault': 'storage',
-      
-      // Network
-      'aws_apigatewayv2_api': 'network',
-      'aws_apigatewayv2_stage': 'network',
-      'aws_apigatewayv2_integration': 'network',
-      'aws_apigatewayv2_route': 'network',
-      'aws_cloudfront_distribution': 'network',
-      'aws_alb': 'network',
-      'aws_nlb': 'network',
-      'aws_vpc': 'network',
-      'aws_subnet': 'network',
-      'aws_route_table': 'network',
-      'aws_internet_gateway': 'network',
-      'aws_nat_gateway': 'network',
-      'aws_vpc_endpoint': 'network',
-      'aws_vpc_peering_connection': 'network',
-      'aws_transit_gateway': 'network',
-      'aws_transit_gateway_vpc_attachment': 'network',
-      
-      // Security
-      'aws_cognito_user_pool': 'security',
-      'aws_cognito_user_pool_client': 'security',
-      'aws_iam_role': 'security',
-      'aws_iam_policy': 'security',
-      'aws_iam_user': 'security',
-      'aws_iam_group': 'security',
-      'aws_secretsmanager_secret': 'security',
-      'aws_kms_key': 'security',
-      'aws_kms_alias': 'security',
-      'aws_wafv2_web_acl': 'security',
-      'aws_shield_protection': 'security',
-      
-      // Monitoring
-      'aws_cloudwatch_log_group': 'monitoring',
-      'aws_cloudwatch_dashboard': 'monitoring',
-      'aws_cloudwatch_alarm': 'monitoring',
-      'aws_cloudwatch_metric': 'monitoring',
-      'aws_cloudwatch_event_rule': 'monitoring',
-      'aws_cloudwatch_event_target': 'monitoring',
-      'aws_grafana_workspace': 'monitoring',
-      
-      // Messaging
-      'aws_sns_topic': 'messaging',
-      'aws_sns_topic_subscription': 'messaging',
-      'aws_sqs_queue': 'messaging',
-      'aws_sqs_queue_policy': 'messaging',
-      'aws_eventbridge_rule': 'messaging',
-      'aws_eventbridge_target': 'messaging',
-      'aws_mq_broker': 'messaging',
-      'aws_mq_configuration': 'messaging',
-      
-      // AI/ML
-      'aws_bedrock_model': 'ai',
-      'aws_sagemaker_endpoint': 'ai',
-      'aws_sagemaker_model': 'ai',
-      'aws_sagemaker_notebook_instance': 'ai',
-      'aws_comprehend_entity_recognizer': 'ai',
-      'aws_translate_parallel_data': 'ai',
-      'aws_rekognition_collection': 'ai',
-      
-      // Analytics
-      'aws_glue_job': 'analytics',
-      'aws_glue_crawler': 'analytics',
-      'aws_glue_database': 'analytics',
-      'aws_athena_workgroup': 'analytics',
-      'aws_athena_database': 'analytics',
-      'aws_quicksight_data_source': 'analytics',
-      'aws_quicksight_dashboard': 'analytics',
-      'aws_emr_cluster': 'analytics',
-      'aws_emr_step': 'analytics',
-      
-      // Developer Tools
-      'aws_codebuild_project': 'devtools',
-      'aws_codedeploy_application': 'devtools',
-      'aws_codedeploy_deployment_group': 'devtools',
-      'aws_codepipeline': 'devtools',
-      'aws_codecommit_repository': 'devtools',
-      'aws_codestarconnections_connection': 'devtools',
-      
-      // Management
-      'aws_organizations_organization': 'management',
-      'aws_organizations_account': 'management',
-      'aws_organizations_organizational_unit': 'management',
-      'aws_controltower_control': 'management',
-      'aws_servicecatalog_product': 'management',
-      'aws_servicecatalog_provisioned_product': 'management'
-    };
-    
-    return categoryMap[resourceType] || 'other';
-  }
+
 
   /**
    * Get service color for visualization
@@ -454,6 +418,92 @@ class TerraformParserClass {
   }
 
   /**
+   * Populate connected nodes based on dependencies
+   * @param resources - Array of parsed resources
+   */
+  private populateConnectedNodes(resources: ParsedResource[]): void {
+    // Create a map of address to UUID for quick lookup
+    const addressToUuid = new Map<string, string>();
+    resources.forEach(resource => {
+      addressToUuid.set(resource.address, resource.uuid);
+    });
+    
+    // Populate connected nodes for each resource
+    resources.forEach(resource => {
+      if (resource.dependencies && resource.dependencies.length > 0) {
+        resource.onScreenElements.connectedNodes = resource.dependencies
+          .map(dep => addressToUuid.get(dep))
+          .filter(uuid => uuid !== undefined) as string[];
+      }
+    });
+
+      }
+
+  /**
+   * Get resources that belong to a specific group
+   * @param groupKey - The group key (e.g., 'service_lambda', 'category_compute')
+   * @param groupedResources - Grouped resources
+   * @param resources - Original parsed resources
+   * @returns Array of resources in the group
+   */
+  getResourcesByGroup(groupKey: string, groupedResources: GroupedResources, resources: ParsedResource[]): ParsedResource[] {
+    const group = groupedResources[groupKey];
+    if (!group) return [];
+    
+    return resources.filter(resource => group.child_uuids.includes(resource.uuid));
+  }
+
+  /**
+   * Populate connection nodes between groups
+   * @param groupedResources - Grouped resources
+   * @param resources - Original parsed resources
+   */
+  private populateGroupConnections(groupedResources: GroupedResources, resources: ParsedResource[]): void {
+    // Create a map of UUID to resource for quick lookup
+    const uuidToResource = new Map<string, ParsedResource>();
+    resources.forEach(resource => {
+      uuidToResource.set(resource.uuid, resource);
+    });
+    
+    // For each group, find connections to other groups
+    Object.entries(groupedResources).forEach(([groupKey, group]) => {
+      const connections: string[] = [];
+      
+      // Parse each child UUID in this group
+      group.child_uuids.forEach(childUuid => {
+        const childResource = uuidToResource.get(childUuid);
+        if (childResource && childResource.onScreenElements.connectedNodes.length > 0) {
+          // For each connected node, find its service and category
+          childResource.onScreenElements.connectedNodes.forEach(connectedUuid => {
+            const connectedResource = uuidToResource.get(connectedUuid);
+            if (connectedResource) {
+              // Get service and category keys for the connected resource
+              const connectedServiceKey = `service_${connectedResource.service || 'unknown'}`;
+              const connectedCategoryKey = `category_${connectedResource.category || 'general'}`;
+              
+              // Find unique service and category keys that this group connects to
+              const targetKeys = new Set([connectedServiceKey, connectedCategoryKey]);
+              
+              // For each target key, get the group UUID and add to connections
+              targetKeys.forEach(targetKey => {
+                if (targetKey !== groupKey && groupedResources[targetKey]) {
+                  const targetGroup = groupedResources[targetKey];
+                  if (!connections.includes(targetGroup.uuid)) {
+                    connections.push(targetGroup.uuid);
+                  }
+                }
+              });
+            }
+          });
+        }
+      });
+      
+      // Update the group's connection nodes
+      group.onScreenElements.connectionNodes = connections;
+    });
+  }
+
+  /**
    * Parse GitHub Terraform files and convert to ParsedResource array
    * @param tfFiles - Array of .tf files with content and path
    * @returns Array of parsed resources in state-like format
@@ -500,6 +550,7 @@ class TerraformParserClass {
           }
           
           const parsedResource: ParsedResource = {
+            uuid: generateUUID(), // Generate a unique UUID
             address,
             type: resource.type,
             name: resource.name,
@@ -508,8 +559,13 @@ class TerraformParserClass {
             service,
             category,
             isData: false, // Resources are not data sources
-            attributes: resource.attributes,
-            dependencies: resource.dependencies
+            attributes: resource.attributes || {},
+            dependencies: resource.dependencies || [],
+            onScreenElements: {
+              icon: getServiceIcon(service), // Use the new utility function
+              label: `${service}.${category}`,
+              connectedNodes: [] // Will be populated after all resources are created
+            }
           };
           
           allResources.push(parsedResource);
@@ -520,96 +576,23 @@ class TerraformParserClass {
       }
     });
     
+    // Populate connected nodes based on dependencies
+    this.populateConnectedNodes(allResources);
+
+    // Generate grouped resources and cache both
+    const groupedResources = this.groupResources(allResources);
+    const cacheKey = this.generateCacheKey(tfFiles);
+    this.setCacheWithGrouped(cacheKey, allResources, groupedResources);
+
+    console.log('All resources:', allResources);
+    console.log('Grouped resources cached with key:', cacheKey);
+    
     return allResources;
   }
 
-  /**
-   * Convert Terraform files to InfrastructureNodeData array
-   * @param tfFiles - Array of .tf files with content and path
-   * @returns Array of infrastructure node data
-   */
-  convertTerraformFilesToInfrastructure(tfFiles: Array<{ name: string; path: string; content: string }>): any[] {
-    const infrastructure: any[] = [];
-    
-    tfFiles.forEach(file => {
-      if (file.content) {
-        try {
-          // Parse the .tf file content with file path for module context
-          const parsedData = this.parseTerraformConfig(file.content, file.path);
-          
-          // Convert parsed resources to infrastructure format
-          if (parsedData.resources) {
-            parsedData.resources.forEach(resource => {
-              // Use built-in categorization
-              const category = this.getResourceCategory(resource.type);
-              const infrastructureType = this.mapCategoryToInfrastructureType(category);
-              
-              infrastructure.push({
-                title: resource.name || `${resource.type}_${resource.name}`,
-                resourceType: infrastructureType,
-                description: `Terraform resource: ${resource.type} (${category})`,
-                status: 'active',
-                region: 'us-east-1',
-                tags: resource.attributes || {},
-                configuration: resource.attributes || {}
-              });
-            });
-          }
-        } catch (parseError) {
-          console.warn(`Failed to parse Terraform file ${file.path}:`, parseError);
-        }
-      }
-    });
 
-    return infrastructure;
-  }
 
-  /**
-   * Map TerraformParser categories to infrastructure types
-   * @param category - Resource category from TerraformParser
-   * @returns Infrastructure type string
-   */
-  mapCategoryToInfrastructureType(category: string): string {
-    switch (category.toLowerCase()) {
-      case 'compute':
-      case 'lambda':
-      case 'ecs':
-      case 'ec2':
-        return 'lambda';
-      case 'storage':
-      case 's3':
-      case 'dynamodb':
-      case 'rds':
-      case 'elasticache':
-        return 'dynamodb';
-      case 'network':
-      case 'vpc':
-      case 'subnet':
-      case 'gateway':
-        return 'vpc';
-      case 'security':
-      case 'iam':
-      case 'cognito':
-      case 'secretsmanager':
-        return 'iam';
-      case 'monitoring':
-      case 'cloudwatch':
-      case 'logs':
-        return 'cloudwatch';
-      case 'integration':
-      case 'apigateway':
-      case 'sqs':
-      case 'sns':
-        return 'apigateway';
-      case 'analytics':
-      case 'glue':
-      case 'athena':
-      case 'quicksight':
-        return 'glue';
-      default:
-        return 'lambda';
-    }
-  }
+
 
   /**
    * Convert TerraformData to ParsedResource array for enhanced parsing
@@ -653,6 +636,7 @@ class TerraformParserClass {
       }
       
       const parsedResource: ParsedResource = {
+        uuid: generateUUID(), // Generate a unique UUID
         address,
         type: resource.type,
         name: resource.name,
@@ -661,12 +645,25 @@ class TerraformParserClass {
         service,
         category,
         isData: false, // Resources are not data sources
-        attributes: resource.attributes,
-        dependencies: resource.dependencies
+        attributes: resource.attributes || {},
+        dependencies: resource.dependencies || [],
+        onScreenElements: {
+          icon: getServiceIcon(service), // Use the new utility function
+          label: `${service}.${category}`,
+          connectedNodes: [] // Will be populated after all resources are created
+        }
       };
       
       parsedResources.push(parsedResource);
     });
+    
+    // Populate connected nodes based on dependencies
+    this.populateConnectedNodes(parsedResources);
+    
+    // Generate grouped resources and cache both
+    const groupedResources = this.groupResources(parsedResources);
+    const cacheKey = `terraform_data_${filePath || 'unknown'}`;
+    this.setCacheWithGrouped(cacheKey, parsedResources, groupedResources);
     
     return parsedResources;
   }
@@ -680,10 +677,12 @@ class TerraformParserClass {
     const nodes: ArchitectureNode[] = [];
     const connections: Array<{ from: string; to: string; type: string }> = [];
     
-    // Create nodes for each resource
+    // Create nodes for each resource using ParsedResource data
     resources.forEach((resource, index) => {
-      const category = this.getResourceCategory(resource.type);
-      const nodeId = resource.address.replace(/[^a-zA-Z0-9_]/g, '_');
+      // Use the service.category from onScreenElements for better categorization
+      const category = resource.onScreenElements.label || resource.service;
+      // Use UUID as the node ID for consistency
+      const nodeId = resource.uuid;
       
       // Smart layout based on category and modules
       let x = 100, y = 100;
@@ -711,16 +710,17 @@ class TerraformParserClass {
       });
     });
     
-    // Create connections based on dependencies and module relationships
-    nodes.forEach((node, index) => {
-      const resource = resources[index];
+    // Create connections based on ParsedResource dependencies and onScreenElements.connectedNodes
+    nodes.forEach((node) => {
+      const resource = resources.find(r => r.uuid === node.id);
+      if (!resource) return;
       
       // Connect resources within the same module
       if (resource.modules.length > 0) {
         const modulePath = resource.modules.join('.');
-        const sameModuleNodes = nodes.filter((n, i) => {
-          const otherResource = resources[i];
-          return otherResource.modules.join('.') === modulePath && n.id !== node.id;
+        const sameModuleNodes = nodes.filter((n) => {
+          const otherResource = resources.find(r => r.uuid === n.id);
+          return otherResource && otherResource.modules.join('.') === modulePath && n.id !== node.id;
         });
         
         sameModuleNodes.forEach(otherNode => {
@@ -732,13 +732,28 @@ class TerraformParserClass {
         });
       }
       
-      // Connect based on resource type dependencies
+      // Use the connectedNodes from onScreenElements for dependency connections
+      if (resource.onScreenElements.connectedNodes.length > 0) {
+        resource.onScreenElements.connectedNodes.forEach(connectedNodeUuid => {
+          const targetNode = nodes.find(n => n.id === connectedNodeUuid);
+          if (targetNode) {
+            connections.push({
+              from: node.id,
+              to: targetNode.id,
+              type: 'dependency'
+            });
+          }
+        });
+      }
+      
+      // Connect based on resource type dependencies (legacy logic)
       if (resource.type.includes('subnet') && resource.modules.length > 0) {
         // Find VPC in parent module
-        const vpcNode = nodes.find(n => 
-          resources[nodes.indexOf(n)].type.includes('vpc') &&
-          resources[nodes.indexOf(n)].modules.length < resource.modules.length
-        );
+        const vpcNode = nodes.find(n => {
+          const vpcResource = resources.find(r => r.uuid === n.id);
+          return vpcResource && vpcResource.type.includes('vpc') && 
+                 vpcResource.modules.length < resource.modules.length;
+        });
         
         if (vpcNode) {
           connections.push({
@@ -820,6 +835,18 @@ class TerraformParserClass {
   }
 
   /**
+   * Generate cache key for a set of Terraform files
+   * @param files - Array of Terraform files
+   * @returns Cache key string
+   */
+  public generateCacheKey(files: Array<{ name: string; path: string; content: string }>): string {
+    const fileCount = files.length;
+    const filePaths = files.map(f => f.path).sort().join('|');
+    const contentHash = files.map(f => f.content.length).reduce((sum, len) => sum + len, 0);
+    return `tf_${fileCount}_${contentHash}_${filePaths.substring(0, 50)}`;
+  }
+
+  /**
    * Get cache key for resources
    * @param key - Cache key
    * @returns Cached resources or null
@@ -852,10 +879,44 @@ class TerraformParserClass {
   }
 
   /**
+   * Get cached grouped resources by key
+   * @param key - Cache key
+   * @returns Cached grouped resources or null if not found/expired
+   */
+  private getGroupedCache(key: string): GroupedResources | null {
+    const cached = this.groupedCache.get(key);
+    const expiry = this.cacheExpiry.get(key);
+    
+    if (cached && expiry && Date.now() < expiry) {
+      return cached;
+    }
+    
+    // Clean up expired cache
+    if (expiry && Date.now() >= expiry) {
+      this.groupedCache.delete(key);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Set cache with both resources and grouped resources
+   * @param key - Cache key
+   * @param resources - Resources to cache
+   * @param groupedResources - Grouped resources to cache
+   */
+  private setCacheWithGrouped(key: string, resources: ParsedResource[], groupedResources: GroupedResources): void {
+    this.cache.set(key, resources);
+    this.groupedCache.set(key, groupedResources);
+    this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
+  }
+
+  /**
    * Clear all cached data
    */
   clearCache(): void {
     this.cache.clear();
+    this.groupedCache.clear();
     this.cacheExpiry.clear();
   }
 
@@ -863,11 +924,63 @@ class TerraformParserClass {
    * Get cache statistics
    * @returns Cache statistics
    */
-  getCacheStats(): { size: number; keys: string[] } {
+  getCacheStats(): { size: number; keys: string[]; groupedSize: number } {
     return {
       size: this.cache.size,
-      keys: Array.from(this.cache.keys())
+      keys: Array.from(this.cache.keys()),
+      groupedSize: this.groupedCache.size
     };
+  }
+
+  /**
+   * Get cached grouped resources by key (public method)
+   * @param key - Cache key
+   * @returns Cached grouped resources or null if not found/expired
+   */
+  getCachedGroupedResources(key: string): GroupedResources | null {
+    return this.getGroupedCache(key);
+  }
+
+  /**
+   * Get cached resources by key (public method)
+   * @param key - Cache key
+   * @returns Cached resources or null if not found/expired
+   */
+  getCachedResources(key: string): ParsedResource[] | null {
+    return this.getCache(key);
+  }
+
+  /**
+   * Get detailed resource information by UUID
+   * @param uuid - Resource UUID
+   * @param resources - Array of parsed resources to search in
+   * @returns ParsedResource or null if not found
+   */
+  getResourceByUUID(uuid: string, resources: ParsedResource[]): ParsedResource | null {
+    return resources.find(resource => resource.uuid === uuid) || null;
+  }
+
+  /**
+   * Get multiple resources by UUIDs
+   * @param uuids - Array of resource UUIDs
+   * @param resources - Array of parsed resources to search in
+   * @returns Array of found ParsedResources
+   */
+  getResourcesByUUIDs(uuids: string[], resources: ParsedResource[]): ParsedResource[] {
+    return resources.filter(resource => uuids.includes(resource.uuid));
+  }
+
+  /**
+   * Get connected resources for a given resource UUID
+   * @param uuid - Resource UUID
+   * @param resources - Array of parsed resources to search in
+   * @returns Array of connected ParsedResources
+   */
+  getConnectedResources(uuid: string, resources: ParsedResource[]): ParsedResource[] {
+    const resource = this.getResourceByUUID(uuid, resources);
+    if (!resource) return [];
+    
+    return this.getResourcesByUUIDs(resource.onScreenElements.connectedNodes, resources);
   }
 }
 

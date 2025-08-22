@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import InfrastructureCanvasViewer from '../canvas/InfrastructureCanvasViewer';
 import GitHubService from '../../utils/githubService';
 import TerraformParser from '../../utils/terraformParser';
-import { InfrastructureNodeData, InfrastructureResourceType } from '../canvas/InfrastructureNode';
 
 interface ArchitectureTabProps {
     projectId: number | null;
@@ -14,22 +13,20 @@ interface GitHubSettings {
     branch: string;
 }
 
-// Use TerraformParser's built-in categorization instead of hardcoded mapping
 
-// TerraformParser handles all categorization logic internally
 
 const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTrigger = 0 }) => {
     const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showConfigureMessage, setShowConfigureMessage] = useState(false);
-    const [infrastructureData, setInfrastructureData] = useState<InfrastructureNodeData[]>([]);
+
     const [terraformFiles, setTerraformFiles] = useState<Array<{ name: string; path: string; selected: boolean }>>([]);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [internalRefreshTrigger, setInternalRefreshTrigger] = useState(0);
     const [parsedTerraformResources, setParsedTerraformResources] = useState<any[]>([]);
-    const [groupBy, setGroupBy] = useState<'service' | 'modules' | 'category'>('service');
-    const [activeFilters, setActiveFilters] = useState<{ provider?: string; service?: string; category?: string }>({});
+    const [groupedTerraformResources, setGroupedTerraformResources] = useState<any>({});
+
 
     // Load GitHub settings from localStorage
     useEffect(() => {
@@ -92,16 +89,28 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                 setTerraformFiles(fileList);
                 setSelectedFile(terraformFiles[0]?.path || null);
 
-                // Parse Terraform files using TerraformParser for both infrastructure data and enhanced parsing
+                // Parse Terraform files using TerraformParser for enhanced parsing with UUIDs and icons
                 const parsedResources = TerraformParser.parseGitHubTerraformFiles(terraformFiles);
                 console.log('Parsed resources from GitHub:', parsedResources);
                 
-                // Convert to infrastructure data using TerraformParser
-                const infrastructureData = TerraformParser.convertTerraformFilesToInfrastructure(terraformFiles);
-                setInfrastructureData(infrastructureData);
-                
-                // Store parsed resources for advanced grouping/filtering
+                // Store parsed resources for advanced grouping/filtering and architecture visualization
                 setParsedTerraformResources(parsedResources);
+                
+                // Get grouped resources from cache (automatically populated by parseGitHubTerraformFiles)
+                const cacheKey = TerraformParser.generateCacheKey(terraformFiles);
+                const groupedResources = TerraformParser.getCachedGroupedResources(cacheKey);
+                console.log('Grouped resources from cache:', groupedResources);
+                
+                // Store grouped resources for use in canvas
+                setGroupedTerraformResources(groupedResources);
+                
+                // Log UUID mapping for debugging
+                console.log('Resource UUID mapping:', parsedResources.map(r => ({
+                    uuid: r.uuid,
+                    name: r.name,
+                    type: r.type,
+                    address: r.address
+                })));
 
             } catch (err) {
                 console.error('Failed to load infrastructure data:', err);
@@ -197,27 +206,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                             // Use enhanced TerraformParser to parse the content
                             const parsedData = TerraformParser.parseTerraformConfig(fileContent, filePath);
                             
-                            // Convert parsed resources to our infrastructure format
-                            const infrastructure: InfrastructureNodeData[] = [];
-                            if (parsedData.resources) {
-                                parsedData.resources.forEach(resource => {
-                                    // Use TerraformParser's built-in categorization
-                                    const category = TerraformParser.getResourceCategory(resource.type);
-                                    const infrastructureType = TerraformParser.mapCategoryToInfrastructureType(category) as InfrastructureResourceType;
-                                    
-                                    infrastructure.push({
-                                        title: resource.name || `${resource.type}_${resource.name}`,
-                                        resourceType: infrastructureType,
-                                        description: `Terraform resource: ${resource.type} (${category})`,
-                                        status: 'active' as const,
-                                        region: 'us-east-1',
-                                        tags: resource.attributes || {},
-                                        configuration: resource.attributes || {}
-                                    });
-                                });
-                            }
-                            
-                            setInfrastructureData(infrastructure);
+
                         } catch (parseError) {
                             console.warn(`Failed to parse Terraform file ${filePath}:`, parseError);
                         }
@@ -229,40 +218,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
         }
     };
 
-    // Handle grouping by service
-    const handleGroupByService = () => {
-        console.log('Group by service clicked');
-        
-        // Group infrastructure data by resource type
-        const grouped = infrastructureData.reduce((acc, resource) => {
-            const service = resource.resourceType;
-            if (!acc[service]) {
-                acc[service] = [];
-            }
-            acc[service].push(resource);
-            return acc;
-        }, {} as Record<string, InfrastructureNodeData[]>);
-        
-        // Convert grouped data back to flat array for the canvas
-        const groupedInfrastructure: InfrastructureNodeData[] = [];
-        Object.entries(grouped).forEach(([service, resources]) => {
-            // Add a service header node
-            groupedInfrastructure.push({
-                title: `${service.toUpperCase()} Service Group`,
-                resourceType: 'iam' as InfrastructureResourceType, // Use IAM icon for service groups
-                description: `${resources.length} resources in ${service} service`,
-                status: 'active' as const,
-                region: 'us-east-1',
-                tags: { Service: service, Group: 'service-group' },
-                configuration: { resourceCount: resources.length }
-            });
-            
-            // Add the actual resources
-            groupedInfrastructure.push(...resources);
-        });
-        
-        setInfrastructureData(groupedInfrastructure);
-    };
+
 
     // Get content of a specific Terraform file using GitHubService
     const getTerraformFileContent = async (owner: string, repo: string, filePath: string, branch: string): Promise<string | null> => {
@@ -368,7 +324,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                         </span>
                     </div>
                     <div className="text-xs text-gray-400">
-                        {infrastructureData.length} resources loaded
+                        {parsedTerraformResources.length} resources loaded
                     </div>
                 </div>
                 <div className="h-full">
@@ -376,11 +332,10 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                         projectId={projectId?.toString()}
                         onNodeClick={(nodeId, data) => console.log('Node clicked:', nodeId, data)}
                         onNodeEdit={(nodeId, data) => console.log('Node edit:', nodeId, data)}
-                        customInfrastructureData={infrastructureData}
                         terraformFiles={terraformFiles}
                         onTerraformFileSelect={handleTerraformFileSelect}
-                        onGroupByService={handleGroupByService}
                         parsedTerraformResources={parsedTerraformResources}
+                        groupedTerraformResources={groupedTerraformResources}
                     />
                 </div>
             </div>
@@ -409,7 +364,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
         );
     }
 
-    if (githubSettings && infrastructureData.length > 0) {
+    if (githubSettings && parsedTerraformResources.length > 0) {
         return renderInfrastructureCanvas();
     }
 
