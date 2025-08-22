@@ -99,6 +99,17 @@
   }
 }
 
+/* Panel Z-Index Management */
+.right-panel {
+  z-index: 1000;
+  position: relative;
+}
+
+.bottom-panel {
+  z-index: 999;
+  position: relative;
+}
+
 /* Docker Log Beautification */
 .docker-log-line {
   padding: 2px 0;

@@ -144,11 +144,21 @@ const ProjectDashboard: React.FC = () => {
 
     // Panel toggle functions
     const toggleBottomPanel = () => {
-        setIsBottomPanelOpen(!isBottomPanelOpen);
+        console.log('ProjectDashboard: toggleBottomPanel called, current state:', isBottomPanelOpen);
+        setIsBottomPanelOpen(prev => {
+            const newState = !prev;
+            console.log('ProjectDashboard: Bottom panel state changing from', prev, 'to', newState);
+            return newState;
+        });
     };
 
     const toggleRightPanel = () => {
-        setIsRightPanelOpen(!isRightPanelOpen);
+        console.log('ProjectDashboard: toggleRightPanel called, current state:', isRightPanelOpen);
+        setIsRightPanelOpen(prev => {
+            const newState = !prev;
+            console.log('ProjectDashboard: Right panel state changing from', prev, 'to', newState);
+            return newState;
+        });
     };
 
     return (
@@ -266,9 +276,16 @@ const ProjectDashboard: React.FC = () => {
                         <div className="flex items-center space-x-2">
                             {/* Bottom Panel Toggle */}
                             <button
-                                onClick={toggleBottomPanel}
-                                className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                                title="Toggle Terminal"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('ProjectDashboard: Bottom panel button clicked');
+                                    toggleBottomPanel();
+                                }}
+                                className={`p-2 rounded-lg transition-colors text-gray-300 hover:bg-white/20 ${
+                                    isBottomPanelOpen ? 'bg-green-500/20 border border-green-500/30' : 'bg-white/10'
+                                }`}
+                                title={`Toggle Terminal ${isBottomPanelOpen ? '(Open)' : '(Closed)'}`}
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -277,12 +294,19 @@ const ProjectDashboard: React.FC = () => {
                             
                             {/* Right Panel Toggle */}
                             <button
-                                onClick={toggleRightPanel}
-                                className="p-2 rounded-lg transition-colors bg-white/10 text-gray-300 hover:bg-white/20"
-                                title="Toggle Chat Panel"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('ProjectDashboard: Right panel button clicked');
+                                    toggleRightPanel();
+                                }}
+                                className={`p-2 rounded-lg transition-colors text-gray-300 hover:bg-white/20 ${
+                                    isRightPanelOpen ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-white/10'
+                                }`}
+                                title={`Toggle Chat Panel ${isRightPanelOpen ? '(Open)' : '(Closed)'}`}
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.0M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                 </svg>
                             </button>
                         </div>
@@ -308,6 +332,12 @@ const ProjectDashboard: React.FC = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
                             </button>
+                        </div>
+                        
+                        {/* Debug Panel States */}
+                        <div className="text-xs text-gray-400 mt-2 flex space-x-4">
+                            <span>Bottom: {isBottomPanelOpen ? '🟢 Open' : '🔴 Closed'}</span>
+                            <span>Right: {isRightPanelOpen ? '🟢 Open' : '🔴 Closed'}</span>
                         </div>
                     </div>
                 </div>
