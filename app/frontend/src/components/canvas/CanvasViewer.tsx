@@ -38,6 +38,14 @@ import {
 } from '@/types/project';
 import { CustomNode, TableNodeData, TableRowData, ColumnDef } from '@/types/canvas';
 import TableNode from './TableNode';
+import { 
+    commManager, 
+    createContractPayload, 
+    createMessagePayload,
+    type ContractPayload,
+    type MessagePayload,
+    type VishCoderPayload
+} from '@/utils/comm';
 
 // Constants for layout calculations
 const BASE_ROW_HEIGHT = 40;
@@ -171,6 +179,10 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     onToggleBottomPanel,
     onToggleRightPanel
 }) => {
+    // Communication Protocol: Uses centralized commManager for all WebSocket communication
+    // - Session threads are managed automatically based on Low Level Requirement ID
+    // - All payloads use standardized 'body' structure (contract, messages, statusDetails)
+    // - Response validation and parsing handled by commManager
     const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeData & { actions: any }>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [userFlows, setUserFlows] = useState<UserFlow[]>([]);
@@ -1566,6 +1578,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             // Start contract building process
             setContractBuilding(true);
             
+            // Set up communication session thread for this build feature request
+            commManager.setSessionThread(rowUiid);
+            
             // Add user message to chat showing the build request FIRST
             const userMessage = {
                 id: `user-${Date.now()}`,
@@ -1747,40 +1762,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`]);
     }, []);
 
-    // Generate standardized payload for VishCoder communication
-    const generateVishCoderPayload = useCallback((
-        type: 'build_feature' | 'question_to_ai' | 'clarification_needed_from_user' | 'status_update' | 'heartbeat',
-        actor: 'System' | 'User' | 'Coder',
-        status: 'Initiated' | 'InProgress' | 'Completed' | 'Failed' | 'Error',
-        payload: any,
-        respondingToMessageId?: string,
-        respondingToActor?: 'System' | 'User' | 'Coder'
-    ) => {
-        const messageId = crypto.randomUUID();
-        const threadId = localStorage.getItem('current_thread_id') || crypto.randomUUID();
-        
-        // Store thread ID for future messages
-        if (!localStorage.getItem('current_thread_id')) {
-            localStorage.setItem('current_thread_id', threadId);
-        }
-        
-        return {
-            version: "1.0",
-            messageId: messageId,
-            threadId: threadId,
-            actor: actor,
-            type: type,
-            status: status,
-            timestamp: new Date().toISOString(),
-            origin: {
-                originMessageId: localStorage.getItem('origin_message_id') || messageId,
-                originActor: actor,
-                respondingToMessageId: respondingToMessageId || null,
-                respondingToActor: respondingToActor || null
-            },
-            payload: payload
-        };
-    }, []);
+    // Communication Protocol Handler - uses the centralized comm.ts module
+    // This replaces the old generateVishCoderPayload function with the standardized approach
+    // All payloads now use the new 'body' structure and proper session management
 
     // Handle AI chat
     const handleAiChat = useCallback(async () => {
@@ -1799,26 +1783,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
         setChatMessages(prev => [...prev, userMsg]);
         
-        // Create standardized payload for AI chat
-        const aiChatPayload = generateVishCoderPayload(
-            'question_to_ai',
-            'User',
-            'Initiated',
-            {
-                message: {
-                    question_text: userMessage,
-                    response_text: null
-                }
-            },
-            undefined,
-            undefined
-        );
+        // Create standardized payload for AI chat using commManager
+        const messagePayload = createMessagePayload(userMessage);
+        const aiChatPayload = commManager.createQuestionPayload(userMessage);
         
         // Send via WebSocket
         agentSocket.send(JSON.stringify(aiChatPayload));
         
         addTerminalLog(`💬 AI Chat: Sent question to VishCoder: "${userMessage}"`);
-    }, [agentInput, agentProcessing, agentSocket, addTerminalLog, generateVishCoderPayload]);
+    }, [agentInput, agentProcessing, agentSocket, addTerminalLog]);
 
     // Send chat message
     const sendChatMessage = useCallback(async (message: string) => {
@@ -1965,11 +1938,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 let logClass = 'log-system';
                 let content = '';
 
-                // Handle standardized messages from VishCoder
-                if (data.type === 'build_feature') {
-                    if (data.actor === 'Coder') {
+                // Parse and validate the response using commManager
+                const parsedResponse = commManager.parseResponse(data);
+                if (!parsedResponse) {
+                    console.error('Invalid response format from VishCoder:', data);
+                    addTerminalLog('❌ Received invalid response format from VishCoder');
+                    return;
+                }
+
+                // Handle standardized messages from VishCoder using parsed response
+                if (parsedResponse.type === 'build_feature') {
+                    if (parsedResponse.actor === 'Coder') {
                         // Response from VishCoder for build feature request
-                        if (data.status === 'InProgress') {
+                        if (parsedResponse.status === 'InProgress') {
                             addTerminalLog('📥 Build feature request received by VishCoder');
                             setAgentStatus('Build feature request received by VishCoder');
                             
@@ -1983,7 +1964,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             };
                             setChatMessages(prev => [...prev, contractReceivedMessage]);
                             
-                        } else if (data.status === 'Completed') {
+                        } else if (parsedResponse.status === 'Completed') {
                             // Contract processing completed
                             addTerminalLog('✅ Build feature processing completed by VishCoder');
                             setAgentStatus('Build feature processing completed');
@@ -1999,9 +1980,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             setChatMessages(prev => [...prev, contractCompletedMessage]);
                             
                             setAgentProcessing(false);
-                        } else if (data.status === 'Failed' || data.status === 'Error') {
+                        } else if (parsedResponse.status === 'Failed' || parsedResponse.status === 'Error') {
                             // Contract processing error
-                            const errorMsg = data.body?.messages?.error || data.body?.messages?.message || 'Unknown error';
+                            const errorMsg = parsedResponse.body.messages.error || parsedResponse.body.messages.message || 'Unknown error';
                             addTerminalLog(`❌ Build feature processing error: ${errorMsg}`);
                             setAgentStatus('Build feature processing failed');
                             
@@ -2019,8 +2000,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         }
                         
                         // Handle status_details from VishCoder for all build_feature responses
-                        if (data.body?.contract?.statusDetails) {
-                            const statusDetails = data.body.contract.statusDetails;
+                        if (parsedResponse.body.contract.statusDetails) {
+                            const statusDetails = parsedResponse.body.contract.statusDetails;
                             const agent = statusDetails.agent || 'Unknown Agent';
                             const llm = statusDetails.LLM || 'Unknown LLM';
                             const details = statusDetails.details || 'No details provided';
@@ -2045,10 +2026,10 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 
                 // Handle AI chat responses from VishCoder
-                if (data.type === 'question_to_ai') {
-                    if (data.actor === 'Coder') {
+                if (parsedResponse.type === 'question_to_ai') {
+                    if (parsedResponse.actor === 'Coder') {
                         // AI response from VishCoder
-                        const responseText = data.body?.messages?.response_text || data.body?.messages?.response || 'Received response from VishCoder';
+                        const responseText = parsedResponse.body.messages.response_text || parsedResponse.body.messages.response || 'Received response from VishCoder';
                         const aiResponse = {
                             id: `ai-${Date.now()}`,
                             type: 'assistant' as const,
@@ -2063,11 +2044,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 
                 // Handle status updates
-                if (data.type === 'status_update') {
-                    if (data.actor === 'Coder') {
+                if (parsedResponse.type === 'status_update') {
+                    if (parsedResponse.actor === 'Coder') {
                         // Check if status_details is available in the body
-                        if (data.body?.statusDetails) {
-                            const statusDetails = data.body.statusDetails;
+                        if (parsedResponse.body.statusDetails) {
+                            const statusDetails = parsedResponse.body.statusDetails;
                             const agent = statusDetails.agent || 'Unknown Agent';
                             const llm = statusDetails.LLM || 'Unknown LLM';
                             const details = statusDetails.details || 'No details provided';
@@ -2090,7 +2071,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             addTerminalLog(`📊 Status Update: ${statusMessage}`);
                         } else {
                             // Fallback to regular message handling
-                            const message = data.body?.messages?.message || 'Status updated';
+                            const message = parsedResponse.body.messages.message || 'Status updated';
                             addTerminalLog(`📊 Status Update: ${message}`);
                             setAgentStatus(message);
                         }
@@ -2098,9 +2079,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 
                 // Handle clarification requests
-                if (data.type === 'clarification_needed_from_user') {
-                    if (data.actor === 'Coder') {
-                        const clarificationText = data.body?.messages?.question_text || 'Clarification needed from user';
+                if (parsedResponse.type === 'clarification_needed_from_user') {
+                    if (parsedResponse.actor === 'Coder') {
+                        const clarificationText = parsedResponse.body.messages.question_text || 'Clarification needed from user';
                         const clarificationMessage = {
                             id: `clarification-${Date.now()}`,
                             type: 'assistant' as const,
@@ -2115,8 +2096,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 
                 // General handler for status_details in any message from VishCoder
-                if (data.actor === 'Coder' && data.body?.statusDetails) {
-                    const statusDetails = data.body.statusDetails;
+                if (parsedResponse.actor === 'Coder' && parsedResponse.body.statusDetails) {
+                    const statusDetails = parsedResponse.body.statusDetails;
                     const agent = statusDetails.agent || 'Unknown Agent';
                     const llm = statusDetails.LLM || 'Unknown LLM';
                     const details = statusDetails.details || 'No details provided';
@@ -2125,41 +2106,44 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     const statusMessage = `${agent}(${llm}) : ${details}`;
                     
                     // Only add to chat if it's not already handled by specific message types
-                    if (data.type !== 'build_feature' && data.type !== 'status_update') {
+                    if (parsedResponse.type !== 'build_feature' && parsedResponse.type !== 'status_update') {
                         const generalStatusMessage = {
                             id: `general-status-${Date.now()}`,
-                                type: 'assistant' as const,
-                                content: `📊 ${statusMessage}`,
-                                timestamp: new Date(),
-                                isContract: false
-                            };
-                            setChatMessages(prev => [...prev, generalStatusMessage]);
-                        }
-                        
-                        // Always log to terminal for debugging
-                        addTerminalLog(`📊 General Status Update: ${statusMessage}`);
+                            type: 'assistant' as const,
+                            content: `📊 ${statusMessage}`,
+                            timestamp: new Date(),
+                            isContract: false
+                        };
+                        setChatMessages(prev => [...prev, generalStatusMessage]);
                     }
-
-                // Handle regular AI agent messages (legacy support)
-                if(data.source === 'manager') logClass = 'log-manager';
-                if(data.source === 'coder') logClass = 'log-coder';
-                if(data.error) logClass = 'log-error';
-
-                // Update status based on incoming messages
-                if (data.log && data.log.includes("Manager is thinking")) {
-                    setAgentStatus("Manager is planning the next step...");
-                } else if (data.log && data.log.includes("Sending task to Coder")) {
-                    setAgentStatus("Coder is generating code...");
+                    
+                    // Always log to terminal for debugging
+                    addTerminalLog(`📊 General Status Update: ${statusMessage}`);
                 }
 
-                const messageContent = data.log || data.error || data.status || "Received an empty message.";
-                content = `<div><span class="badge ${logClass}">${data.source.toUpperCase()}</span> ${messageContent.replace(/\n/g, '<br>')}</div>`;
-                setAgentLogs(prev => prev + content);
+                // Handle regular AI agent messages (legacy support)
+                // Only process legacy format if the parsed response doesn't have the new structure
+                if (!parsedResponse.body || Object.keys(parsedResponse.body).length === 0) {
+                    if(data.source === 'manager') logClass = 'log-manager';
+                    if(data.source === 'coder') logClass = 'log-coder';
+                    if(data.error) logClass = 'log-error';
 
-                // If the process is finished, re-enable the UI
-                if (data.status === "SUCCESS" || data.status === "FAILED" || data.error) {
-                    setAgentStatus(`Finished (${data.status || 'Error'})`);
-                    setAgentProcessing(false);
+                    // Update status based on incoming messages
+                    if (data.log && data.log.includes("Manager is thinking")) {
+                        setAgentStatus("Manager is planning the next step...");
+                    } else if (data.log && data.log.includes("Sending task to Coder")) {
+                        setAgentStatus("Coder is generating code...");
+                    }
+
+                    const messageContent = data.log || data.error || data.status || "Received an empty message.";
+                    content = `<div><span class="badge ${logClass}">${data.source.toUpperCase()}</span> ${messageContent.replace(/\n/g, '<br>')}</div>`;
+                    setAgentLogs(prev => prev + content);
+
+                    // If the process is finished, re-enable the UI
+                    if (data.status === "SUCCESS" || data.status === "FAILED" || data.error) {
+                        setAgentStatus(`Finished (${data.status || 'Error'})`);
+                        setAgentProcessing(false);
+                    }
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -2747,20 +2731,16 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                             .map(msg => msg.contractData)[0];
                                         
                                         if (contractData && agentSocket && agentSocket.readyState === WebSocket.OPEN) {
-                                            // Create the standardized payload for VishCoder
-                                            const vishCoderPayload = generateVishCoderPayload(
-                                                'build_feature',
-                                                'System',
-                                                'Initiated',
-                                                {
-                                                    contract: contractData
-                                                },
-                                                undefined,
-                                                undefined
+                                            // Create the standardized payload for VishCoder using commManager
+                                            const contractPayload = createContractPayload(
+                                                contractData.metadata || {},
+                                                contractData.settings || {},
+                                                contractData.requirements || {},
+                                                contractData.statusDetails || {}
                                             );
+                                            const vishCoderPayload = commManager.createBuildFeaturePayload(contractPayload);
                                             
-                                            // Store origin message ID for this build feature request
-                                            localStorage.setItem('origin_message_id', vishCoderPayload.messageId);
+                                            // Origin message ID is automatically managed by commManager
                                             
                                             // Send via WebSocket
                                             agentSocket.send(JSON.stringify(vishCoderPayload));
