@@ -27,6 +27,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import InfrastructureNode, { InfrastructureNodeData, InfrastructureResourceType, RESOURCE_CONFIG } from './InfrastructureNode';
+import TerraformParser from '../../utils/terraformParser';
 
 // Import AWS icons
 import lambdaIcon from '../../../assets/aws/lambda.svg';
@@ -36,6 +37,12 @@ import apigatewayIcon from '../../../assets/aws/apigateway.svg';
 import iamIcon from '../../../assets/aws/iam.svg';
 import s3Icon from '../../../assets/aws/s3.svg';
 
+// Simple function to get resource type from TerraformParser data
+const getResourceTypeFromTerraform = (resource: any): string => {
+    // Use the service property directly from TerraformParser
+    return resource.service || resource.resourceType || 'lambda';
+};
+
 // AWS icon mapping
 const AWS_ICONS: Record<string, string> = {
     lambda: lambdaIcon,
@@ -44,6 +51,26 @@ const AWS_ICONS: Record<string, string> = {
     apigateway: apigatewayIcon,
     iam: iamIcon,
     s3: s3Icon,
+    // Additional resource types with appropriate icons
+    cloudfront: s3Icon, // Use S3 icon for CloudFront
+    cloudwatch: iamIcon, // Use IAM icon for CloudWatch
+    route53: apigatewayIcon, // Use API Gateway icon for Route53
+    vpc: iamIcon, // Use IAM icon for VPC
+    alb: apigatewayIcon, // Use API Gateway icon for ALB
+    ecs: lambdaIcon, // Use Lambda icon for ECS
+    rds: dynamodbIcon, // Use DynamoDB icon for RDS
+    elasticache: dynamodbIcon, // Use DynamoDB icon for ElastiCache
+    sqs: lambdaIcon, // Use Lambda icon for SQS
+    sns: lambdaIcon, // Use Lambda icon for SNS
+    eventbridge: lambdaIcon, // Use Lambda icon for EventBridge
+    secretsmanager: iamIcon, // Use IAM icon for Secrets Manager
+    ssm: iamIcon, // Use IAM icon for SSM
+    ses: lambdaIcon, // Use Lambda icon for SES
+    bedrock: lambdaIcon, // Use Lambda icon for Bedrock
+    glue: lambdaIcon, // Use Lambda icon for Glue
+    athena: dynamodbIcon, // Use DynamoDB icon for Athena
+    quicksight: dynamodbIcon, // Use DynamoDB icon for QuickSight
+    appsync: apigatewayIcon, // Use API Gateway icon for AppSync
     // Default fallback
     default: lambdaIcon
 };
@@ -121,167 +148,10 @@ const InfrastructureEdge: React.FC<EdgeProps> = ({
 };
 
 // Sample infrastructure data - this would come from your Terraform or AWS API
-const SAMPLE_INFRASTRUCTURE: InfrastructureNodeData[] = [
-    {
-        title: 'VishMaker API Gateway',
-        resourceType: 'apigateway',
-        description: 'HTTP API Gateway for all backend services',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Environment: 'prod', Project: 'VishMaker' },
-        metrics: { requests: 1500, errors: 5 },
-        security: { encryption: true, public: false }
-    },
-    {
-        title: 'Auth Lambda',
-        resourceType: 'lambda',
-        description: 'Authentication and user management service',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'auth', Environment: 'prod' },
-        metrics: { cpu: 45, memory: 60, requests: 800 },
-        cost: { monthly: 12.50, daily: 0.42 }
-    },
-    {
-        title: 'LLM Lambda',
-        resourceType: 'lambda',
-        description: 'AI/ML processing and code generation service',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'llm', Environment: 'prod' },
-        metrics: { cpu: 78, memory: 85, requests: 300 },
-        cost: { monthly: 45.20, daily: 1.51 }
-    },
-    {
-        title: 'Projects Lambda',
-        resourceType: 'lambda',
-        description: 'Project management and CRUD operations',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'projects', Environment: 'prod' },
-        metrics: { cpu: 32, memory: 45, requests: 1200 },
-        cost: { monthly: 8.75, daily: 0.29 }
-    },
-    {
-        title: 'User Flows Table',
-        resourceType: 'dynamodb',
-        description: 'User flow and requirement storage',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Table: 'user-flows', Environment: 'prod' },
-        metrics: { requests: 2500 },
-        cost: { monthly: 23.40, daily: 0.78 },
-        security: { encryption: true }
-    },
-    {
-        title: 'Requirements Table',
-        resourceType: 'dynamodb',
-        description: 'High and low level requirements storage',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Table: 'requirements', Environment: 'prod' },
-        metrics: { requests: 1800 },
-        cost: { monthly: 18.90, daily: 0.63 },
-        security: { encryption: true }
-    },
-    {
-        title: 'Config S3 Bucket',
-        resourceType: 's3',
-        description: 'Application configuration and static assets',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Bucket: 'configs', Environment: 'prod' },
-        cost: { monthly: 2.15, daily: 0.07 },
-        security: { encryption: true, public: false }
-    },
-    {
-        title: 'CloudFront Distribution',
-        resourceType: 'cloudfront',
-        description: 'Global content delivery and caching',
-        status: 'active',
-        region: 'global',
-        tags: { Service: 'cdn', Environment: 'prod' },
-        metrics: { requests: 5000 },
-        cost: { monthly: 15.80, daily: 0.53 }
-    },
-    {
-        title: 'Cognito User Pool',
-        resourceType: 'cognito',
-        description: 'User authentication and management',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'auth', Environment: 'prod' },
-        security: { encryption: true, compliance: ['SOC2', 'GDPR'] }
-    },
-    {
-        title: 'IAM Roles & Policies',
-        resourceType: 'iam',
-        description: 'Security permissions and access control',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'security', Environment: 'prod' },
-        security: { encryption: true }
-    },
-    {
-        title: 'CloudWatch Logs',
-        resourceType: 'cloudwatch',
-        description: 'Application monitoring and logging',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'monitoring', Environment: 'prod' },
-        cost: { monthly: 8.45, daily: 0.28 }
-    },
-    {
-        title: 'Route53 DNS',
-        resourceType: 'route53',
-        description: 'Domain management and routing',
-        status: 'active',
-        region: 'us-east-1',
-        tags: { Service: 'dns', Environment: 'prod' },
-        cost: { monthly: 0.50, daily: 0.02 }
-    }
-];
+
 
 // Sample connections between infrastructure components
-const SAMPLE_CONNECTIONS: Edge[] = [
-    // API Gateway connections
-    { id: 'e1', source: 'VishMaker API Gateway', target: 'Auth Lambda', data: { type: 'integration', label: 'HTTP' } },
-    { id: 'e2', source: 'VishMaker API Gateway', target: 'LLM Lambda', data: { type: 'integration', label: 'HTTP' } },
-    { id: 'e3', source: 'VishMaker API Gateway', target: 'Projects Lambda', data: { type: 'integration', label: 'HTTP' } },
 
-    // Lambda to DynamoDB connections
-    { id: 'e4', source: 'Auth Lambda', target: 'User Flows Table', data: { type: 'database', label: 'CRUD' } },
-    { id: 'e5', source: 'LLM Lambda', target: 'User Flows Table', data: { type: 'database', label: 'CRUD' } },
-    { id: 'e6', source: 'Projects Lambda', target: 'User Flows Table', data: { type: 'database', label: 'CRUD' } },
-    { id: 'e7', source: 'LLM Lambda', target: 'Requirements Table', data: { type: 'database', label: 'CRUD' } },
-    { id: 'e8', source: 'Projects Lambda', target: 'Requirements Table', data: { type: 'database', label: 'CRUD' } },
-
-    // Lambda to S3 connections
-    { id: 'e9', source: 'LLM Lambda', target: 'Config S3 Bucket', data: { type: 'storage', label: 'Config' } },
-
-    // CloudFront connections
-    { id: 'e10', source: 'CloudFront Distribution', target: 'Config S3 Bucket', data: { type: 'storage', label: 'Origin' } },
-
-    // Security connections
-    { id: 'e11', source: 'IAM Roles & Policies', target: 'Auth Lambda', data: { type: 'security', label: 'Permissions' } },
-    { id: 'e12', source: 'IAM Roles & Policies', target: 'LLM Lambda', data: { type: 'security', label: 'Permissions' } },
-    { id: 'e13', source: 'IAM Roles & Policies', target: 'Projects Lambda', data: { type: 'security', label: 'Permissions' } },
-
-    // Monitoring connections
-    { id: 'e14', source: 'Auth Lambda', target: 'CloudWatch Logs', data: { type: 'monitoring', label: 'Logs' } },
-    { id: 'e15', source: 'LLM Lambda', target: 'CloudWatch Logs', data: { type: 'monitoring', label: 'Logs' } },
-    { id: 'e16', source: 'Projects Lambda', target: 'CloudWatch Logs', data: { type: 'monitoring', label: 'Logs' } },
-
-    // DNS connections
-    { id: 'e17', source: 'Route53 DNS', target: 'CloudFront Distribution', data: { type: 'dependency', label: 'CNAME' } },
-    { id: 'e18', source: 'Route53 DNS', target: 'VishMaker API Gateway', data: { type: 'dependency', label: 'CNAME' } },
-
-    // Authentication flow
-    { id: 'e19', source: 'Auth Lambda', target: 'Cognito User Pool', data: { type: 'integration', label: 'Auth' } },
-
-    // Data flow dependencies
-    { id: 'e20', source: 'User Flows Table', target: 'Requirements Table', data: { type: 'dependency', label: 'References' } }
-];
 
 interface InfrastructureCanvasViewerProps {
     projectId?: string | null;
@@ -291,11 +161,13 @@ interface InfrastructureCanvasViewerProps {
     terraformFiles?: Array<{ name: string; path: string; selected?: boolean }>;
     onTerraformFileSelect?: (filePath: string) => void;
     onGroupByService?: () => void;
+    parsedTerraformResources?: any[];
 }
 
 interface FilterOptions {
     searchTerm: string;
     serviceFilter: string;
+    groupBy: 'service' | 'modules' | 'category';
     showConnectivity: boolean;
     showDependencies: boolean;
     showAttributes: boolean;
@@ -308,10 +180,11 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
     customInfrastructureData,
     terraformFiles,
     onTerraformFileSelect,
-    onGroupByService
+    onGroupByService,
+    parsedTerraformResources
 }) => {
-    // Use custom data if provided, otherwise use sample data
-    const infrastructureData = customInfrastructureData || SAMPLE_INFRASTRUCTURE;
+    // Use custom data if provided, otherwise use empty array
+    const infrastructureData = customInfrastructureData || [];
 
     // Convert infrastructure data to ReactFlow nodes with better layout
     const initialNodes: Node<InfrastructureNodeData>[] = infrastructureData.map((resource, index) => {
@@ -348,6 +221,7 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
     const [filterOptions, setFilterOptions] = useState<FilterOptions>({
         searchTerm: '',
         serviceFilter: '',
+        groupBy: 'service',
         showConnectivity: true,
         showDependencies: true,
         showAttributes: true
@@ -363,12 +237,39 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
     // Modal state for showing node details
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [selectedNodeData, setSelectedNodeData] = useState<InfrastructureNodeData | null>(null);
+    
+    // Resource details popup state
+    const [selectedResourceDetails, setSelectedResourceDetails] = useState<any>(null);
+    const [showResourcePopup, setShowResourcePopup] = useState(false);
 
     // Get unique services for filtering
     const services = useMemo(() => {
-        const serviceSet = new Set(infrastructureData.map(resource => resource.resourceType));
+        const serviceSet = new Set(infrastructureData.map(resource => getResourceTypeFromTerraform(resource)));
         return Array.from(serviceSet).sort();
     }, [infrastructureData]);
+
+    // Convert infrastructure data to ParsedResource format for grouping
+    const parsedResourcesForGrouping = useMemo(() => {
+        return infrastructureData.map(resource => ({
+            address: resource.title,
+            type: getResourceTypeFromTerraform(resource),
+            name: resource.title,
+            modules: [],
+            provider: 'aws',
+            service: getResourceTypeFromTerraform(resource),
+            category: TerraformParser.getResourceCategory(getResourceTypeFromTerraform(resource)),
+            isData: false,
+            attributes: resource.tags || {},
+            dependencies: []
+        }));
+    }, [infrastructureData]);
+
+    // Group resources based on selected grouping option
+    const groupedResources = useMemo(() => {
+        if (!parsedResourcesForGrouping.length) return {};
+        
+        return TerraformParser.groupResources(parsedResourcesForGrouping, filterOptions.groupBy);
+    }, [parsedResourcesForGrouping, filterOptions.groupBy]);
 
     // Filtered infrastructure data
     const filteredInfrastructureData = useMemo(() => {
@@ -378,11 +279,11 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                 (resource.description || '').toLowerCase().includes(filterOptions.searchTerm.toLowerCase());
 
             const matchesService = !filterOptions.serviceFilter ||
-                resource.resourceType === filterOptions.serviceFilter;
+                getResourceTypeFromTerraform(resource) === filterOptions.serviceFilter;
 
             return matchesSearch && matchesService;
         });
-    }, [infrastructureData, filterOptions]);
+    }, [infrastructureData, filterOptions.searchTerm, filterOptions.serviceFilter]);
 
 
 
@@ -393,10 +294,12 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
 
         // Create basic connections based on resource types
         infraData.forEach((resource, index) => {
-            if (resource.resourceType === 'apigateway') {
+            const resourceType = getResourceTypeFromTerraform(resource);
+            if (resourceType === 'apigateway') {
                 // API Gateway connects to Lambda functions
                 infraData.forEach(target => {
-                    if (target.resourceType === 'lambda') {
+                    const targetType = getResourceTypeFromTerraform(target);
+                    if (targetType === 'lambda') {
                         // Determine if this edge should be highlighted
                         let isHighlighted = false;
                         const edgeId = `e${connections.length + 1}`;
@@ -424,10 +327,11 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                         });
                     }
                 });
-            } else if (resource.resourceType === 'lambda') {
+            } else if (resourceType === 'lambda') {
                 // Lambda functions connect to databases and storage
                 infraData.forEach(target => {
-                    if (['dynamodb', 's3', 'rds'].includes(target.resourceType)) {
+                    const targetType = getResourceTypeFromTerraform(target);
+                    if (['dynamodb', 's3', 'rds'].includes(targetType)) {
                         // Determine if this edge should be highlighted
                         let isHighlighted = false;
                         const edgeId = `e${connections.length + 1}`;
@@ -495,74 +399,162 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
 
     // Update nodes when filtered data changes
     useEffect(() => {
-        const filteredNodes: Node<InfrastructureNodeData>[] = filteredInfrastructureData.map((resource, index) => {
-            const cols = 8; // More columns since nodes are smaller
-            const spacingX = 120; // Smaller spacing since nodes are smaller
-            const spacingY = 120;
+        let filteredNodes: Node<InfrastructureNodeData>[];
 
-            const startX = 50;
-            const startY = 50;
-
-            const col = index % cols;
-            const row = Math.floor(index / cols);
-
-            // Get AWS icon for the resource type
-            const awsIcon = AWS_ICONS[resource.resourceType] || AWS_ICONS.default;
-
-            // Determine if this node should be highlighted
-            let isHighlighted = false;
-            let isConnected = false;
-
-            if (isInitialState) {
-                // Initial state: everything is highlighted
-                isHighlighted = true;
-                isConnected = false;
-            } else if (selectedNodeId) {
-                // Node selected: highlight selected node and connected nodes, dim everything else
-                const { connectedNodeIds } = getConnectedElements(selectedNodeId);
-                if (resource.title === selectedNodeId) {
-                    isHighlighted = true;
-                    isConnected = false;
-                } else if (connectedNodeIds.has(resource.title)) {
-                    isHighlighted = true;
-                    isConnected = true;
-                } else {
-                    isHighlighted = false;
-                    isConnected = false;
+        if (filterOptions.groupBy === 'service') {
+            // Group by service - arrange resources in clusters
+            const serviceGroups: Record<string, InfrastructureNodeData[]> = {};
+            
+            // Group resources by service
+            filteredInfrastructureData.forEach(resource => {
+                const service = getResourceTypeFromTerraform(resource);
+                if (!serviceGroups[service]) {
+                    serviceGroups[service] = [];
                 }
-            } else if (selectedEdgeId) {
-                // Edge selected: highlight connected nodes, dim everything else
-                const connectedNodeIds = getEdgeConnectedNodes(selectedEdgeId);
-                if (connectedNodeIds.has(resource.title)) {
+                serviceGroups[service].push(resource);
+            });
+
+            filteredNodes = [];
+            let nodeIndex = 0;
+
+            // Position each service group
+            Object.entries(serviceGroups).forEach(([service, resources], groupIndex) => {
+                const groupX = 100 + (groupIndex % 3) * 500; // 3 groups per row
+                const groupY = 100 + Math.floor(groupIndex / 3) * 400; // New row every 3 groups
+
+                // Position resources within each service group
+                resources.forEach((resource, resourceIndex) => {
+                    const resourcesPerRow = 4;
+                    const row = Math.floor(resourceIndex / resourcesPerRow);
+                    const col = resourceIndex % resourcesPerRow;
+                    
+                    const x = groupX + col * 140; // Closer spacing within groups
+                    const y = groupY + row * 120;
+
+                    // Get AWS icon for the resource type
+                    const resourceType = getResourceTypeFromTerraform(resource);
+                    const awsIcon = AWS_ICONS[resourceType] || AWS_ICONS.default;
+
+                    // Determine if this node should be highlighted
+                    let isHighlighted = false;
+                    let isConnected = false;
+
+                    if (isInitialState) {
+                        isHighlighted = true;
+                        isConnected = false;
+                    } else if (selectedNodeId) {
+                        const { connectedNodeIds } = getConnectedElements(selectedNodeId);
+                        if (resource.title === selectedNodeId) {
+                            isHighlighted = true;
+                            isConnected = false;
+                        } else if (connectedNodeIds.has(resource.title)) {
+                            isHighlighted = true;
+                            isConnected = true;
+                        } else {
+                            isHighlighted = false;
+                            isConnected = false;
+                        }
+                    } else if (selectedEdgeId) {
+                        const connectedNodeIds = getEdgeConnectedNodes(selectedEdgeId);
+                        if (connectedNodeIds.has(resource.title)) {
+                            isHighlighted = true;
+                            isConnected = false;
+                        } else {
+                            isHighlighted = false;
+                            isConnected = false;
+                        }
+                    }
+
+                    filteredNodes.push({
+                        id: resource.title,
+                        type: 'infrastructureNode',
+                        position: { x, y },
+                        data: {
+                            ...resource,
+                            resourceType: resourceType as InfrastructureResourceType, // Use converted resource type
+                            awsIcon: awsIcon,
+                            isHighlighted,
+                            isConnected
+                        },
+                        draggable: true,
+                        selectable: true
+                    });
+                    nodeIndex++;
+                });
+            });
+        } else {
+            // Default grid layout for other grouping options
+            filteredNodes = filteredInfrastructureData.map((resource, index) => {
+                const cols = 8; // More columns since nodes are smaller
+                const spacingX = 120; // Smaller spacing since nodes are smaller
+                const spacingY = 120;
+
+                const startX = 50;
+                const startY = 50;
+
+                const col = index % cols;
+                const row = Math.floor(index / cols);
+
+                // Get AWS icon for the resource type
+                const resourceType = getResourceTypeFromTerraform(resource);
+                const awsIcon = AWS_ICONS[resourceType] || AWS_ICONS.default;
+
+                // Determine if this node should be highlighted
+                let isHighlighted = false;
+                let isConnected = false;
+
+                if (isInitialState) {
+                    // Initial state: everything is highlighted
                     isHighlighted = true;
                     isConnected = false;
-                } else {
-                    isHighlighted = false;
-                    isConnected = false;
+                } else if (selectedNodeId) {
+                    // Node selected: highlight selected node and connected nodes, dim everything else
+                    const { connectedNodeIds } = getConnectedElements(selectedNodeId);
+                    if (resource.title === selectedNodeId) {
+                        isHighlighted = true;
+                        isConnected = false;
+                    } else if (connectedNodeIds.has(resource.title)) {
+                        isHighlighted = true;
+                        isConnected = true;
+                    } else {
+                        isHighlighted = false;
+                        isConnected = false;
+                    }
+                } else if (selectedEdgeId) {
+                    // Edge selected: highlight connected nodes, dim everything else
+                    const connectedNodeIds = getEdgeConnectedNodes(selectedEdgeId);
+                    if (connectedNodeIds.has(resource.title)) {
+                        isHighlighted = true;
+                        isConnected = false;
+                    } else {
+                        isHighlighted = false;
+                        isConnected = false;
+                    }
                 }
-            }
 
-            return {
-                id: resource.title,
-                type: 'infrastructureNode',
-                position: {
-                    x: startX + col * spacingX,
-                    y: startY + row * spacingY
-                },
-                data: {
-                    ...resource,
-                    awsIcon: awsIcon,
-                    isHighlighted,
-                    isConnected
-                },
-                draggable: true,
-                selectable: true
-            };
-        });
+                return {
+                    id: resource.title,
+                    type: 'infrastructureNode',
+                    position: {
+                        x: startX + col * spacingX,
+                        y: startY + row * spacingY
+                    },
+                    data: {
+                        ...resource,
+                        resourceType: resourceType as InfrastructureResourceType, // Use converted resource type
+                        awsIcon: awsIcon,
+                        isHighlighted,
+                        isConnected
+                    },
+                    draggable: true,
+                    selectable: true
+                };
+            });
+        }
 
         setNodes(filteredNodes);
         setEdges(generateConnections(filteredInfrastructureData));
-    }, [filteredInfrastructureData, setNodes, setEdges]);
+    }, [filteredInfrastructureData, setNodes, setEdges, filterOptions.groupBy, isInitialState, selectedNodeId, selectedEdgeId]);
 
     // Handle node changes
     const handleNodesChange: OnNodesChange = useCallback(
@@ -589,24 +581,48 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
     );
 
     // Handle node click (single click for highlighting)
-    const handleNodeClick = useCallback((nodeId: string, data: InfrastructureNodeData) => {
-        console.log('Infrastructure node clicked:', nodeId, data);
+    const handleNodeClick = useCallback((event: React.MouseEvent, node: Node<InfrastructureNodeData>) => {
+        console.log('Infrastructure node clicked:', node.id, node.data);
 
         // Set selected node and clear edge selection
-        setSelectedNodeId(nodeId);
+        setSelectedNodeId(node.id);
         setSelectedEdgeId(null);
 
-        onNodeClick?.(nodeId, data);
+        onNodeClick?.(node.id, node.data);
     }, [onNodeClick]);
 
     // Handle node double click (opens modal)
-    const handleNodeDoubleClick = useCallback((nodeId: string, data: InfrastructureNodeData) => {
-        console.log('Infrastructure node double-clicked:', nodeId, data);
+    const handleNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node<InfrastructureNodeData>) => {
+        console.log('Infrastructure node double-clicked:', node.id, node.data);
 
         // Show details modal
-        setSelectedNodeData(data);
+        setSelectedNodeData(node.data);
         setShowDetailsModal(true);
-    }, []);
+
+        // Also prepare resource details for Terraform popup
+        const resourceDetails = {
+            ...node.data,
+            terraformType: node.data.resourceType,
+            terraformAddress: node.data.title,
+            terraformCategory: TerraformParser.getResourceCategory(node.data.resourceType),
+            terraformService: node.data.resourceType,
+            terraformProvider: 'aws',
+            terraformAttributes: node.data.tags || {},
+            terraformConfiguration: node.data.configuration || {},
+            terraformDependencies: edges
+                .filter(edge => edge.source === node.data.title || edge.target === node.data.title)
+                .map(edge => {
+                    if (edge.source === node.data.title) {
+                        return `→ ${edge.target} (${edge.data?.type || 'connection'})`;
+                    } else {
+                        return `← ${edge.source} (${edge.data?.type || 'connection'})`;
+                    }
+                }),
+            terraformModules: []
+        };
+        setSelectedResourceDetails(resourceDetails);
+        setShowResourcePopup(true);
+    }, [edges]);
 
     // Handle edge click
     const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
@@ -636,8 +652,18 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
         infrastructureNode: (props) => (
             <InfrastructureNode
                 {...props}
-                onNodeClick={handleNodeClick}
-                onNodeDoubleClick={handleNodeDoubleClick}
+                onNodeClick={(nodeId: string, data: InfrastructureNodeData) => {
+                    // Convert to ReactFlow format
+                    const mockEvent = {} as React.MouseEvent;
+                    const mockNode = { id: nodeId, data } as Node<InfrastructureNodeData>;
+                    handleNodeClick(mockEvent, mockNode);
+                }}
+                onNodeDoubleClick={(nodeId: string, data: InfrastructureNodeData) => {
+                    // Convert to ReactFlow format
+                    const mockEvent = {} as React.MouseEvent;
+                    const mockNode = { id: nodeId, data } as Node<InfrastructureNodeData>;
+                    handleNodeDoubleClick(mockEvent, mockNode);
+                }}
                 onNodeEdit={handleNodeEdit}
                 awsIcon={props.data.awsIcon}
             />
@@ -687,14 +713,6 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
 
             {/* Main Canvas Area */}
             <div className="flex-1 relative">
-                {/* Canvas Header */}
-                <div className="absolute top-4 left-4 z-10 bg-gray-900/95 backdrop-blur-md border border-gray-700 rounded-xl p-4 text-white shadow-2xl">
-                    <h2 className="text-xl font-bold text-blue-400 mb-2">AWS Infrastructure</h2>
-                    <p className="text-sm text-gray-300">Interactive visualization of your AWS resources</p>
-                    <div className="mt-2 text-xs text-gray-400">
-                        {infrastructureData.length} resources loaded
-                    </div>
-                </div>
 
                 <ReactFlow
                     nodes={nodes}
@@ -702,6 +720,8 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                     onNodesChange={handleNodesChange}
                     onEdgesChange={handleEdgesChange}
                     onConnect={handleConnect}
+                    onNodeClick={handleNodeClick}
+                    onNodeDoubleClick={handleNodeDoubleClick}
                     onEdgeClick={handleEdgeClick}
                     onPaneClick={handleCanvasClick}
                     nodeTypes={nodeTypes}
@@ -729,6 +749,31 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                         nodeColor="#6b7280"
                         maskColor="rgba(0, 0, 0, 0.1)"
                     />
+
+                    {/* Service Group Labels - Only show when grouping by service */}
+                    {filterOptions.groupBy === 'service' && Object.keys(groupedResources).length > 0 && (
+                        <div className="absolute inset-0 pointer-events-none">
+                            {Object.entries(groupedResources).map(([service, resources], groupIndex) => {
+                                const groupX = 100 + (groupIndex % 3) * 500;
+                                const groupY = 100 + Math.floor(groupIndex / 3) * 400;
+                                
+                                return (
+                                    <div
+                                        key={service}
+                                        className="absolute bg-blue-600/20 border border-blue-400/50 rounded-lg px-3 py-2 text-blue-300 font-semibold text-sm backdrop-blur-sm"
+                                        style={{
+                                            left: groupX - 20,
+                                            top: groupY - 40,
+                                            minWidth: '120px',
+                                            textAlign: 'center'
+                                        }}
+                                    >
+                                        {service.charAt(0).toUpperCase() + service.slice(1)} ({resources.length})
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </ReactFlow>
 
 
@@ -737,6 +782,20 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
             {/* Right Sidebar - Advanced Filtering & Options */}
             <div className="w-80 bg-gray-800/95 backdrop-blur-md border-l border-gray-700 p-4 overflow-y-auto">
                 <h3 className="text-lg font-bold text-blue-400 mb-4">Visualization Options</h3>
+
+                {/* Group By */}
+                <div className="mb-4">
+                    <label className="block text-xs font-medium text-gray-300 mb-2">Group By</label>
+                    <select
+                        value={filterOptions.groupBy || 'service'}
+                        onChange={(e) => setFilterOptions(prev => ({ ...prev, groupBy: e.target.value as 'service' | 'modules' | 'category' }))}
+                        className="w-full px-3 py-2 text-sm bg-gray-700/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                    >
+                                                    <option value="service">Service</option>
+                            <option value="modules">Modules</option>
+                            <option value="category">Categories</option>
+                    </select>
+                </div>
 
                 {/* Search */}
                 <div className="mb-4">
@@ -799,19 +858,7 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                     </div>
                 </div>
 
-                {/* Group by Service */}
-                <div className="mb-6">
-                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Group by Service</h4>
-                    <button
-                        onClick={onGroupByService}
-                        className="w-full p-3 bg-blue-600/30 border border-blue-400/50 rounded-lg text-blue-300 hover:bg-blue-600/50 transition-all duration-200"
-                    >
-                        <div className="flex items-center space-x-2">
-                            <span>🔧</span>
-                            <span>Group by AWS Service</span>
-                        </div>
-                    </button>
-                </div>
+
 
                 {/* Resource Statistics */}
                 <div className="mb-6">
@@ -824,57 +871,39 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Lambda Functions:</span>
                             <span className="text-white font-medium">
-                                {filteredInfrastructureData.filter(r => r.resourceType === 'lambda').length}
+                                {filteredInfrastructureData.filter(r => getResourceTypeFromTerraform(r) === 'lambda').length}
                             </span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Databases:</span>
                             <span className="text-white font-medium">
-                                {filteredInfrastructureData.filter(r => ['dynamodb', 'rds'].includes(r.resourceType)).length}
+                                {filteredInfrastructureData.filter(r => ['dynamodb', 'rds'].includes(getResourceTypeFromTerraform(r))).length}
                             </span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Storage:</span>
                             <span className="text-white font-medium">
-                                {filteredInfrastructureData.filter(r => ['s3', 'cloudfront'].includes(r.resourceType)).length}
+                                {filteredInfrastructureData.filter(r => ['s3', 'cloudfront'].includes(getResourceTypeFromTerraform(r))).length}
                             </span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Security:</span>
                             <span className="text-white font-medium">
-                                {filteredInfrastructureData.filter(r => ['iam', 'cognito'].includes(r.resourceType)).length}
+                                {filteredInfrastructureData.filter(r => ['iam', 'cognito'].includes(getResourceTypeFromTerraform(r))).length}
                             </span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Monitoring:</span>
                             <span className="text-white font-medium">
-                                {filteredInfrastructureData.filter(r => ['cloudwatch', 'xray'].includes(r.resourceType)).length}
+                                {filteredInfrastructureData.filter(r => ['cloudwatch', 'xray'].includes(getResourceTypeFromTerraform(r))).length}
                             </span>
                         </div>
                     </div>
                 </div>
 
-                {/* Service Breakdown */}
-                <div className="mb-6">
-                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Service Breakdown</h4>
-                    <div className="space-y-2">
-                        {Object.entries(
-                            filteredInfrastructureData.reduce((acc, resource) => {
-                                const type = resource.resourceType;
-                                acc[type] = (acc[type] || 0) + 1;
-                                return acc;
-                            }, {} as Record<string, number>)
-                        ).map(([service, count]) => (
-                            <div key={service} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
-                                <div className="flex items-center space-x-2">
-                                    <div className={`w-3 h-3 rounded-full ${RESOURCE_CONFIG[service as InfrastructureResourceType]?.bgColor || 'bg-gray-500'}`}></div>
-                                    <span className="text-sm text-gray-300 capitalize">{service}</span>
-                                </div>
-                                <span className="text-sm font-medium text-white">{count}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+
+
+
 
                 {/* Quick Actions */}
                 <div>
@@ -966,6 +995,141 @@ const InfrastructureCanvasViewer: React.FC<InfrastructureCanvasViewerProps> = ({
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Terraform Resource Details Popup */}
+            {showResourcePopup && selectedResourceDetails && (
+                <div 
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                    onClick={() => setShowResourcePopup(false)}
+                >
+                    <div 
+                        className="bg-gray-800 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white">Terraform Resource Details</h3>
+                            <button
+                                onClick={() => setShowResourcePopup(false)}
+                                className="text-gray-400 hover:text-white text-xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Basic Information */}
+                            <div className="space-y-4">
+                                <div className="bg-gray-700/50 rounded-lg p-4">
+                                    <h4 className="font-semibold text-blue-400 mb-3">Basic Information</h4>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">Resource Name:</span>
+                                            <span className="text-white font-mono">{selectedResourceDetails.terraformAddress}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">Type:</span>
+                                            <span className="text-white font-mono">{selectedResourceDetails.terraformType}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">Provider:</span>
+                                            <span className="text-white font-mono">{selectedResourceDetails.terraformProvider}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">Service:</span>
+                                            <span className="text-white font-mono">{selectedResourceDetails.terraformService}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">Category:</span>
+                                            <span className="text-white font-mono">{selectedResourceDetails.terraformCategory}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Terraform Configuration */}
+                                {Object.keys(selectedResourceDetails.terraformConfiguration || {}).length > 0 && (
+                                    <div className="bg-gray-700/50 rounded-lg p-4">
+                                        <h4 className="font-semibold text-green-400 mb-3">Configuration</h4>
+                                        <div className="space-y-2">
+                                            {Object.entries(selectedResourceDetails.terraformConfiguration).map(([key, value]) => (
+                                                <div key={key} className="text-sm">
+                                                    <div className="text-gray-300 font-medium">{key}:</div>
+                                                    <div className="text-white font-mono text-xs bg-gray-800 p-2 rounded mt-1">
+                                                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Terraform Attributes & Tags */}
+                            <div className="space-y-4">
+                                {/* Tags */}
+                                {Object.keys(selectedResourceDetails.terraformAttributes || {}).length > 0 && (
+                                    <div className="bg-gray-700/50 rounded-lg p-4">
+                                        <h4 className="font-semibold text-yellow-400 mb-3">Tags</h4>
+                                        <div className="space-y-2">
+                                            {Object.entries(selectedResourceDetails.terraformAttributes).map(([key, value]) => (
+                                                <div key={key} className="text-sm">
+                                                    <div className="text-gray-300 font-medium">{key}:</div>
+                                                    <div className="text-white font-mono text-xs bg-gray-800 p-2 rounded mt-1">
+                                                        {String(value)}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Dependencies */}
+                                <div className="bg-gray-700/50 rounded-lg p-4">
+                                    <h4 className="font-semibold text-purple-400 mb-3">Dependencies</h4>
+                                    <div className="text-sm text-gray-400">
+                                        {selectedResourceDetails.terraformDependencies.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {selectedResourceDetails.terraformDependencies.map((dep: string, idx: number) => (
+                                                    <div key={idx} className="text-white font-mono text-xs bg-gray-800 p-2 rounded">
+                                                        {dep}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-500 italic">No explicit dependencies defined</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Modules */}
+                                <div className="bg-gray-700/50 rounded-lg p-4">
+                                    <h4 className="font-semibold text-orange-400 mb-3">Modules</h4>
+                                    <div className="text-sm text-gray-400">
+                                        {selectedResourceDetails.terraformModules.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {selectedResourceDetails.terraformModules.map((module: string, idx: number) => (
+                                                    <div key={idx} className="text-white font-mono text-xs bg-gray-800 p-2 rounded">
+                                                        {module}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-500 italic">Standalone resource (no modules)</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Raw Terraform Data */}
+                        <div className="mt-6 bg-gray-700/50 rounded-lg p-4">
+                            <h4 className="font-semibold text-gray-300 mb-3">Raw Terraform Data</h4>
+                            <pre className="text-xs text-gray-300 bg-gray-800 p-3 rounded overflow-x-auto">
+                                {JSON.stringify(selectedResourceDetails, null, 2)}
+                            </pre>
                         </div>
                     </div>
                 </div>

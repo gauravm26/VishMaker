@@ -271,8 +271,9 @@ const InfrastructureNode: React.FC<InfrastructureNodeProps> = ({
   const { title, resourceType, description, status = 'active', region, tags, configuration, metrics, cost, security } = data;
   const reactFlowInstance = useReactFlow();
   
+
   const config = RESOURCE_CONFIG[resourceType] || RESOURCE_CONFIG.lambda;
-  
+
   // Status colors
   const statusColors = {
     active: 'bg-green-500',

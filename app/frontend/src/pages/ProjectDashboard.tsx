@@ -334,11 +334,7 @@ const ProjectDashboard: React.FC = () => {
                             </button>
                         </div>
                         
-                        {/* Debug Panel States */}
-                        <div className="text-xs text-gray-400 mt-2 flex space-x-4">
-                            <span>Bottom: {isBottomPanelOpen ? '🟢 Open' : '🔴 Closed'}</span>
-                            <span>Right: {isRightPanelOpen ? '🟢 Open' : '🔴 Closed'}</span>
-                        </div>
+
                     </div>
                 </div>
 

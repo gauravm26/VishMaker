@@ -186,12 +186,12 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
   const filteredArchitecture = useMemo(() => {
     if (!tfData || !filteredVisualizationResources.length) return null;
 
-    const filteredData: TerraformData = {
-      ...tfData,
-      resources: filteredVisualizationResources
-    };
+    // Convert to ParsedResource format for enhanced parsing
+    const parsedResources = TerraformParser.convertTerraformDataToParsedResources(
+      { ...tfData, resources: filteredVisualizationResources }
+    );
 
-    return TerraformParser.buildArchitectureDiagram(filteredData);
+    return TerraformParser.buildArchitectureDiagram(parsedResources);
   }, [tfData, filteredVisualizationResources]);
 
   // Load all .tf files from the repository
@@ -396,8 +396,9 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
       const parsedData = TerraformParser.parseTerraformConfig(content);
       setTfData(parsedData);
 
-      // Build architecture diagram
-      const diagram = TerraformParser.buildArchitectureDiagram(parsedData);
+      // Convert to ParsedResource format and build architecture diagram
+      const parsedResources = TerraformParser.convertTerraformDataToParsedResources(parsedData, filePath);
+      const diagram = TerraformParser.buildArchitectureDiagram(parsedResources);
       setArchitecture(diagram);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load Terraform file';
@@ -602,7 +603,7 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
           <div className="flex items-center space-x-4 text-sm text-gray-400 mb-3">
             <span>Resources: {filteredArchitecture.nodes.filter(n => n.type === 'resource').length}</span>
             <span>Modules: {filteredArchitecture.nodes.filter(n => n.type === 'module').length}</span>
-            <span>Dependencies: {filteredArchitecture.edges.length}</span>
+            <span>Dependencies: {filteredArchitecture.connections.length}</span>
             {filterOptions.showConnectivity && (
               <span className="text-purple-400">• Connectivity Enabled</span>
             )}
@@ -657,10 +658,10 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
                   key={node.id}
                   className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-110 transition-transform"
                   style={{
-                    left: node.position?.x || 0,
-                    top: node.position?.y || 0
+                    left: node.x || 0,
+                    top: node.y || 0
                   }}
-                  title={`${node.label}\nProvider: ${node.provider}\nCategory: ${node.category}`}
+                  title={`${node.name}\nType: ${node.type}\nCategory: ${node.category}`}
                 >
                   {/* Circular Node */}
                   <div 
@@ -686,7 +687,7 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
                   {/* Node Label */}
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2">
                     <div className="text-xs font-medium text-white text-center bg-black/50 px-2 py-1 rounded whitespace-nowrap">
-                      {node.label.split('.').pop()}
+                      {node.name.split('.').pop()}
                     </div>
                   </div>
                 </div>
@@ -695,29 +696,29 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
               {/* Enhanced edges with better connectivity */}
               {filterOptions.showConnectivity && (
                 <svg className="absolute inset-0 pointer-events-none">
-                  {filteredArchitecture.edges.map((edge) => {
-                    const sourceNode = filteredArchitecture.nodes.find(n => n.id === edge.source);
-                    const targetNode = filteredArchitecture.nodes.find(n => n.id === edge.target);
+                  {filteredArchitecture.connections.map((connection) => {
+                    const sourceNode = filteredArchitecture.nodes.find(n => n.id === connection.from);
+                    const targetNode = filteredArchitecture.nodes.find(n => n.id === connection.to);
                     
-                    if (!sourceNode?.position || !targetNode?.position) return null;
+                    if (!sourceNode || !targetNode) return null;
 
                     // Calculate connection points (8px offset from node center)
-                    const sourceX = sourceNode.position.x;
-                    const sourceY = sourceNode.position.y;
-                    const targetX = targetNode.position.x;
-                    const targetY = targetNode.position.y;
+                    const sourceX = sourceNode.x;
+                    const sourceY = sourceNode.y;
+                    const targetX = targetNode.x;
+                    const targetY = targetNode.y;
 
                     return (
-                      <g key={edge.id}>
+                      <g key={`${connection.from}-${connection.to}`}>
                         {/* Main connection line with type-specific styling */}
                         <line
                           x1={sourceX}
                           y1={sourceY}
                           x2={targetX}
                           y2={targetY}
-                          stroke={getConnectionColor(edge.type)}
-                          strokeWidth={getConnectionWidth(edge.type)}
-                          strokeDasharray={getConnectionDash(edge.type)}
+                          stroke={getConnectionColor(connection.type)}
+                          strokeWidth={getConnectionWidth(connection.type)}
+                          strokeDasharray={getConnectionDash(connection.type)}
                           markerEnd="url(#arrowhead)"
                         />
                         {/* Glow effect for better visibility */}
@@ -726,7 +727,7 @@ const TerraformArchitectureViewer: React.FC<TerraformArchitectureViewerProps> = 
                           y1={sourceY}
                           x2={targetX}
                           y2={targetY}
-                          stroke={getConnectionColor(edge.type)}
+                          stroke={getConnectionColor(connection.type)}
                           strokeWidth="1"
                           opacity="0.3"
                           markerEnd="url(#arrowhead-glow)"

@@ -14,34 +14,9 @@ interface GitHubSettings {
     branch: string;
 }
 
-// Terraform resource type mapping to our infrastructure types
-const TERRAFORM_TO_INFRASTRUCTURE_TYPE: Record<string, InfrastructureResourceType> = {
-    'aws_lambda_function': 'lambda',
-    'aws_dynamodb_table': 'dynamodb',
-    'aws_s3_bucket': 's3',
-    'aws_apigatewayv2_api': 'apigateway',
-    'aws_cloudfront_distribution': 'cloudfront',
-    'aws_cognito_user_pool': 'cognito',
-    'aws_iam_role': 'iam',
-    'aws_cloudwatch_log_group': 'cloudwatch',
-    'aws_route53_zone': 'route53',
-    'aws_vpc': 'vpc',
-    'aws_lb': 'alb',
-    'aws_ecs_cluster': 'ecs',
-    'aws_db_instance': 'rds',
-    'aws_elasticache_cluster': 'elasticache',
-    'aws_sqs_queue': 'sqs',
-    'aws_sns_topic': 'sns',
-    'aws_cloudwatch_event_rule': 'eventbridge',
-    'aws_secretsmanager_secret': 'secretsmanager',
-    'aws_ssm_parameter': 'ssm',
-    'aws_ses_domain': 'ses',
-    'aws_bedrock_model': 'bedrock',
-    'aws_glue_job': 'glue',
-    'aws_athena_workgroup': 'athena',
-    'aws_quicksight_data_source': 'quicksight',
-    'aws_appsync_graphql_api': 'appsync'
-};
+// Use TerraformParser's built-in categorization instead of hardcoded mapping
+
+// TerraformParser handles all categorization logic internally
 
 const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTrigger = 0 }) => {
     const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
@@ -52,6 +27,9 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
     const [terraformFiles, setTerraformFiles] = useState<Array<{ name: string; path: string; selected: boolean }>>([]);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [internalRefreshTrigger, setInternalRefreshTrigger] = useState(0);
+    const [parsedTerraformResources, setParsedTerraformResources] = useState<any[]>([]);
+    const [groupBy, setGroupBy] = useState<'service' | 'modules' | 'category'>('service');
+    const [activeFilters, setActiveFilters] = useState<{ provider?: string; service?: string; category?: string }>({});
 
     // Load GitHub settings from localStorage
     useEffect(() => {
@@ -114,9 +92,16 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                 setTerraformFiles(fileList);
                 setSelectedFile(terraformFiles[0]?.path || null);
 
-                // Parse Terraform files and convert to infrastructure data
-                const parsedData = parseTerraformToInfrastructure(terraformFiles);
-                setInfrastructureData(parsedData);
+                // Parse Terraform files using TerraformParser for both infrastructure data and enhanced parsing
+                const parsedResources = TerraformParser.parseGitHubTerraformFiles(terraformFiles);
+                console.log('Parsed resources from GitHub:', parsedResources);
+                
+                // Convert to infrastructure data using TerraformParser
+                const infrastructureData = TerraformParser.convertTerraformFilesToInfrastructure(terraformFiles);
+                setInfrastructureData(infrastructureData);
+                
+                // Store parsed resources for advanced grouping/filtering
+                setParsedTerraformResources(parsedResources);
 
             } catch (err) {
                 console.error('Failed to load infrastructure data:', err);
@@ -182,40 +167,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
         }
     };
 
-    // Parse Terraform files and convert to our infrastructure format using existing TerraformParser
-    const parseTerraformToInfrastructure = (terraformFiles: any[]): InfrastructureNodeData[] => {
-        const infrastructure: InfrastructureNodeData[] = [];
-        
-        terraformFiles.forEach(file => {
-            if (file.content) {
-                try {
-                    // Use existing TerraformParser to parse the content
-                    const parsedData = TerraformParser.parseTerraformConfig(file.content);
-                    
-                    // Convert parsed resources to our infrastructure format
-                    if (parsedData.resources) {
-                        parsedData.resources.forEach(resource => {
-                            const infrastructureType = TERRAFORM_TO_INFRASTRUCTURE_TYPE[resource.type] || 'lambda';
-                            
-                            infrastructure.push({
-                                title: resource.name || `${resource.type}_${resource.name}`,
-                                resourceType: infrastructureType,
-                                description: `Terraform resource: ${resource.type}`,
-                                status: 'active' as const,
-                                region: 'us-east-1', // Default region
-                                tags: resource.attributes || {},
-                                configuration: resource.attributes || {}
-                            });
-                        });
-                    }
-                } catch (parseError) {
-                    console.warn(`Failed to parse Terraform file ${file.path}:`, parseError);
-                }
-            }
-        });
-
-        return infrastructure;
-    };
+    // TerraformParser now handles all parsing logic - no need for duplicate functions
 
     // Handle Terraform file selection
     const handleTerraformFileSelect = async (filePath: string) => {
@@ -242,19 +194,21 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                     
                     if (fileContent) {
                         try {
-                            // Use existing TerraformParser to parse the content
-                            const parsedData = TerraformParser.parseTerraformConfig(fileContent);
+                            // Use enhanced TerraformParser to parse the content
+                            const parsedData = TerraformParser.parseTerraformConfig(fileContent, filePath);
                             
                             // Convert parsed resources to our infrastructure format
                             const infrastructure: InfrastructureNodeData[] = [];
                             if (parsedData.resources) {
                                 parsedData.resources.forEach(resource => {
-                                    const infrastructureType = TERRAFORM_TO_INFRASTRUCTURE_TYPE[resource.type] || 'lambda';
+                                    // Use TerraformParser's built-in categorization
+                                    const category = TerraformParser.getResourceCategory(resource.type);
+                                    const infrastructureType = TerraformParser.mapCategoryToInfrastructureType(category) as InfrastructureResourceType;
                                     
                                     infrastructure.push({
                                         title: resource.name || `${resource.type}_${resource.name}`,
                                         resourceType: infrastructureType,
-                                        description: `Terraform resource: ${resource.type}`,
+                                        description: `Terraform resource: ${resource.type} (${category})`,
                                         status: 'active' as const,
                                         region: 'us-east-1',
                                         tags: resource.attributes || {},
@@ -426,6 +380,7 @@ const ArchitectureTab: React.FC<ArchitectureTabProps> = ({ projectId, refreshTri
                         terraformFiles={terraformFiles}
                         onTerraformFileSelect={handleTerraformFileSelect}
                         onGroupByService={handleGroupByService}
+                        parsedTerraformResources={parsedTerraformResources}
                     />
                 </div>
             </div>
