@@ -23,6 +23,24 @@ interface SettingsData {
         branch?: string;
         token?: string;
     };
+    llmConfig: {
+        vishMaker: {
+            refineWithAI: string;
+            generateUserFlow: string;
+            generateHighLevelRequirements: string;
+            generateLowLevelRequirements: string;
+            generateTestCases: string;
+            chatWithVishMaker: string;
+        };
+        vishCoder: {
+            managerAgent: string;
+            architectAgent: string;
+            coderAgent: string;
+            testerAgent: string;
+            deployerAgent: string;
+            chatWithVishCoder: string;
+        };
+    };
     techStack: {
         stack: {
             frontend: string;
@@ -270,6 +288,24 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
             crossAccountRoleArn: 'arn:aws:iam::[YOUR_ACCOUNT_ID]:role/VishCoder-TerraformExecutionRole'
         },
         github: {},
+        llmConfig: {
+            vishMaker: {
+                refineWithAI: 'auto',
+                generateUserFlow: 'auto',
+                generateHighLevelRequirements: 'auto',
+                generateLowLevelRequirements: 'auto',
+                generateTestCases: 'auto',
+                chatWithVishMaker: 'auto'
+            },
+            vishCoder: {
+                managerAgent: 'auto',
+                architectAgent: 'auto',
+                coderAgent: 'anthropic-claude-code',
+                testerAgent: 'auto',
+                deployerAgent: 'auto',
+                chatWithVishCoder: 'auto'
+            }
+        },
         techStack: {
             stack: {
                 frontend: "react",
@@ -346,7 +382,7 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
     const [isTestingConnection, setIsTestingConnection] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
-    const [activeTab, setActiveTab] = useState<'tech-stack' | 'settings'>('tech-stack');
+    const [activeTab, setActiveTab] = useState<'tech-stack' | 'settings' | 'llm-config'>('tech-stack');
     const [editingCapability, setEditingCapability] = useState<string | null>(null);
 
     // Load settings from localStorage on mount
@@ -361,6 +397,10 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                     aws: {
                         ...parsed.aws,
                         crossAccountRoleArn: parsed.aws?.crossAccountRoleArn || 'arn:aws:iam::[YOUR_ACCOUNT_ID]:role/VishCoder-TerraformExecutionRole'
+                    },
+                    llmConfig: {
+                        ...settings.llmConfig, // Keep defaults
+                        ...parsed.llmConfig // Override with saved values
                     },
                     techStack: {
                         ...settings.techStack, // Keep defaults
@@ -443,6 +483,32 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                 [field]: value
             }
         }));
+    };
+
+    const updateLLMConfig = (section: 'vishMaker' | 'vishCoder', field: string, value: string) => {
+        setSettings(prev => ({
+            ...prev,
+            llmConfig: {
+                ...prev.llmConfig || {},
+                [section]: {
+                    ...(prev.llmConfig?.[section] || {}),
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    const getLLMOptionLabel = (value: string) => {
+        const optionLabels: Record<string, string> = {
+            'auto': 'Auto (Default)',
+            'chatgpt-5-mini': 'ChatGPT 5.0 Mini',
+            'gemini-2-5-pro': 'Gemini 2.5 Pro',
+            'anthropic-claude': 'Anthropic Claude',
+            'google-jules': 'Google Jules',
+            'anthropic-claude-code': 'Anthropic Claude Code (Default)',
+            'chatgpt-coder': 'ChatGPT Coder'
+        };
+        return optionLabels[value] || value;
     };
 
     const updateTechStackField = (section: 'stack' | 'capabilities', field: string, value: any) => {
@@ -556,6 +622,19 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             Settings
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('llm-config')}
+                            className={`flex-1 px-6 py-4 text-sm font-medium transition-all duration-300 ${
+                                activeTab === 'llm-config'
+                                    ? 'text-white border-b-2 border-purple-400 bg-white/5'
+                                    : 'text-white/60 hover:text-white/80 hover:bg-white/5'
+                            }`}
+                        >
+                            <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            LLM Config
                         </button>
                     </div>
 
@@ -999,6 +1078,191 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                             </>
                         )}
 
+                        {/* LLM Configuration Tab */}
+                        {activeTab === 'llm-config' && !settings.llmConfig && (
+                            <div className="text-center py-8">
+                                <div className="text-white/60 text-sm">
+                                    Loading LLM configuration...
+                                </div>
+                            </div>
+                        )}
+                        {activeTab === 'llm-config' && settings.llmConfig && (
+                            <>
+                                <div className="space-y-6">
+                                    <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-4">
+                                        <p className="text-sm text-white/80">
+                                            Configure which Large Language Model (LLM) to use for different AI-powered features. 
+                                            Choose "Auto" to let the system automatically select the best model for each task, 
+                                            or manually specify your preferred model for different features.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-8">
+                                    {/* VishMaker Section */}
+                                    <div className="space-y-6">
+                                        <h3 className="text-lg font-medium text-white flex items-center">
+                                            <svg className="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                            </svg>
+                                            VishMaker
+                                        </h3>
+                                        
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {Object.entries(settings.llmConfig.vishMaker || {}).map(([key, value]) => (
+                                                <div key={key} className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                                                    <div className="flex-1">
+                                                        <label className="block text-sm font-medium text-white/90 capitalize">
+                                                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                                                        </label>
+                                                        <p className="text-xs text-white/60 mt-1">
+                                                            Current: {getLLMOptionLabel(value || 'auto')}
+                                                        </p>
+                                                    </div>
+                                                    <div className="w-48">
+                                                        <select
+                                                            value={value}
+                                                            onChange={(e) => updateLLMConfig('vishMaker', key, e.target.value)}
+                                                            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                        >
+                                                            <option value="auto" className="bg-gray-800">Auto (Default)</option>
+                                                            <option value="chatgpt-5-mini" className="bg-gray-800">ChatGPT 5.0 Mini</option>
+                                                            <option value="gemini-2-5-pro" className="bg-gray-800">Gemini 2.5 Pro</option>
+                                                            <option value="anthropic-claude" className="bg-gray-800">Anthropic Claude</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* VishCoder Section */}
+                                    <div className="space-y-6">
+                                        <h3 className="text-lg font-medium text-white flex items-center">
+                                            <svg className="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                            </svg>
+                                            VishCoder
+                                        </h3>
+                                        
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {Object.entries(settings.llmConfig.vishCoder || {}).map(([key, value]) => (
+                                                <div key={key} className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                                                    <div className="flex-1">
+                                                        <label className="block text-sm font-medium text-white/90 capitalize">
+                                                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                                                        </label>
+                                                        <p className="text-xs text-white/60 mt-1">
+                                                            Current: {getLLMOptionLabel(value || 'auto')}
+                                                        </p>
+                                                    </div>
+                                                    <div className="w-48">
+                                                        <select
+                                                            value={value}
+                                                            onChange={(e) => updateLLMConfig('vishCoder', key, e.target.value)}
+                                                            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                        >
+                                                            {key === 'coderAgent' ? (
+                                                                <>
+                                                                    <option value="google-jules" className="bg-gray-800">Google Jules</option>
+                                                                    <option value="anthropic-claude-code" className="bg-gray-800">Anthropic Claude Code (Default)</option>
+                                                                    <option value="chatgpt-coder" className="bg-gray-800">ChatGPT Coder</option>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <option value="auto" className="bg-gray-800">Auto (Default)</option>
+                                                                    <option value="chatgpt-5-mini" className="bg-gray-800">ChatGPT 5.0 Mini</option>
+                                                                    <option value="gemini-2-5-pro" className="bg-gray-800">Gemini 2.5 Pro</option>
+                                                                    <option value="anthropic-claude" className="bg-gray-800">Anthropic Claude</option>
+                                                                </>
+                                                            )}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* API Keys Section */}
+                                <div className="space-y-6">
+                                    <h3 className="text-lg font-medium text-white flex items-center">
+                                        <svg className="w-5 h-5 mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-3.586l4.293-4.293A6 6 0 0119 9z" />
+                                        </svg>
+                                        API Keys
+                                    </h3>
+                                    
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {/* OpenAI API Key */}
+                                        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-white/90">
+                                                    OpenAI API Key
+                                                </label>
+                                                <p className="text-xs text-white/60 mt-1">
+                                                    Required for ChatGPT 5.0 Mini and ChatGPT Coder
+                                                </p>
+                                            </div>
+                                            <div className="w-80">
+                                                <input
+                                                    type="password"
+                                                    value={settings.apiKeys.openai || ''}
+                                                    onChange={(e) => updateApiKey('openai', e.target.value)}
+                                                    placeholder="sk-..."
+                                                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Anthropic API Key */}
+                                        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-white/90">
+                                                    Anthropic API Key
+                                                </label>
+                                                <p className="text-xs text-white/60 mt-1">
+                                                    Required for Anthropic Claude and Claude Code
+                                                </p>
+                                            </div>
+                                            <div className="w-80">
+                                                <input
+                                                    type="password"
+                                                    value={settings.apiKeys.anthropic || ''}
+                                                    onChange={(e) => updateApiKey('anthropic', e.target.value)}
+                                                    placeholder="sk-ant-..."
+                                                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Google API Key */}
+                                        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-white/90">
+                                                    Google API Key
+                                                </label>
+                                                <p className="text-xs text-white/60 mt-1">
+                                                    Required for Gemini 2.5 Pro and Google Jules
+                                                </p>
+                                            </div>
+                                            <div className="w-80">
+                                                <input
+                                                    type="password"
+                                                    value={settings.apiKeys.google || ''}
+                                                    onChange={(e) => updateApiKey('google', e.target.value)}
+                                                    placeholder="AIza..."
+                                                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+
+                                </div>
+                            </div>
+                        </>
+                        )}
+
                         {/* Save Message */}
                         {saveMessage && (
                             <div className={`p-4 rounded-xl backdrop-blur-sm ${
@@ -1011,9 +1275,9 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                                 }`}>
                                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         {saveMessage.includes('success') ? (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0 1 18 0z" />
                                         ) : (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0 1 18 0z" />
                                         )}
                                     </svg>
                                     {saveMessage}
