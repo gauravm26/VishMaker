@@ -209,8 +209,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [logConnected, setLogConnected] = useState<boolean>(false);
     
     // Log filtering and beautification state
-    const [lastHealthCheckTime, setLastHealthCheckTime] = useState<number>(0);
-    const [healthCheckCount, setHealthCheckCount] = useState<number>(0);
+
     const [processedLogs, setProcessedLogs] = useState<string>('');
     
     // Chat state
@@ -284,49 +283,20 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         const lines = rawLogs.split('\n');
         const processedLines: string[] = [];
         const now = Date.now();
+        const hide_logs = [
+            'health',
+            'Health Check:',
+            ' GET /'
+        ]
         
         for (const line of lines) {
             // Skip empty lines
             if (!line.trim()) continue;
             
-            // Check if this is a health check log
-            if (line.includes('Health check result')) {
-                // Only show health check every minute (60000ms)
-                if (now - lastHealthCheckTime > 60000) {
-                    // Beautify health check logs with HTML
-                    const healthCheckLine = line.replace(
-                        /Health check result: status='([^']+)' anthropic_manager_model='([^']+)' timestamp='([^']+)'/,
-                        '<div class="docker-log-line docker-log-health">🏥 Health Check: <span class="docker-log-separator">|</span> Status: $1 <span class="docker-log-separator">|</span> Model: $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$3</span></div>'
-                    );
-                    processedLines.push(healthCheckLine);
-                    setLastHealthCheckTime(now);
-                    setHealthCheckCount(0);
-                } else {
-                    // Increment count but don't show
-                    setHealthCheckCount(prev => prev + 1);
-                }
-                continue;
-            }
-            
-            // Check if this is an endpoint access log
-            if (line.includes('GET /') || line.includes('POST /')) {
-                // Beautify endpoint logs with HTML
-                const endpointLine = line.replace(
-                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - INFO - (GET|POST) (\/[^ ]*) - ([^-]+)/,
-                    '<div class="docker-log-line docker-log-endpoint">🌐 $2 $3 <span class="docker-log-separator">|</span> $4 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
-                );
-                processedLines.push(endpointLine);
-                continue;
-            }
-            
-            // Beautify other INFO logs with HTML
-            if (line.includes(' - INFO - ')) {
-                const infoLine = line.replace(
-                    /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - INFO - (.+)/,
-                    '<div class="docker-log-line docker-log-info">ℹ️ $2 <span class="docker-log-separator">|</span> <span class="docker-log-timestamp">$1</span></div>'
-                );
-                processedLines.push(infoLine);
-                continue;
+            // Check if line contains any text we want to hide
+            const shouldHide = hide_logs.some(hideText => line.includes(hideText));
+            if (shouldHide) {
+                continue; // Skip this line completely
             }
             
             // Beautify ERROR logs with HTML
@@ -353,14 +323,10 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             processedLines.push(`<div class="docker-log-line">${line}</div>`);
         }
         
-        // Add health check summary if we have suppressed some
-        if (healthCheckCount > 0) {
-            const summaryLine = `<div class="docker-log-line docker-log-health">🏥 Health Check: ${healthCheckCount} checks suppressed (showing every minute)</div>`;
-            processedLines.push(summaryLine);
-        }
+
         
         return processedLines.join('');
-    }, [lastHealthCheckTime, healthCheckCount]);
+    }, []);
     
     // Get cache info for display
     const getCacheInfo = useCallback(() => {
@@ -382,6 +348,9 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     // AI Agent state
     const [agentSocket, setAgentSocket] = useState<WebSocket | null>(null);
     const [agentConnected, setAgentConnected] = useState<boolean>(false);
+    
+    // Chat scroll reference
+    const chatMessagesEndRef = useRef<HTMLDivElement>(null);
     const [agentStatus, setAgentStatus] = useState<string>('Connecting...');
     const [agentLogs, setAgentLogs] = useState<string>('');
     const [agentInput, setAgentInput] = useState<string>('');
@@ -2016,17 +1985,22 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
     // AI Agent WebSocket connection
     const connectToAgent = useCallback(() => {
+        console.log('connectToAgent called, current agentSocket:', agentSocket);
         if (agentSocket) {
+            console.log('Closing existing agentSocket');
             agentSocket.close();
         }
 
+        console.log('Creating new WebSocket connection to wss://vishmaker.com/ws');
         const socket = new WebSocket("wss://vishmaker.com/ws");
         
         socket.onopen = () => {
+            console.log('AI Agent WebSocket onopen event fired');
             setAgentConnected(true);
             setAgentStatus('Connected and Idle');
             setAgentLogs('<div><span class="badge log-system">SYSTEM</span><strong>Connection Opened. Ready to receive requests.</strong></div>');
             addTerminalLog('AI agent connected');
+            console.log('AI Agent WebSocket connected successfully, agentConnected set to true');
         };
 
         socket.onmessage = (event) => {
@@ -2249,6 +2223,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
 
         socket.onerror = (error) => {
+            console.error('AI Agent WebSocket connection error:', error);
             setAgentConnected(false);
             setAgentStatus('Connection Failed');
             setAgentLogs(prev => prev + '<div><span class="badge log-error">ERROR</span><strong>Connection Failed. Check backend server and WebSocket URL.</strong></div>');
@@ -2256,6 +2231,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
 
         socket.onclose = () => {
+            console.log('AI Agent WebSocket connection closed');
             setAgentConnected(false);
             setAgentStatus('Disconnected');
             setAgentLogs(prev => prev + '<div><span class="badge log-system">SYSTEM</span><strong>Connection Closed.</strong></div>');
@@ -2286,14 +2262,43 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         addTerminalLog(`Sent requirement to AI Agent: ${agentInput.substring(0, 50)}...`);
     }, [agentInput, agentSocket, agentProcessing, addTerminalLog]);
 
-    // Connect to agent when right panel opens
+    // Connect to agent when right panel opens OR when contract modal is open
     useEffect(() => {
-        if (rightPanelOpen && !agentSocket) {
+        console.log('useEffect for agent connection - rightPanelOpen:', rightPanelOpen, 'contractPopups.size:', contractPopups.size, 'agentSocket:', !!agentSocket);
+        if ((rightPanelOpen || contractPopups.size > 0) && !agentSocket) {
+            console.log('Triggering connectToAgent()');
             connectToAgent();
-        } else if (!rightPanelOpen && agentSocket) {
+        } else if (!rightPanelOpen && contractPopups.size === 0 && agentSocket) {
+            console.log('Triggering disconnectFromAgent()');
             disconnectFromAgent();
         }
-    }, [rightPanelOpen, agentSocket, connectToAgent, disconnectFromAgent]);
+    }, [rightPanelOpen, contractPopups.size, agentSocket, connectToAgent, disconnectFromAgent]);
+
+    // Ensure AI Agent WebSocket is connected when contract modal opens
+    useEffect(() => {
+        console.log('Contract modal useEffect - contractPopups.size:', contractPopups.size, 'agentSocket:', !!agentSocket);
+        if (contractPopups.size > 0 && !agentSocket) {
+            console.log('Contract modal opened, connecting to AI Agent WebSocket...');
+            connectToAgent();
+        }
+    }, [contractPopups.size, agentSocket, connectToAgent]);
+
+    // Auto-scroll to bottom of chat messages
+    useEffect(() => {
+        if (chatMessagesEndRef.current && chatMessages.length > 0) {
+            // Force scroll to bottom with a small delay to ensure DOM is updated
+            setTimeout(() => {
+                if (chatMessagesEndRef.current) {
+                    chatMessagesEndRef.current.scrollTop = chatMessagesEndRef.current.scrollHeight;
+                    console.log('Auto-scrolled to bottom, scrollHeight:', chatMessagesEndRef.current.scrollHeight);
+                }
+            }, 100);
+        }
+    }, [chatMessages]);
+
+
+
+
 
     // Cleanup agent WebSocket on component unmount
     useEffect(() => {
@@ -2504,15 +2509,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 <div className="flex items-center space-x-2">
                                     <button
                                         onClick={clearChatHistory}
-                                        className="text-gray-400 hover:text-red-400 p-1 transition-colors"
-                                        title="Clear Chat History"
-                                    >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={clearChatHistory}
                                         className="text-gray-400 hover:text-red-400 px-2 py-1 rounded text-xs transition-colors border border-gray-600 hover:border-red-400"
                                         title="Delete History & Clear Cache"
                                     >
@@ -2550,8 +2546,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         
                         {/* Chat Messages */}
                         <div 
-                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 chat-messages-container"
+                            ref={chatMessagesEndRef}
+                            className="flex-1 overflow-y-auto p-3 bg-[#f8f9fa] border-b border-white/10 chat-messages-container relative"
+                            style={{ 
+                                scrollbarWidth: 'thin',
+                                scrollbarColor: '#9CA3AF #E5E7EB',
+                                scrollBehavior: 'smooth',
+                                minHeight: '300px',
+                                maxHeight: 'calc(100vh - 400px)',
+                                overflowY: 'scroll'
+                            }}
+
                         >
+
                             {chatMessages.length === 0 ? (
                                 <div className="text-center text-gray-500 text-xs py-8">
                                     <div className="mb-2">📋 No contracts generated yet</div>
@@ -2606,12 +2613,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                             </div>
                                         </div>
                                     ))}
-                                    {/* Scroll indicator */}
-                                    {chatMessages.length > 3 && (
-                                        <div className="text-center text-gray-400 text-xs py-2">
-                                            💡 Scroll to see more messages
-                                        </div>
-                                    )}
+
                                 </div>
                             )}
                         </div>
@@ -2675,8 +2677,6 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 onClick={() => {
                                     setDockerLogs('Connecting to log stream...');
                                     setProcessedLogs('');
-                                    setLastHealthCheckTime(0);
-                                    setHealthCheckCount(0);
                                 }}
                                 className="text-gray-400 hover:text-white text-xs"
                             >
@@ -2833,6 +2833,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                             .map(msg => msg.contractData)[0];
                                         
                                         if (contractData && agentSocket && agentSocket.readyState === WebSocket.OPEN) {
+                                            // Set the session thread ID for the commManager
+                                            const threadId = contractData.metadata?.feature_Number || 
+                                                           contractData.metadata?.dateTime || 
+                                                           `contract_${Date.now()}`;
+                                            commManager.setSessionThread(threadId);
+                                            
                                             // Create the standardized payload for VishCoder using commManager
                                             const contractPayload = createContractPayload(
                                                 contractData.metadata || {},
@@ -2886,10 +2892,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                             addTerminalLog('❌ No contract data found to send');
                                         }
                                     }}
-                                    disabled={!agentSocket || agentSocket.readyState !== WebSocket.OPEN}
+                                    disabled={!agentSocket || !agentConnected || agentSocket.readyState !== WebSocket.OPEN}
                                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {!agentSocket || agentSocket.readyState !== WebSocket.OPEN ? (
+                                    {!agentSocket || !agentConnected ? (
+                                        <span className="flex items-center space-x-2">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            <span>Connecting...</span>
+                                        </span>
+                                    ) : agentSocket.readyState !== WebSocket.OPEN ? (
                                         <span className="flex items-center space-x-2">
                                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                                             <span>Connecting...</span>
