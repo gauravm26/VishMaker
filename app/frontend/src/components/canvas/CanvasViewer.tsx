@@ -38,6 +38,7 @@ import {
 } from '@/types/project';
 import { CustomNode, TableNodeData, TableRowData, ColumnDef } from '@/types/canvas';
 import TableNode from './TableNode';
+import Modal from '@/components/shared/Modal';
 import { 
     commManager, 
     createContractPayload, 
@@ -219,6 +220,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [contractBuilding, setContractBuilding] = useState<boolean>(false);
     const [expandedContracts, setExpandedContracts] = useState<Set<string>>(new Set());
     const [contractPopups, setContractPopups] = useState<Set<string>>(new Set());
+    
+    // Build Summary modal state
+    const [isBuildSummaryModalOpen, setIsBuildSummaryModalOpen] = useState<boolean>(false);
+    const [buildSummaryData, setBuildSummaryData] = useState<{
+        lowLevelRequirementId: string;
+        status: string;
+        branchLink: string;
+        prLink: string;
+        documentLinks: string[];
+        keyMetrics: string;
+        dashboardLinks: string[];
+        alerts: string;
+        logs: string;
+        productManager: string;
+        devManager: string;
+    } | null>(null);
+    
+    // Inline editing state
+    const [editingField, setEditingField] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState<string>('');
     
     // Chat history cache management
     const CHAT_CACHE_KEY = 'vishmaker_chat_history';
@@ -2445,6 +2466,101 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         }
     };
 
+    // Handle inline editing
+    const startEditing = (fieldName: string, currentValue: string) => {
+        setEditingField(fieldName);
+        setEditValue(currentValue);
+    };
+    
+    const saveEdit = () => {
+        if (editingField && buildSummaryData) {
+            if (editingField.startsWith('doc_')) {
+                // Handle document links
+                const index = parseInt(editingField.split('_')[1]);
+                const newLinks = [...buildSummaryData.documentLinks];
+                newLinks[index] = editValue;
+                setBuildSummaryData(prev => prev ? { ...prev, documentLinks: newLinks } : null);
+            } else if (editingField.startsWith('dashboard_')) {
+                // Handle dashboard links
+                const index = parseInt(editingField.split('_')[1]);
+                const newLinks = [...buildSummaryData.dashboardLinks];
+                newLinks[index] = editValue;
+                setBuildSummaryData(prev => prev ? { ...prev, dashboardLinks: newLinks } : null);
+            } else {
+                // Handle regular fields
+                setBuildSummaryData(prev => prev ? { ...prev, [editingField]: editValue } : null);
+            }
+        }
+        setEditingField(null);
+        setEditValue('');
+    };
+    
+    const cancelEdit = () => {
+        setEditingField(null);
+        setEditValue('');
+    };
+    
+    // Handle Build Summary modal
+    const handleBuildSummary = (nodeId: string, rowIndex: number): void => {
+        try {
+            // Find the node and get its data
+            const node = nodes.find(n => n.id === nodeId);
+            if (!node) {
+                console.error(`Node with ID ${nodeId} not found`);
+                return;
+            }
+            
+            const nodeData = node.data;
+            const visibleRows: TableRowData[] = nodeData.rows || [];
+            
+            // Validate row index
+            if (rowIndex < 0 || rowIndex >= visibleRows.length) {
+                console.error(`Row index ${rowIndex} is out of bounds (0-${visibleRows.length-1})`);
+                return;
+            }
+            
+            // Get the row data for the clicked row
+            const rowData = visibleRows[rowIndex];
+            const rowUiid = rowData.uiid || rowData.id;
+            
+            // Set default build summary data
+            const summaryData = {
+                lowLevelRequirementId: rowUiid,
+                status: 'Build In Progress',
+                branchLink: 'https://github.com/example/repo/tree/feature-branch',
+                prLink: 'https://github.com/example/repo/pull/123',
+                documentLinks: [
+                    'https://docs.example.com/feature-spec',
+                    'https://docs.example.com/api-docs',
+                    'https://docs.example.com/user-guide'
+                ],
+                keyMetrics: 'Response time < 200ms, 99.9% uptime, Error rate < 0.1%',
+                dashboardLinks: [
+                    'https://grafana.example.com/d/feature-dashboard',
+                    'https://datadog.example.com/dashboard/feature-monitoring'
+                ],
+                alerts: 'CloudWatch Alerts configured for error rate > 1%, response time > 500ms',
+                logs: 'CloudWatch Logs: /aws/lambda/feature-function, /aws/ecs/feature-service',
+                productManager: 'John Doe',
+                devManager: 'Jane Smith'
+            };
+            
+            setBuildSummaryData(summaryData);
+            setIsBuildSummaryModalOpen(true);
+            
+            console.log('Build Summary modal opened for:', {
+                nodeId,
+                rowIndex,
+                rowUiid,
+                rowData: rowData.name
+            });
+            
+        } catch (error: any) {
+            console.error('Error opening Build Summary modal:', error);
+            setError(`Failed to open Build Summary: ${error.message || 'Unknown error'}`);
+        }
+    };
+
     return (
         <div className="h-full flex flex-col">
             {/* Add CSS for animations */}
@@ -2725,6 +2841,53 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }}
                 theme="dark"
             >
+                                {/* Build the Feature - Only show for low level requirement tables with highlighted styling */}
+                                {clickedNodeType === 'llr' && (
+                            <Item 
+                                id="build-feature"
+                                onClick={({ props }) => {
+                                    if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                        props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
+                                        console.log('Context menu: Build the Feature clicked', {
+                                            nodeId: props.nodeId,
+                                            rowIndex: props.rowIndex,
+                                            rowType: props.type
+                                        });
+                                        handleBuildFeature(props.nodeId, props.rowIndex);
+                                        // Close the context menu after selection
+                                        document.body.click();
+                                    } else {
+                                        console.warn('Cannot build feature: Missing nodeId or rowIndex or not a low level requirement', props);
+                                    }
+                                }}
+                            >
+                                <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
+                            </Item>
+                        )}
+                        
+                        {/* Build Summary - Only show for low level requirement tables */}
+                        {clickedNodeType === 'llr' && (
+                            <Item 
+                                id="build-summary"
+                                onClick={({ props }) => {
+                                    if (props?.type === 'row' && props.rowIndex !== undefined && 
+                                        props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
+                                        console.log('Context menu: Build Summary clicked', {
+                                            nodeId: props.nodeId,
+                                            rowIndex: props.rowIndex,
+                                            rowType: props.type
+                                        });
+                                        handleBuildSummary(props.nodeId, props.rowIndex);
+                                        // Close the context menu after selection
+                                        document.body.click();
+                                    } else {
+                                        console.warn('Cannot open build summary: Missing nodeId or rowIndex or not a low level requirement', props);
+                                    }
+                                }}
+                            >
+                                <span className="font-bold text-blue-600 build-summary-text">Build Summary</span>
+                            </Item>
+                        )}
                 {/* Table manipulation items */}
                 <Item onClick={({ props }) => {
                     if (props?.type === 'row' && props.rowIndex !== undefined) {
@@ -2783,29 +2946,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     </Item>
                 )}
                 
-                                        {/* Build the Feature - Only show for low level requirement tables with highlighted styling */}
-                        {clickedNodeType === 'llr' && (
-                            <Item 
-                                id="build-feature"
-                                onClick={({ props }) => {
-                                    if (props?.type === 'row' && props.rowIndex !== undefined && 
-                                        props.nodeId && props.nodeId.startsWith('lowlevelrequirement_')) {
-                                        console.log('Context menu: Build the Feature clicked', {
-                                            nodeId: props.nodeId,
-                                            rowIndex: props.rowIndex,
-                                            rowType: props.type
-                                        });
-                                        handleBuildFeature(props.nodeId, props.rowIndex);
-                                        // Close the context menu after selection
-                                        document.body.click();
-                                    } else {
-                                        console.warn('Cannot build feature: Missing nodeId or rowIndex or not a low level requirement', props);
-                                    }
-                                }}
-                            >
-                                <span className="font-bold text-green-600 build-feature-text">Build the Feature</span>
-                            </Item>
-                        )}
+                        
             </Menu>
             
             {/* Contract Popup Modal - Simple JSON Editor */}
@@ -3044,6 +3185,647 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 `}
             </style>
+            
+            {/* Build Summary Modal */}
+            <Modal
+                isOpen={isBuildSummaryModalOpen}
+                onClose={() => setIsBuildSummaryModalOpen(false)}
+                title="Build Summary"
+                size="xl"
+            >
+                {buildSummaryData && (
+                    <div className="space-y-6">
+                        {/* Basic Information */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-white/90 mb-2">
+                                    Low Level Requirement ID
+                                </label>
+                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white font-mono text-sm">
+                                    {buildSummaryData.lowLevelRequirementId}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-white/90 mb-2">
+                                    Status
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={buildSummaryData.status}
+                                        onChange={(e) => setBuildSummaryData(prev => prev ? {...prev, status: e.target.value} : null)}
+                                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                    >
+                                        <option value="Build In Progress" className="bg-gray-800">Build In Progress</option>
+                                        <option value="Build Complete" className="bg-gray-800">Build Complete</option>
+                                        <option value="PR" className="bg-gray-800">PR</option>
+                                        <option value="Merged" className="bg-gray-800">Merged</option>
+                                        <option value="Deployed Dev" className="bg-gray-800">Deployed Dev</option>
+                                        <option value="Deployed Test" className="bg-gray-800">Deployed Test</option>
+                                        <option value="Deployed Prod" className="bg-gray-800">Deployed Prod</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Build and Deploy */}
+                        <div className="border-t border-white/10 pt-4">
+                            <h3 className="text-lg font-medium text-white flex items-center mb-3">
+                                <svg className="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg>
+                                Build and Deploy
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        Branch Link
+                                    </label>
+                                    <div className="relative group">
+                                        {editingField === 'branchLink' ? (
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
+                                                    {buildSummaryData.branchLink}
+                                                </div>
+                                                <button
+                                                    onClick={() => startEditing('branchLink', buildSummaryData.branchLink)}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                    title="Edit branch link"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        PR Link
+                                    </label>
+                                    <div className="relative group">
+                                        {editingField === 'prLink' ? (
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
+                                                    {buildSummaryData.prLink}
+                                                </div>
+                                                <button
+                                                    onClick={() => startEditing('prLink', buildSummaryData.prLink)}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                    title="Edit PR link"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Documents */}
+                        <div className="border-t border-white/10 pt-4">
+                            <h3 className="text-lg font-medium text-white flex items-center mb-3">
+                                <svg className="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Documents
+                            </h3>
+                            <div className="space-y-2">
+                                {buildSummaryData.documentLinks.map((link, index) => (
+                                    <div key={index} className="flex items-center space-x-2">
+                                        {editingField === `doc_${index}` ? (
+                                            <div className="flex-1 flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
+                                                {link}
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => startEditing(`doc_${index}`, link)}
+                                            className="p-2 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-colors"
+                                            title="Edit document link"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const newLinks = buildSummaryData.documentLinks.filter((_, i) => i !== index);
+                                                setBuildSummaryData(prev => prev ? {...prev, documentLinks: newLinks} : null);
+                                            }}
+                                            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                            title="Remove document link"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={() => {
+                                        const newLinks = [...buildSummaryData.documentLinks, ''];
+                                        setBuildSummaryData(prev => prev ? {...prev, documentLinks: newLinks} : null);
+                                    }}
+                                    className="px-4 py-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded-lg border border-purple-400/30 transition-colors flex items-center space-x-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    <span>Add Document Link</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Monitoring */}
+                        <div className="border-t border-white/10 pt-4">
+                            <h3 className="text-lg font-medium text-white flex items-center mb-3">
+                                <svg className="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                Monitoring
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        Key Metrics
+                                    </label>
+                                    <div className="relative group">
+                                        {editingField === 'keyMetrics' ? (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm min-h-[80px] resize-none"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && e.ctrlKey) saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <div className="flex justify-end space-x-2">
+                                                    <button
+                                                        onClick={saveEdit}
+                                                        className="px-3 py-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors text-sm"
+                                                    >
+                                                        Save (Ctrl+Enter)
+                                                    </button>
+                                                    <button
+                                                        onClick={cancelEdit}
+                                                        className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors text-sm"
+                                                    >
+                                                        Cancel (Esc)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white min-h-[80px] whitespace-pre-wrap text-sm">
+                                                    {buildSummaryData.keyMetrics}
+                                                </div>
+                                                <button
+                                                    onClick={() => startEditing('keyMetrics', buildSummaryData.keyMetrics)}
+                                                    className="absolute right-2 top-2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                    title="Edit key metrics"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        Dashboard Links
+                                    </label>
+                                    <div className="space-y-2">
+                                        {buildSummaryData.dashboardLinks.map((link, index) => (
+                                            <div key={index} className="flex items-center space-x-2">
+                                                                                        {editingField === `dashboard_${index}` ? (
+                                            <div className="flex-1 flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                        <button
+                                                            onClick={saveEdit}
+                                                            className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                            title="Save"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={cancelEdit}
+                                                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                            title="Cancel"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                                                                    <div className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
+                                                    {link}
+                                                </div>
+                                                )}
+                                                <button
+                                                    onClick={() => startEditing(`dashboard_${index}`, link)}
+                                                    className="p-2 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-colors"
+                                                    title="Edit dashboard link"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        const newLinks = buildSummaryData.dashboardLinks.filter((_, i) => i !== index);
+                                                        setBuildSummaryData(prev => prev ? {...prev, dashboardLinks: newLinks} : null);
+                                                    }}
+                                                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Remove dashboard link"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <button
+                                            onClick={() => {
+                                                const newLinks = [...buildSummaryData.dashboardLinks, ''];
+                                                setBuildSummaryData(prev => prev ? {...prev, dashboardLinks: newLinks} : null);
+                                            }}
+                                            className="px-4 py-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded-lg border border-purple-400/30 transition-colors flex items-center space-x-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                            </svg>
+                                            <span>Add Dashboard Link</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/90 mb-2">
+                                            Alerts
+                                        </label>
+                                        <div className="relative group">
+                                                                                    {editingField === 'alerts' ? (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm min-h-[80px] resize-none"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && e.ctrlKey) saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                    <div className="flex justify-end space-x-2">
+                                                        <button
+                                                            onClick={saveEdit}
+                                                            className="px-3 py-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors text-sm"
+                                                        >
+                                                            Save (Ctrl+Enter)
+                                                        </button>
+                                                        <button
+                                                            onClick={cancelEdit}
+                                                            className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors text-sm"
+                                                        >
+                                                            Cancel (Esc)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                                                                    <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white min-h-[80px] whitespace-pre-wrap text-sm">
+                                                    {buildSummaryData.alerts}
+                                                </div>
+                                                    <button
+                                                        onClick={() => startEditing('alerts', buildSummaryData.alerts)}
+                                                        className="absolute right-2 top-2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                        title="Edit alerts"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/90 mb-2">
+                                            Logs
+                                        </label>
+                                        <div className="relative group">
+                                                                                    {editingField === 'logs' ? (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm min-h-[80px] resize-none"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && e.ctrlKey) saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                    <div className="flex justify-end space-x-2">
+                                                        <button
+                                                            onClick={saveEdit}
+                                                            className="px-3 py-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors text-sm"
+                                                        >
+                                                            Save (Ctrl+Enter)
+                                                        </button>
+                                                        <button
+                                                            onClick={cancelEdit}
+                                                            className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors text-sm"
+                                                        >
+                                                            Cancel (Esc)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                                                                    <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white min-h-[80px] whitespace-pre-wrap text-sm">
+                                                    {buildSummaryData.logs}
+                                                </div>
+                                                    <button
+                                                        onClick={() => startEditing('logs', buildSummaryData.logs)}
+                                                        className="absolute right-2 top-2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                        title="Edit logs"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Owners */}
+                        <div className="border-t border-white/10 pt-4">
+                            <h3 className="text-lg font-medium text-white flex items-center mb-3">
+                                <svg className="w-5 h-5 mr-2 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                                </svg>
+                                Owners
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        Product Manager
+                                    </label>
+                                    <div className="relative group">
+                                        {editingField === 'productManager' ? (
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm">
+                                                    {buildSummaryData.productManager}
+                                                </div>
+                                                <button
+                                                    onClick={() => startEditing('productManager', buildSummaryData.productManager)}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                    title="Edit product manager"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-white/90 mb-2">
+                                        Dev Manager
+                                    </label>
+                                                                            <div className="relative group">
+                                        {editingField === 'devManager' ? (
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="text"
+                                                    value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEdit();
+                                                        if (e.key === 'Escape') cancelEdit();
+                                                    }}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={saveEdit}
+                                                    className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded transition-colors"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={cancelEdit}
+                                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-colors"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm">
+                                                    {buildSummaryData.devManager}
+                                                </div>
+                                                <button
+                                                    onClick={() => startEditing('devManager', buildSummaryData.devManager)}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                                    title="Edit dev manager"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="border-t border-white/10 pt-4 flex justify-end space-x-4">
+                            <button
+                                onClick={() => setIsBuildSummaryModalOpen(false)}
+                                className="px-6 py-2 text-sm font-medium text-white/70 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-all duration-300"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    // Here you can add logic to save the build summary data
+                                    console.log('Build Summary Data:', buildSummaryData);
+                                    setIsBuildSummaryModalOpen(false);
+                                }}
+                                className="px-6 py-2 text-sm font-semibold bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white shadow-lg hover:shadow-purple-500/25 rounded-lg transition-all duration-300"
+                            >
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };
