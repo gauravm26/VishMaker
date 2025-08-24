@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../shared/Modal';
+import GitHubService from '../../utils/githubService';
+import type { GitHubPullRequest, GitHubPRStatus, GitHubPRReview } from '../../utils/githubService';
 
 interface BuildSummaryData {
     lowLevelRequirementId: string;
@@ -27,6 +29,26 @@ interface BuildSummaryModalProps {
     cancelEdit: () => void;
 }
 
+// New interface for PR status information
+interface PRStatusInfo {
+    isLoading: boolean;
+    error: string | null;
+    prInfo: {
+        pr: GitHubPullRequest;
+        status: GitHubPRStatus[];
+        reviews: GitHubPRReview[];
+        approvalInfo: {
+            approved: boolean;
+            reviewCount: number;
+            approvalCount: number;
+            changesRequested: boolean;
+            lastReviewState: string;
+            prState: string;
+            mergeable: boolean;
+        };
+    } | null;
+}
+
 const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
     isOpen,
     onClose,
@@ -38,6 +60,71 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
     saveEdit,
     cancelEdit
 }) => {
+    // New state for PR status checking
+    const [prStatusInfo, setPrStatusInfo] = useState<PRStatusInfo>({
+        isLoading: false,
+        error: null,
+        prInfo: null
+    });
+    const [isDeploying, setIsDeploying] = useState(false);
+
+    // Function to check PR status
+    const checkPRStatus = async (prUrl: string) => {
+        if (!prUrl || !prUrl.includes('github.com')) return;
+        
+        setPrStatusInfo(prev => ({ ...prev, isLoading: true, error: null }));
+        
+        try {
+            const prInfo = await GitHubService.getPullRequestInfo(prUrl);
+            setPrStatusInfo({
+                isLoading: false,
+                error: null,
+                prInfo
+            });
+        } catch (error) {
+            setPrStatusInfo({
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to check PR status',
+                prInfo: null
+            });
+        }
+    };
+
+    // Function to handle deployment
+    const handleDeploy = async () => {
+        setIsDeploying(true);
+        try {
+            // Simulate deployment process
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Update status to deployed
+            if (buildSummaryData) {
+                setBuildSummaryData(prev => prev ? { ...prev, status: 'Deployed Dev' } : null);
+            }
+            
+            // Show success message or handle deployment completion
+            console.log('Deployment completed successfully');
+        } catch (error) {
+            console.error('Deployment failed:', error);
+        } finally {
+            setIsDeploying(false);
+        }
+    };
+
+    // Check PR status when PR link changes
+    useEffect(() => {
+        if (buildSummaryData?.prLink) {
+            checkPRStatus(buildSummaryData.prLink);
+        }
+    }, [buildSummaryData?.prLink]);
+
+    // Function to open external links
+    const openExternalLink = (url: string) => {
+        if (url && url.startsWith('http')) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+    };
+
     if (!buildSummaryData) return null;
 
     return (
@@ -48,6 +135,26 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
             size="xl"
         >
             <div className="space-y-6">
+                {/* PR Auto-population Notification */}
+                {buildSummaryData?.prLink && buildSummaryData.prLink.includes('github.com') && (
+                    <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 border border-green-400/30 rounded-xl p-4">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+                                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 className="text-green-400 font-medium">PR Information Auto-populated</h4>
+                                <p className="text-green-300/80 text-sm">
+                                    Pull Request information has been automatically populated from VishCoder. 
+                                    The PR link is now clickable and status checking is enabled.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Basic Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -128,8 +235,14 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
-                                            {buildSummaryData.branchLink}
+                                        <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm flex items-center justify-between group cursor-pointer hover:bg-white/15 transition-all duration-200"
+                                             onClick={() => openExternalLink(buildSummaryData.branchLink)}>
+                                            <span className="text-blue-400 hover:text-blue-300 transition-colors">
+                                                {buildSummaryData.branchLink}
+                                            </span>
+                                            <svg className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
                                         </div>
                                         <button
                                             onClick={() => startEditing('branchLink', buildSummaryData.branchLink)}
@@ -183,21 +296,139 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm">
-                                            {buildSummaryData.prLink}
-                                        </div>
-                                        <button
-                                            onClick={() => startEditing('prLink', buildSummaryData.prLink)}
-                                            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-all duration-200 opacity-0 group-hover:opacity-100"
-                                            title="Edit PR link"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        <div className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white break-all text-sm flex items-center justify-between group cursor-pointer hover:bg-white/15 transition-all duration-200"
+                                             onClick={() => openExternalLink(buildSummaryData.prLink)}>
+                                            <span className="text-purple-400 hover:text-purple-300 transition-colors">
+                                                {buildSummaryData.prLink}
+                                            </span>
+                                            <svg className="w-4 h-4 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                             </svg>
-                                        </button>
+                                        </div>
+                                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                            <button
+                                                onClick={() => checkPRStatus(buildSummaryData.prLink)}
+                                                className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 rounded transition-colors"
+                                                title="Refresh PR status"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => startEditing('prLink', buildSummaryData.prLink)}
+                                                className="p-1.5 text-white/40 hover:text-white/90 hover:bg-white/20 rounded transition-colors"
+                                                title="Edit PR link"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </>
                                 )}
                             </div>
+                            
+                            {/* PR Status Display */}
+                            {buildSummaryData.prLink && (
+                                <div className="mt-3">
+                                    {prStatusInfo.isLoading ? (
+                                        <div className="flex items-center space-x-2 text-blue-400 text-sm">
+                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <span>Checking PR status...</span>
+                                        </div>
+                                    ) : prStatusInfo.error ? (
+                                        <div className="flex items-center space-x-2 text-red-400 text-sm">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>{prStatusInfo.error}</span>
+                                        </div>
+                                    ) : prStatusInfo.prInfo ? (
+                                        <div className="bg-white/5 border border-white/20 rounded-lg p-3 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                        prStatusInfo.prInfo.approvalInfo.prState === 'open' 
+                                                            ? 'bg-green-500/20 text-green-400' 
+                                                            : prStatusInfo.prInfo.approvalInfo.prState === 'closed'
+                                                            ? 'bg-red-500/20 text-red-400'
+                                                            : 'bg-purple-500/20 text-purple-400'
+                                                    }`}>
+                                                        {prStatusInfo.prInfo.approvalInfo.prState.toUpperCase()}
+                                                    </span>
+                                                    <span className="text-white/70 text-xs">
+                                                        #{prStatusInfo.prInfo.pr.number}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="text-white/60 text-xs">
+                                                        {prStatusInfo.prInfo.approvalInfo.reviewCount} reviews
+                                                    </span>
+                                                    <span className="text-white/60 text-xs">
+                                                        {prStatusInfo.prInfo.approvalInfo.approvalCount} approved
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="text-white/90 text-sm">
+                                                {prStatusInfo.prInfo.pr.title}
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                        prStatusInfo.prInfo.approvalInfo.approved
+                                                            ? 'bg-green-500/20 text-green-400'
+                                                            : prStatusInfo.prInfo.approvalInfo.changesRequested
+                                                            ? 'bg-yellow-500/20 text-yellow-400'
+                                                            : 'bg-gray-500/20 text-gray-400'
+                                                    }`}>
+                                                        {prStatusInfo.prInfo.approvalInfo.approved 
+                                                            ? 'APPROVED' 
+                                                            : prStatusInfo.prInfo.approvalInfo.changesRequested
+                                                            ? 'CHANGES REQUESTED'
+                                                            : 'PENDING REVIEW'
+                                                        }
+                                                    </span>
+                                                    {prStatusInfo.prInfo.approvalInfo.mergeable && (
+                                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
+                                                            MERGEABLE
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Deploy Button - Only show when PR is approved */}
+                                                {prStatusInfo.prInfo.approvalInfo.approved && (
+                                                    <button
+                                                        onClick={handleDeploy}
+                                                        disabled={isDeploying}
+                                                        className="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-green-600/50 disabled:to-green-700/50 text-white rounded-lg transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none disabled:scale-100"
+                                                    >
+                                                        {isDeploying ? (
+                                                            <>
+                                                                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                                <span>Deploying...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                                                </svg>
+                                                                <span>Deploy Changes</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -280,11 +511,21 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                                     </svg>
                                                 </div>
-                                                <div className="text-white text-sm font-medium break-all">
+                                                <div className="text-white text-sm font-medium break-all cursor-pointer hover:text-green-400 transition-colors"
+                                                     onClick={() => openExternalLink(link)}>
                                                     {link}
                                                 </div>
                                             </div>
                                             <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <button
+                                                    onClick={() => openExternalLink(link)}
+                                                    className="p-2 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors"
+                                                    title="Open document link"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                    </svg>
+                                                </button>
                                                 <button
                                                     onClick={() => startEditing(`doc_${index}`, link)}
                                                     className="p-2 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded-lg transition-colors"
@@ -467,11 +708,21 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                                             </svg>
                                                         </div>
-                                                        <div className="text-white text-sm font-medium break-all">
+                                                        <div className="text-white text-sm font-medium break-all cursor-pointer hover:text-purple-400 transition-colors"
+                                                             onClick={() => openExternalLink(link)}>
                                                             {link}
                                                         </div>
                                                     </div>
                                                     <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                        <button
+                                                            onClick={() => openExternalLink(link)}
+                                                            className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded transition-colors"
+                                                            title="Open dashboard link"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                            </svg>
+                                                        </button>
                                                         <button
                                                             onClick={() => startEditing(`dashboard_${index}`, link)}
                                                             className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded transition-colors"

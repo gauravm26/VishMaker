@@ -223,7 +223,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         contractData?: any, 
         agent?: string, 
         llm?: string, 
-        progress?: number
+        progress?: number | null
     }>>([]);
     const [chatInput, setChatInput] = useState<string>('');
     const [chatLoading, setChatLoading] = useState<boolean>(false);
@@ -358,6 +358,18 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
         
         return processedLines.join('');
+    }, []);
+    
+    // Limit logs to last 200 lines
+    const limitLogsToLastNLines = useCallback((logs: string, maxLines: number = 200) => {
+        const lines = logs.split('\n');
+        if (lines.length <= maxLines) {
+            return logs;
+        }
+        
+        // Keep only the last maxLines lines
+        const limitedLines = lines.slice(-maxLines);
+        return limitedLines.join('\n');
     }, []);
     
     // Get cache info for display
@@ -1851,6 +1863,53 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         setTerminalLogs(prev => [...prev, `[${timestamp}] ${message}`]);
     }, []);
 
+    // Helper function to handle PR information from VishCoder
+    const handlePRInformation = useCallback((prUrl: string, prNumber: number, agent: string, llm: string, details: string, progress: number | null) => {
+        console.log(`🚀 PR created by VishCoder: ${prUrl} (PR #${prNumber})`);
+        
+        // Initialize build summary data if it doesn't exist
+        if (!buildSummaryData) {
+            const newBuildSummaryData = {
+                lowLevelRequirementId: `req_${Date.now()}_${Math.floor(Math.random() * 1000000)}`,
+                status: 'PR',
+                branchLink: '', // Will be populated when branch info is available
+                prLink: prUrl,
+                documentLinks: [],
+                keyMetrics: 'Response time < 200ms, 99.9% uptime, Error rate < 0.1%',
+                dashboardLinks: [],
+                alerts: '',
+                logs: '',
+                productManager: '',
+                devManager: ''
+            };
+            setBuildSummaryData(newBuildSummaryData);
+            console.log('📋 New build summary created for PR:', newBuildSummaryData);
+        } else {
+            // Update existing build summary data
+            setBuildSummaryData(prev => prev ? {
+                ...prev,
+                prLink: prUrl,
+                status: 'PR'
+            } : null);
+        }
+        
+        // Add a special notification about the PR
+        const prNotificationMessage = {
+            id: `pr-notification-${Date.now()}`,
+            type: 'status' as const,
+            content: `🚀 Pull Request #${prNumber} created successfully! Click the PR link to review and approve.`,
+            agent: agent,
+            llm: llm,
+            progress: progress,
+            timestamp: new Date(),
+            isContract: false
+        };
+        setChatMessages(prev => [...prev, prNotificationMessage]);
+        
+        // Log to terminal
+        addTerminalLog(`🚀 PR #${prNumber} created: ${prUrl}`);
+    }, [buildSummaryData, setChatMessages, addTerminalLog]);
+
     // Communication Protocol Handler - uses the centralized comm.ts module
     // This replaces the old generateVishCoderPayload function with the standardized approach
     // All payloads now use the new 'body' structure and proper session management
@@ -1950,9 +2009,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             
             setDockerLogs(prev => {
                 const combinedLogs = prev + processedNewLogs;
-                const processedCombinedLogs = processDockerLogs(combinedLogs);
+                // Limit logs to last 200 lines before processing
+                const limitedLogs = limitLogsToLastNLines(combinedLogs, 200);
+                const processedCombinedLogs = processDockerLogs(limitedLogs);
                 setProcessedLogs(processedCombinedLogs);
-                return combinedLogs;
+                return limitedLogs;
             });
             
             // Auto-scroll to bottom
@@ -1966,13 +2027,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
 
         socket.onerror = (error) => {
             setLogConnected(false);
-            setDockerLogs(prev => prev + "\n--- CONNECTION ERROR ---\nCould not connect to the log stream. Is the backend running?\n");
+            setDockerLogs(prev => {
+                const updatedLogs = prev + "\n--- CONNECTION ERROR ---\nCould not connect to the log stream. Is the backend running?\n";
+                return limitLogsToLastNLines(updatedLogs, 200);
+            });
             addTerminalLog('Docker log stream connection error');
         };
 
         socket.onclose = () => {
             setLogConnected(false);
-            setDockerLogs(prev => prev + "\n--- DISCONNECTED ---\nLog stream has been closed.\n");
+            setDockerLogs(prev => {
+                const updatedLogs = prev + "\n--- DISCONNECTED ---\nLog stream has been closed.\n";
+                return limitLogsToLastNLines(updatedLogs, 200);
+            });
             addTerminalLog('Docker log stream disconnected');
         };
 
@@ -1996,6 +2063,19 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             terminalElement.scrollTop = terminalElement.scrollHeight;
         }
     }, [dockerLogs]);
+
+    // Periodically clean up logs to ensure they don't exceed 200 lines
+    useEffect(() => {
+        if (dockerLogs && dockerLogs.split('\n').filter(line => line.trim()).length > 200) {
+            const limitedLogs = limitLogsToLastNLines(dockerLogs, 200);
+            setDockerLogs(limitedLogs);
+            const processedLimitedLogs = processDockerLogs(limitedLogs);
+            setProcessedLogs(processedLimitedLogs);
+            
+            // Add a notification that logs were truncated
+            addTerminalLog('Docker logs truncated to last 200 lines');
+        }
+    }, [dockerLogs, limitLogsToLastNLines, processDockerLogs, addTerminalLog]);
 
     // Connect to log stream when bottom panel opens
     useEffect(() => {
@@ -2110,6 +2190,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const details = statusDetails.details || 'No details provided';
                             const progress = statusDetails.progress || null;
                             
+                            // Check for PR information in the status details
+                            const prUrl = statusDetails.pr_url;
+                            const prNumber = statusDetails.pr_number;
+                            
+                            // If PR information is available, update the build summary data
+                            if (prUrl && prNumber) {
+                                handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                            }
+                            
                             // Check if this is the first "Manager" message - show it as a regular message
                             const isManagerInitial = agent === 'Manager' && details.includes('Thanks for sending the request');
                             
@@ -2161,6 +2250,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const details = statusDetails.details || 'No details provided';
                             const progress = statusDetails.progress || null;
                             
+                            // Check for PR information in the status details
+                            const prUrl = statusDetails.pr_url;
+                            const prNumber = statusDetails.pr_number;
+                            
+                            // If PR information is available, update the build summary data
+                            if (prUrl && prNumber) {
+                                handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                            }
+                            
                             // Add status message to chat as a log entry
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
@@ -2210,6 +2308,15 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     const llm = statusDetails.LLM || 'Unknown LLM';
                     let details = statusDetails.details || 'No details provided';
                     const progress = statusDetails.progress || null;
+                    
+                    // Check for PR information in the status details
+                    const prUrl = statusDetails.pr_url;
+                    const prNumber = statusDetails.pr_number;
+                    
+                    // If PR information is available, update the build summary data
+                    if (prUrl && prNumber) {
+                        handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                    }
                     
                     // Only add to chat if it's not already handled by specific message types
                     if (parsedResponse.type !== 'build_feature' && parsedResponse.type !== 'status_update') {
@@ -2277,7 +2384,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         };
 
         setAgentSocket(socket);
-    }, [agentSocket, addTerminalLog, agentConnected]);
+    }, [agentSocket, addTerminalLog, agentConnected, buildSummaryData, handlePRInformation]);
 
     // Disconnect from agent
     const disconnectFromAgent = useCallback(() => {
@@ -2859,6 +2966,14 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             <span className={`text-xs ${logConnected ? 'text-green-400' : 'text-red-400'}`}>
                                 {logConnected ? 'Connected' : 'Disconnected'}
                             </span>
+                            <span className={`text-xs ml-2 ${
+                                dockerLogs && dockerLogs.split('\n').filter(line => line.trim()).length >= 200 
+                                    ? 'text-yellow-400' 
+                                    : 'text-gray-400'
+                            }`}>
+                                {dockerLogs ? `${dockerLogs.split('\n').filter(line => line.trim()).length}/200 lines` : '0/200 lines'}
+                                {dockerLogs && dockerLogs.split('\n').filter(line => line.trim()).length >= 200 && ' ⚠️'}
+                            </span>
                         </div>
                         <div className="flex items-center space-x-2">
                             <button
@@ -2867,6 +2982,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                     setProcessedLogs('');
                                 }}
                                 className="text-gray-400 hover:text-white text-xs"
+                                title="Clear all logs and reset to initial state"
                             >
                                 Clear
                             </button>

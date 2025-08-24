@@ -33,6 +33,129 @@ interface GitHubBranch {
   protected: boolean;
 }
 
+// New interfaces for Pull Request functionality
+interface GitHubPullRequest {
+  id: number;
+  number: number;
+  state: 'open' | 'closed' | 'merged';
+  title: string;
+  body: string;
+  html_url: string;
+  diff_url: string;
+  patch_url: string;
+  issue_url: string;
+  commits_url: string;
+  review_comments_url: string;
+  review_comment_url: string;
+  comments_url: string;
+  statuses_url: string;
+  head: {
+    label: string;
+    ref: string;
+    sha: string;
+    user: {
+      login: string;
+      id: number;
+      avatar_url: string;
+      html_url: string;
+    };
+    repo: {
+      id: number;
+      name: string;
+      full_name: string;
+      private: boolean;
+      html_url: string;
+    };
+  };
+  base: {
+    label: string;
+    ref: string;
+    sha: string;
+    user: {
+      login: string;
+      id: number;
+      avatar_url: string;
+      html_url: string;
+    };
+    repo: {
+      id: number;
+      name: string;
+      full_name: string;
+      private: boolean;
+      html_url: string;
+    };
+  };
+  user: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  };
+  assignees: Array<{
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  }>;
+  requested_reviewers: Array<{
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  }>;
+  labels: Array<{
+    id: number;
+    name: string;
+    color: string;
+    description: string;
+  }>;
+  draft: boolean;
+  merged: boolean;
+  mergeable: boolean;
+  mergeable_state: 'clean' | 'dirty' | 'unstable' | 'blocked';
+  merged_by: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  } | null;
+  merge_commit_sha: string | null;
+  comments: number;
+  review_comments: number;
+  commits: number;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  merged_at: string | null;
+}
+
+interface GitHubPRStatus {
+  state: 'pending' | 'success' | 'failure' | 'error';
+  target_url: string;
+  description: string;
+  context: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GitHubPRReview {
+  id: number;
+  user: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  };
+  body: string;
+  state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
+  html_url: string;
+  pull_request_url: string;
+  submitted_at: string;
+}
+
 class GitHubService {
   private static readonly GITHUB_API_BASE = 'https://api.github.com';
   private static readonly GITHUB_RAW_BASE = 'https://raw.githubusercontent.com';
@@ -361,7 +484,183 @@ class GitHubService {
       { name: 'microsoft/TypeScript', description: 'TypeScript language' }
     ];
   }
+
+  /**
+   * Extract owner, repo, and PR number from a GitHub PR URL
+   */
+  static parsePRUrl(prUrl: string): { owner: string; repo: string; prNumber: number } | null {
+    const match = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+    if (!match) {
+      return null;
+    }
+    return {
+      owner: match[1],
+      repo: match[2],
+      prNumber: parseInt(match[3], 10)
+    };
+  }
+
+  /**
+   * Get Pull Request information
+   */
+  static async getPullRequest(owner: string, repo: string, prNumber: number): Promise<GitHubPullRequest> {
+    try {
+      const response = await fetch(`${this.GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${prNumber}`, {
+        headers: this.getHeaders()
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Pull Request #${prNumber} not found in repository '${owner}/${repo}'.`);
+        } else if (response.status === 403) {
+          throw new Error(`Repository '${owner}/${repo}' is private or requires authentication.`);
+        } else {
+          throw new Error(`Failed to fetch pull request: ${response.statusText} (${response.status})`);
+        }
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching pull request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Pull Request status checks
+   */
+  static async getPullRequestStatus(owner: string, repo: string, prNumber: number): Promise<GitHubPRStatus[]> {
+    try {
+      const response = await fetch(`${this.GITHUB_API_BASE}/repos/${owner}/${repo}/commits/${prNumber}/status`, {
+        headers: this.getHeaders()
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Status not found for PR #${prNumber} in repository '${owner}/${repo}'.`);
+        } else if (response.status === 403) {
+          throw new Error(`Repository '${owner}/${repo}' is private or requires authentication.`);
+        } else {
+          throw new Error(`Failed to fetch PR status: ${response.statusText} (${response.status})`);
+        }
+      }
+      
+      const data = await response.json();
+      return data.statuses || [];
+    } catch (error) {
+      console.error('Error fetching PR status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get Pull Request reviews
+   */
+  static async getPullRequestReviews(owner: string, repo: string, prNumber: number): Promise<GitHubPRReview[]> {
+    try {
+      const response = await fetch(`${this.GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${prNumber}/reviews`, {
+        headers: this.getHeaders()
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Reviews not found for PR #${prNumber} in repository '${owner}/${repo}'.`);
+        } else if (response.status === 403) {
+          throw new Error(`Repository '${owner}/${repo}' is private or requires authentication.`);
+        } else {
+          throw new Error(`Failed to fetch PR reviews: ${response.statusText} (${response.status})`);
+        }
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching PR reviews:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a Pull Request is approved and ready for merge
+   */
+  static async isPullRequestApproved(owner: string, repo: string, prNumber: number): Promise<{
+    approved: boolean;
+    reviewCount: number;
+    approvalCount: number;
+    changesRequested: boolean;
+    lastReviewState: string;
+    prState: string;
+    mergeable: boolean;
+  }> {
+    try {
+      const [pr, reviews] = await Promise.all([
+        this.getPullRequest(owner, repo, prNumber),
+        this.getPullRequestReviews(owner, repo, prNumber)
+      ]);
+
+      const approvalCount = reviews.filter(review => review.state === 'APPROVED').length;
+      const changesRequested = reviews.some(review => review.state === 'CHANGES_REQUESTED');
+      const lastReview = reviews.length > 0 ? reviews[reviews.length - 1] : null;
+
+      return {
+        approved: approvalCount > 0 && !changesRequested && pr.state === 'open',
+        reviewCount: reviews.length,
+        approvalCount,
+        changesRequested,
+        lastReviewState: lastReview?.state || 'NO_REVIEWS',
+        prState: pr.state,
+        mergeable: pr.mergeable && pr.mergeable_state === 'clean'
+      };
+    } catch (error) {
+      console.error('Error checking PR approval status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive PR information including status and reviews
+   */
+  static async getPullRequestInfo(prUrl: string): Promise<{
+    pr: GitHubPullRequest;
+    status: GitHubPRStatus[];
+    reviews: GitHubPRReview[];
+    approvalInfo: {
+      approved: boolean;
+      reviewCount: number;
+      approvalCount: number;
+      changesRequested: boolean;
+      lastReviewState: string;
+      prState: string;
+      mergeable: boolean;
+    };
+  } | null> {
+    try {
+      const parsed = this.parsePRUrl(prUrl);
+      if (!parsed) {
+        throw new Error('Invalid GitHub PR URL format');
+      }
+
+      const { owner, repo, prNumber } = parsed;
+      
+      const [pr, status, reviews] = await Promise.all([
+        this.getPullRequest(owner, repo, prNumber),
+        this.getPullRequestStatus(owner, repo, prNumber),
+        this.getPullRequestReviews(owner, repo, prNumber)
+      ]);
+
+      const approvalInfo = await this.isPullRequestApproved(owner, repo, prNumber);
+
+      return {
+        pr,
+        status,
+        reviews,
+        approvalInfo
+      };
+    } catch (error) {
+      console.error('Error getting comprehensive PR info:', error);
+      return null;
+    }
+  }
 }
 
 export default GitHubService;
-export type { GitHubFile, GitHubRepository, GitHubBranch }; 
+export type { GitHubFile, GitHubRepository, GitHubBranch, GitHubPullRequest, GitHubPRStatus, GitHubPRReview }; 

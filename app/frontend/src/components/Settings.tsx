@@ -47,6 +47,7 @@ interface SettingsData {
             css: string;
             api: string;
             language: string;
+            iac: string;
             cloud: string;
         };
         selectedBundle: string;
@@ -312,6 +313,7 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                 css: "tailwind",
                 api: "fastapi",
                 language: "python",
+                iac: 'terraform',
                 cloud: "aws"
             },
             selectedBundle: "serverless-starter",
@@ -724,6 +726,23 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                                                     <option value="java" className="bg-gray-800">Java 21</option>
                                                     <option value="go" className="bg-gray-800">Go 1.21</option>
                                                     <option value="rust" className="bg-gray-800">Rust 1.75</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="block text-sm font-medium text-white/80">
+                                                    IAC Language
+                                                </label>
+                                                <select
+                                                    value={settings.techStack.stack.iac || 'terraform'}
+                                                    onChange={(e) => updateTechStackField('stack', 'iac', e.target.value)}
+                                                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300"
+                                                >
+                                                    <option value="terraform" className="bg-gray-800">Terraform</option>
+                                                    <option value="cloudformation" className="bg-gray-800">AWS CloudFormation</option>
+                                                    <option value="cdk" className="bg-gray-800">AWS CDK</option>
+                                                    <option value="pulumi" className="bg-gray-800">Pulumi</option>
+                                                    <option value="bicep" className="bg-gray-800">Azure Bicep</option>
+                                                    <option value="helm" className="bg-gray-800">Helm Charts</option>
                                                 </select>
                                             </div>
                                             <div className="space-y-2 col-span-2">
