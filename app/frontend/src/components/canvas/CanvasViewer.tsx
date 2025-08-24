@@ -3679,6 +3679,138 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                         </div>
                                     </div>
                                 </div>
+                                
+                                {/* Performance Metrics Charts */}
+                                <div className="mt-6">
+                                    <h4 className="text-md font-medium text-white/90 mb-4">Performance Metrics (Last 7 Days)</h4>
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        {/* Response Time Chart */}
+                                        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                            <h5 className="text-sm font-medium text-white/80 mb-3">Response Time (ms)</h5>
+                                            <div className="h-32 relative">
+                                                <svg className="w-full h-full" viewBox="0 0 300 120" preserveAspectRatio="none">
+                                                    {/* Grid lines */}
+                                                    <defs>
+                                                        <pattern id="grid" width="50" height="20" patternUnits="userSpaceOnUse">
+                                                            <path d="M 50 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+                                                        </pattern>
+                                                    </defs>
+                                                    <rect width="100%" height="100%" fill="url(#grid)" />
+                                                    
+                                                    {/* Y-axis labels */}
+                                                    <text x="5" y="15" className="text-xs fill-white/60">200</text>
+                                                    <text x="5" y="35" className="text-xs fill-white/60">150</text>
+                                                    <text x="5" y="55" className="text-xs fill-white/60">100</text>
+                                                    <text x="5" y="75" className="text-xs fill-white/60">50</text>
+                                                    <text x="5" y="95" className="text-xs fill-white/60">0</text>
+                                                    
+                                                    {/* X-axis labels */}
+                                                    <text x="50" y="115" className="text-xs fill-white/60">Mon</text>
+                                                    <text x="100" y="115" className="text-xs fill-white/60">Tue</text>
+                                                    <text x="150" y="115" className="text-xs fill-white/60">Wed</text>
+                                                    <text x="200" y="115" className="text-xs fill-white/60">Thu</text>
+                                                    <text x="250" y="115" className="text-xs fill-white/60">Fri</text>
+                                                    <text x="300" y="115" className="text-xs fill-white/60">Sat</text>
+                                                    
+                                                    {/* Response Time Line */}
+                                                    <path
+                                                        d="M 0 60 L 50 45 L 100 35 L 150 55 L 200 25 L 250 40 L 300 30"
+                                                        fill="none"
+                                                        stroke="#60A5FA"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    
+                                                    {/* Data points */}
+                                                    <circle cx="0" cy="60" r="3" fill="#60A5FA" />
+                                                    <circle cx="50" cy="45" r="3" fill="#60A5FA" />
+                                                    <circle cx="100" cy="35" r="3" fill="#60A5FA" />
+                                                    <circle cx="150" cy="55" r="3" fill="#60A5FA" />
+                                                    <circle cx="200" cy="25" r="3" fill="#60A5FA" />
+                                                    <circle cx="250" cy="40" r="3" fill="#60A5FA" />
+                                                    <circle cx="300" cy="30" r="3" fill="#60A5FA" />
+                                                </svg>
+                                            </div>
+                                            <div className="mt-2 text-xs text-white/60">
+                                                <span className="text-green-400">↓ 12%</span> from last week
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Error Rate Chart */}
+                                        <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                            <h5 className="text-sm font-medium text-white/80 mb-3">Error Rate (%)</h5>
+                                            <div className="h-32 relative">
+                                                <svg className="w-full h-full" viewBox="0 0 300 120" preserveAspectRatio="none">
+                                                    {/* Grid lines */}
+                                                    <defs>
+                                                        <pattern id="grid2" width="50" height="20" patternUnits="userSpaceOnUse">
+                                                            <path d="M 50 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+                                                        </pattern>
+                                                    </defs>
+                                                    <rect width="100%" height="100%" fill="url(#grid2)" />
+                                                    
+                                                    {/* Y-axis labels */}
+                                                    <text x="5" y="15" className="text-xs fill-white/60">5.0</text>
+                                                    <text x="5" y="35" className="text-xs fill-white/60">4.0</text>
+                                                    <text x="5" y="55" className="text-xs fill-white/60">3.0</text>
+                                                    <text x="5" y="75" className="text-xs fill-white/60">2.0</text>
+                                                    <text x="5" y="95" className="text-xs fill-white/60">1.0</text>
+                                                    
+                                                    {/* X-axis labels */}
+                                                    <text x="50" y="115" className="text-xs fill-white/60">Mon</text>
+                                                    <text x="100" y="115" className="text-xs fill-white/60">Tue</text>
+                                                    <text x="150" y="115" className="text-xs fill-white/60">Wed</text>
+                                                    <text x="200" y="115" className="text-xs fill-white/60">Thu</text>
+                                                    <text x="250" y="115" className="text-xs fill-white/60">Fri</text>
+                                                    <text x="300" y="115" className="text-xs fill-white/60">Sat</text>
+                                                    
+                                                    {/* Error Rate Line */}
+                                                    <path
+                                                        d="M 0 80 L 50 70 L 100 85 L 150 65 L 200 90 L 250 75 L 300 60"
+                                                        fill="none"
+                                                        stroke="#F87171"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    
+                                                    {/* Data points */}
+                                                    <circle cx="0" cy="80" r="3" fill="#F87171" />
+                                                    <circle cx="50" cy="70" r="3" fill="#F87171" />
+                                                    <circle cx="100" cy="85" r="3" fill="#F87171" />
+                                                    <circle cx="150" cy="65" r="3" fill="#F87171" />
+                                                    <circle cx="200" cy="90" r="3" fill="#F87171" />
+                                                    <circle cx="250" cy="75" r="3" fill="#F87171" />
+                                                    <circle cx="300" cy="60" r="3" fill="#F87171" />
+                                                </svg>
+                                            </div>
+                                            <div className="mt-2 text-xs text-white/60">
+                                                <span className="text-green-400">↓ 8%</span> from last week
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Additional Metrics Summary */}
+                                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                                            <div className="text-lg font-semibold text-green-400">99.2%</div>
+                                            <div className="text-xs text-white/60">Uptime</div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                                            <div className="text-lg font-semibold text-blue-400">245ms</div>
+                                            <div className="text-xs text-white/60">Avg Response</div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                                            <div className="text-lg font-semibold text-yellow-400">2.1%</div>
+                                            <div className="text-xs text-white/60">Error Rate</div>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                                            <div className="text-lg font-semibold text-purple-400">1.2K</div>
+                                            <div className="text-xs text-white/60">Requests/min</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
