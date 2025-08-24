@@ -6,6 +6,7 @@ import CanvasViewer from '../components/canvas/CanvasViewer';
 import RequirementsTab from '../components/tabs/RequirementsTab';
 import ArchitectureTab from '../components/tabs/ArchitectureTab';
 import CodeTab from '../components/tabs/CodeTab';
+import DocumentViewer from '../components/documents/DocumentViewer';
 import Settings from '../components/Settings';
 import Modal from '../components/shared/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,7 +35,7 @@ const ProjectDashboard: React.FC = () => {
     const [shouldExpandCreateForm, setShouldExpandCreateForm] = useState(false);
     
     // Tab state
-    const [activeTab, setActiveTab] = useState<'requirements' | 'architecture' | 'code'>('requirements');
+    const [activeTab, setActiveTab] = useState<'requirements' | 'architecture' | 'code' | 'documents'>('requirements');
     
     // Panel visibility states
     const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
@@ -43,6 +44,7 @@ const ProjectDashboard: React.FC = () => {
     // Refresh triggers for tabs
     const [architectureRefreshTrigger, setArchitectureRefreshTrigger] = useState(0);
     const [codeRefreshTrigger, setCodeRefreshTrigger] = useState(0);
+    const [documentsRefreshTrigger, setDocumentsRefreshTrigger] = useState(0);
 
     // Handle refresh based on active tab
     const handleRefresh = () => {
@@ -50,6 +52,8 @@ const ProjectDashboard: React.FC = () => {
             setArchitectureRefreshTrigger(prev => prev + 1);
         } else if (activeTab === 'code') {
             setCodeRefreshTrigger(prev => prev + 1);
+        } else if (activeTab === 'documents') {
+            setDocumentsRefreshTrigger(prev => prev + 1);
         } else if (activeTab === 'requirements') {
             setCanvasRefreshNonce(Date.now());
         }
@@ -126,6 +130,7 @@ const ProjectDashboard: React.FC = () => {
         setCanvasRefreshNonce(Date.now());
         setArchitectureRefreshTrigger(prev => prev + 1);
         setCodeRefreshTrigger(prev => prev + 1);
+        setDocumentsRefreshTrigger(prev => prev + 1);
         
         // Close mobile sidebar after selecting project
         if (isMobile) {
@@ -349,6 +354,7 @@ const ProjectDashboard: React.FC = () => {
                                 {activeTab === 'requirements' && 'Requirements'}
                                 {activeTab === 'architecture' && 'Architecture'}
                                 {activeTab === 'code' && 'Code'}
+                                {activeTab === 'documents' && 'Documents'}
                             </span>
                         )}
                     </div>
@@ -388,6 +394,16 @@ const ProjectDashboard: React.FC = () => {
                                     }`}
                                 >
                                     Code
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('documents')}
+                                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                        activeTab === 'documents'
+                                            ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg'
+                                            : 'text-gray-300 hover:text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    Documents
                                 </button>
                             </div>
                             <button
@@ -430,6 +446,12 @@ const ProjectDashboard: React.FC = () => {
                                 <CodeTab 
                                     projectId={selectedProjectId} 
                                     refreshTrigger={codeRefreshTrigger}
+                                />
+                            )}
+                            {activeTab === 'documents' && (
+                                <DocumentViewer 
+                                    projectId={selectedProjectId} 
+                                    refreshTrigger={documentsRefreshTrigger}
                                 />
                             )}
                         </div>

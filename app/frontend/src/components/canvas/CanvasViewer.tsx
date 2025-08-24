@@ -214,12 +214,23 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
     const [processedLogs, setProcessedLogs] = useState<string>('');
     
     // Chat state
-    const [chatMessages, setChatMessages] = useState<Array<{id: string, type: 'user' | 'assistant', content: string, timestamp: Date, isContract?: boolean, contractData?: any}>>([]);
+    const [chatMessages, setChatMessages] = useState<Array<{
+        id: string, 
+        type: 'user' | 'assistant' | 'status', 
+        content: string, 
+        timestamp: Date, 
+        isContract?: boolean, 
+        contractData?: any, 
+        agent?: string, 
+        llm?: string, 
+        progress?: number
+    }>>([]);
     const [chatInput, setChatInput] = useState<string>('');
     const [chatLoading, setChatLoading] = useState<boolean>(false);
     const [contractBuilding, setContractBuilding] = useState<boolean>(false);
     const [expandedContracts, setExpandedContracts] = useState<Set<string>>(new Set());
     const [contractPopups, setContractPopups] = useState<Set<string>>(new Set());
+    const [showAllLogs, setShowAllLogs] = useState<boolean>(false);
     
     // Build Summary modal state
     const [isBuildSummaryModalOpen, setIsBuildSummaryModalOpen] = useState<boolean>(false);
@@ -2097,22 +2108,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const agent = statusDetails.agent || 'Unknown Agent';
                             const llm = statusDetails.LLM || 'Unknown LLM';
                             const details = statusDetails.details || 'No details provided';
+                            const progress = statusDetails.progress || null;
                             
-                            // Format message as: agent(LLM) : details
-                            const statusMessage = `${agent}(${llm}) : ${details}`;
+                            // Check if this is the first "Manager" message - show it as a regular message
+                            const isManagerInitial = agent === 'Manager' && details.includes('Thanks for sending the request');
                             
                             // Add status message to chat
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
-                                type: 'assistant' as const,
-                                content: `📊 ${statusMessage}`,
+                                type: isManagerInitial ? 'assistant' as const : 'status' as const,
+                                content: isManagerInitial ? `${agent}(${llm}) : ${details}` : details,
+                                agent: isManagerInitial ? undefined : agent,
+                                llm: isManagerInitial ? undefined : llm,
+                                progress: progress,
                                 timestamp: new Date(),
                                 isContract: false
                             };
                             setChatMessages(prev => [...prev, statusUpdateMessage]);
                             
                             // Also log to terminal
-                            addTerminalLog(`📊 Status Update: ${statusMessage}`);
+                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${details}`);
                         }
                     }
                 }
@@ -2144,23 +2159,24 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const agent = statusDetails.agent || 'Unknown Agent';
                             const llm = statusDetails.LLM || 'Unknown LLM';
                             const details = statusDetails.details || 'No details provided';
+                            const progress = statusDetails.progress || null;
                             
-                            // Format message as: agent(LLM) : details
-                            const statusMessage = `${agent}(${llm}) : ${details}`;
-                            
-                            // Add status message to chat
+                            // Add status message to chat as a log entry
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
-                                type: 'assistant' as const,
-                                content: `📊 ${statusMessage}`,
+                                type: 'status' as const,
+                                content: details,
+                                agent: agent,
+                                llm: llm,
+                                progress: progress,
                                 timestamp: new Date(),
                                 isContract: false
                             };
                             setChatMessages(prev => [...prev, statusUpdateMessage]);
                             
                             // Update agent status and log to terminal
-                            setAgentStatus(statusMessage);
-                            addTerminalLog(`📊 Status Update: ${statusMessage}`);
+                            setAgentStatus(`${agent}(${llm}) : ${details}`);
+                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${details}`);
                         } else {
                             // Fallback to regular message handling
                             const message = parsedResponse.body.messages.message || 'Status updated';
@@ -2193,16 +2209,17 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     const agent = statusDetails.agent || 'Unknown Agent';
                     const llm = statusDetails.LLM || 'Unknown LLM';
                     let details = statusDetails.details || 'No details provided';
-                    
-                    // Format message as: agent(LLM) : details
-                    const statusMessage = `${agent}(${llm}) : ${details}`;
+                    const progress = statusDetails.progress || null;
                     
                     // Only add to chat if it's not already handled by specific message types
                     if (parsedResponse.type !== 'build_feature' && parsedResponse.type !== 'status_update') {
                         const generalStatusMessage = {
                             id: `general-status-${Date.now()}`,
-                            type: 'assistant' as const,
-                            content: `📊 ${statusMessage}`,
+                            type: 'status' as const,
+                            content: details,
+                            agent: agent,
+                            llm: llm,
+                            progress: progress,
                             timestamp: new Date(),
                             isContract: false
                         };
@@ -2210,7 +2227,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     }
                     
                     // Always log to terminal for debugging
-                    addTerminalLog(`📊 General Status Update: ${statusMessage}`);
+                    addTerminalLog(`📊 General Status Update: ${agent}(${llm}) : ${details}`);
                 }
 
                 // Handle regular AI agent messages (legacy support)
@@ -2685,11 +2702,35 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 </div>
                             ) : (
                                 <div className="space-y-3 pb-2">
-                                    {chatMessages.map((message) => (
+                                    {/* Show status message count and toggle */}
+                                    {chatMessages.filter(m => m.type === 'status').length > 0 && (
+                                        <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="text-xs text-gray-600">
+                                                📊 {chatMessages.filter(m => m.type === 'status').length} status update{chatMessages.filter(m => m.type === 'status').length !== 1 ? 's' : ''}
+                                            </div>
+                                            <button
+                                                onClick={() => setShowAllLogs(!showAllLogs)}
+                                                className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition-colors"
+                                            >
+                                                {showAllLogs ? 'Hide Details' : 'Show All'}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {chatMessages
+                                        .filter(message => {
+                                            if (message.type !== 'status') return true;
+                                            if (showAllLogs) return true;
+                                            // In collapsed mode, only show the latest status message
+                                            const statusMessages = chatMessages.filter(m => m.type === 'status');
+                                            return statusMessages.length > 0 && message.id === statusMessages[statusMessages.length - 1].id;
+                                        })
+                                        .map((message) => (
                                         <div key={message.id} className="flex justify-start">
                                             <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs shadow-sm ${
                                                 message.isContract 
                                                     ? 'bg-green-50 border border-green-200' 
+                                                    : message.type === 'status'
+                                                    ? 'bg-blue-50 border border-blue-200 text-blue-800'
                                                     : 'bg-gray-200 text-gray-800'
                                             }`}>
                                                 {message.isContract ? (
@@ -2715,6 +2756,37 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                                         >
                                                             {contractPopups.has(message.id) ? '📋 Hide Contract' : '📋 Review and Send Contract'}
                                                         </button>
+                                                    </div>
+                                                ) : message.type === 'status' ? (
+                                                    <div className="font-mono">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <div className="text-xs font-medium text-blue-700 flex items-center gap-1">
+                                                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                                                                <span className="font-bold">{message.agent}</span>
+                                                                <span className="text-blue-500">({message.llm})</span>
+                                                                {!showAllLogs && chatMessages.filter(m => m.type === 'status').length > 1 && (
+                                                                    <span className="text-xs bg-blue-200 text-blue-700 px-1 py-0.5 rounded">
+                                                                        Latest
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {message.progress && (
+                                                                <div className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                                                    {message.progress}%
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-blue-800 text-xs mb-2 pl-3 border-l-2 border-blue-300">
+                                                            {message.content}
+                                                        </div>
+                                                        {message.progress && (
+                                                            <div className="w-full bg-blue-100 rounded-full h-2 mb-1">
+                                                                <div 
+                                                                    className="bg-gradient-to-r from-blue-400 to-blue-600 h-2 rounded-full transition-all duration-700 shadow-sm" 
+                                                                    style={{ width: `${message.progress}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div className="break-words">{message.content}</div>
