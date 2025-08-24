@@ -1,4 +1,4 @@
-# File Difference Report - Sun Aug 24 18:38:40 CDT 2025
+# File Difference Report - Sun Aug 24 18:48:27 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -16,12 +16,6 @@ app/.DS_Store
 ## app/backend
 ### Missing Remotely:
 app/backend/.DS_Store
-
-## app/backend/lambdas/waitlist/code
-### Missing Locally:
-app/backend/lambdas/waitlist/code/routes.py
-app/backend/lambdas/waitlist/code/schemas.py
-app/backend/lambdas/waitlist/code/services.py
 
 ## app/frontend
 ### Missing Locally:
@@ -71,16 +65,4 @@ iac/terraform.tfvars.example
 iac/tfplan
 iac/variables.tf
 
-## scripts
-### Missing Remotely:
-scripts/.count_diff.txt
-scripts/deploy.sh
-scripts/lambda_zip.sh
-scripts/test_waitlist_api.py
-
-### Missing Locally:
-scripts/.count_diff.txt
-scripts/deploy.sh
-scripts/lambda_zip.sh
-
-Total file differences: 13
+Total file differences: 10

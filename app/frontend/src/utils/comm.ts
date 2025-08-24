@@ -10,7 +10,7 @@ export type VishMakerActor = "System" | "User";
 export type VishCoderActor = "Coder";
 export type Actor = VishMakerActor | VishCoderActor;
 
-export type MessageType = "question_to_ai" | "build_feature" | "status_update" | "clarification_needed_from_user";
+export type MessageType = "question_to_ai" | "build_feature" | "status_update" | "clarification_needed_from_user" | "heartbeat";
 export type Status = "Initiated" | "InProgress" | "Completed" | "Failed" | "Error";
 
 export interface Origin {
@@ -328,7 +328,7 @@ export class CommunicationManager {
             }
             
             // Validate type
-            const validTypes = ["question_to_ai", "build_feature", "status_update", "clarification_needed_from_user"];
+            const validTypes = ["question_to_ai", "build_feature", "status_update", "clarification_needed_from_user", "heartbeat"];
             if (!validTypes.includes(responseData["type"])) {
                 return [false, `Invalid message type: ${responseData["type"]}`];
             }
