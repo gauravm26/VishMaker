@@ -55,7 +55,7 @@ AUTO_CONFIRM=true
 FORCE_REBUILD=false
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements")
+AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements" "waitlist")
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -677,7 +677,9 @@ elif [[ "$DEPLOY_MODE" == "lambdas" ]]; then
     echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
     echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
     echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 Requirements API: ${BLUE}$API_GATEWAY_URL/requirements/${NC}"
     echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo -e "🔗 Waitlist API: ${BLUE}$API_GATEWAY_URL/api/waitlist${NC}"
     echo ""
     print_success "Lambda deployment completed successfully! 🎉"
 elif [[ "$DEPLOY_MODE" == "terraform" ]]; then
@@ -695,7 +697,9 @@ elif [[ "$DEPLOY_MODE" == "terraform" ]]; then
     echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
     echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
     echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 Requirements API: ${BLUE}$API_GATEWAY_URL/requirements/${NC}"
     echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo -e "🔗 Waitlist API: ${BLUE}$API_GATEWAY_URL/api/waitlist${NC}"
     echo -e "🔗 Frontend: ${BLUE}$FRONTEND_URL${NC}"
     echo ""
     print_success "Terraform infrastructure deployment completed successfully! 🎉"
@@ -715,14 +719,17 @@ else
     echo -e "🔗 Health Check: ${BLUE}$API_GATEWAY_URL/ping${NC}"
     echo -e "🔗 Auth API: ${BLUE}$API_GATEWAY_URL/auth/${NC}"
     echo -e "🔗 Projects API: ${BLUE}$API_GATEWAY_URL/projects/${NC}"
+    echo -e "🔗 Requirements API: ${BLUE}$API_GATEWAY_URL/requirements/${NC}"
     echo -e "🔗 LLM API: ${BLUE}$API_GATEWAY_URL/llm/${NC}"
+    echo -e "🔗 Waitlist API: ${BLUE}$API_GATEWAY_URL/api/waitlist${NC}"
     echo -e "🔗 Frontend: ${BLUE}$FRONTEND_URL${NC}"
     echo ""
     echo -e "${YELLOW}🔧 Next Steps${NC}"
     echo "=============="
     echo "1. Test the authentication flow"
     echo "2. Verify frontend is working with new backend"
-    echo "3. Configure domain name and SSL certificate (optional)"
+    echo "3. Test the waitlist functionality"
+    echo "4. Configure domain name and SSL certificate (optional)"
     echo ""
     print_success "Full deployment completed successfully! 🎉"
 fi

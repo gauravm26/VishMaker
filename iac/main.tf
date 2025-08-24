@@ -617,6 +617,17 @@ locals {
       lambda_arn    = aws_lambda_function.lambda_functions["llm_api"].invoke_arn
       function_name = aws_lambda_function.lambda_functions["llm_api"].function_name
     }
+    waitlist_api = {
+      routes = [
+        {
+          path    = ["/api/waitlist", "/api/waitlist/{proxy+}"]
+          methods = ["GET", "POST", "PUT", "DELETE"]
+          auth    = "NONE"
+        }
+      ]
+      lambda_arn    = aws_lambda_function.lambda_functions["waitlist_api"].invoke_arn
+      function_name = aws_lambda_function.lambda_functions["waitlist_api"].function_name
+    }
   }
   flattened_routes = {
     for route in flatten([
@@ -743,6 +754,13 @@ locals {
     requirements_api = {
       lambda_name           = "requirements"
       environment_variables = local.common_dynamodb_env_vars
+      dynamo_access_all     = true
+    }
+    waitlist_api = {
+      lambda_name           = "waitlist"
+      environment_variables = merge(local.common_dynamodb_env_vars, {
+        WAITLIST_TABLE_NAME = "dev-vishmaker-waitlist"
+      })
       dynamo_access_all     = true
     }
   }

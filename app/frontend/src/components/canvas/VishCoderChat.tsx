@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
 export interface ChatMessage {
     id: string;
-    type: 'manager' | 'developer' | 'system';
+    type: 'manager' | 'developer' | 'system' | 'user';
     content: string;
     timestamp: Date;
     agent?: string;
@@ -10,6 +10,11 @@ export interface ChatMessage {
     progress?: number;
     isGrouped?: boolean;
     groupId?: string;
+    details?: {
+        file_type?: 'New' | 'Modified';
+        file_name?: string;
+        file_size?: string;
+    };
 }
 
 interface VishCoderChatProps {
@@ -25,16 +30,129 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
 }) => {
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [inputValue, setInputValue] = useState('');
+    const [throttledMessages, setThrottledMessages] = useState<ChatMessage[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messageBufferRef = useRef<ChatMessage[]>([]);
+    const throttleTimeoutRef = useRef<number | null>(null);
 
-    // Auto-scroll to bottom when new messages arrive
+    // Message throttling to prevent UI freeze from rapid updates
+    const throttleMessages = useCallback(() => {
+        if (messageBufferRef.current.length > 0) {
+            const batchSize = messageBufferRef.current.length;
+            console.log(`📦 VishCoder: Processing batch of ${batchSize} messages`);
+            
+            // Take all buffered messages and add them to throttled messages
+            setThrottledMessages(prev => [...prev, ...messageBufferRef.current]);
+            messageBufferRef.current = [];
+        }
+        throttleTimeoutRef.current = null;
+    }, []);
+
+    // Buffer incoming messages and throttle updates
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        // Find new messages that aren't in throttledMessages yet
+        const newMessages = messages.filter(msg => 
+            !throttledMessages.some(throttledMsg => throttledMsg.id === msg.id)
+        );
+
+        if (newMessages.length > 0) {
+            // Add new messages to buffer
+            messageBufferRef.current.push(...newMessages);
+
+            // If we don't have a pending throttle, schedule one
+            if (!throttleTimeoutRef.current) {
+                // Use 150ms delay for fast responsive updates while preventing UI freeze
+                throttleTimeoutRef.current = setTimeout(throttleMessages, 150);
+            }
+        }
+    }, [messages, throttledMessages, throttleMessages]);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (throttleTimeoutRef.current) {
+                clearTimeout(throttleTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Throttled auto-scroll to bottom when new messages arrive
+    const autoScrollTimeoutRef = useRef<number | null>(null);
+    useEffect(() => {
+        // Clear existing timeout
+        if (autoScrollTimeoutRef.current) {
+            clearTimeout(autoScrollTimeoutRef.current);
+        }
+
+        // Debounce auto-scroll to prevent excessive scrolling
+        autoScrollTimeoutRef.current = setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 200);
+
+        return () => {
+            if (autoScrollTimeoutRef.current) {
+                clearTimeout(autoScrollTimeoutRef.current);
+            }
+        };
+    }, [throttledMessages]);
+
+    // Group messages by type and time - using useMemo to prevent recalculation
+    const groupedMessages = useMemo(() => {
+        const groups: Record<string, ChatMessage[]> = {};
+        const regular: ChatMessage[] = [];
+        let currentGroupId: string | null = null;
+        let groupCounter = 0;
+
+        throttledMessages.forEach((message) => {
+            // Check if this message starts a new build process
+            if (message.type === 'manager' && 
+                message.content.toLowerCase().includes('starting feature build process')) {
+                currentGroupId = `build-process-${groupCounter++}`;
+                regular.push(message);
+            }
+            // Check if this message indicates completion, failure, or error
+            else if (message.type === 'developer' && currentGroupId && 
+                     (message.content.toLowerCase().includes('completed') || 
+                      message.content.toLowerCase().includes('failed') || 
+                      message.content.toLowerCase().includes('error') ||
+                      message.content.toLowerCase().includes('successfully') ||
+                      message.content.toLowerCase().includes('🎉') ||
+                      message.content.toLowerCase().includes('❌') ||
+                      message.content.toLowerCase().includes('⚠️'))) {
+                // Add the final message to the group and close it
+                if (!groups[currentGroupId]) {
+                    groups[currentGroupId] = [];
+                }
+                groups[currentGroupId].push(message);
+                currentGroupId = null; // Close the group
+            }
+            // Add developer messages to current group if we're in a build process
+            else if (message.type === 'developer' && currentGroupId) {
+                if (!groups[currentGroupId]) {
+                    groups[currentGroupId] = [];
+                }
+                groups[currentGroupId].push(message);
+            }
+            // Handle manually grouped messages
+            else if (message.isGrouped && message.groupId) {
+                if (!groups[message.groupId]) {
+                    groups[message.groupId] = [];
+                }
+                groups[message.groupId].push(message);
+            }
+            // All other messages go to regular
+            else {
+                regular.push(message);
+            }
+        });
+
+        return { regular, groups };
+    }, [throttledMessages]);
 
     // Auto-expand groups when status is completed, failed, or error
     useEffect(() => {
         const newExpandedGroups = new Set(expandedGroups);
+        let hasChanges = false;
         
         Object.entries(groupedMessages.groups).forEach(([groupId, groupMessages]) => {
             const latestMessage = groupMessages[groupMessages.length - 1];
@@ -48,28 +166,17 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                 content.includes('🎉') ||
                 content.includes('❌') ||
                 content.includes('⚠️')) {
-                newExpandedGroups.add(groupId);
+                if (!newExpandedGroups.has(groupId)) {
+                    newExpandedGroups.add(groupId);
+                    hasChanges = true;
+                }
             }
         });
         
-        if (newExpandedGroups.size !== expandedGroups.size) {
+        if (hasChanges) {
             setExpandedGroups(newExpandedGroups);
         }
-    }, [messages, groupedMessages.groups, expandedGroups]);
-
-    // Group messages by type and time
-    const groupedMessages = messages.reduce((acc, message) => {
-        if (message.type === 'developer' && message.isGrouped) {
-            const groupId = message.groupId || 'default';
-            if (!acc.groups[groupId]) {
-                acc.groups[groupId] = [];
-            }
-            acc.groups[groupId].push(message);
-        } else {
-            acc.regular.push(message);
-        }
-        return acc;
-    }, { regular: [] as ChatMessage[], groups: {} as Record<string, ChatMessage[]> });
+    }, [throttledMessages, expandedGroups]);
 
     const handleSendMessage = () => {
         if (inputValue.trim() && onSendMessage) {
@@ -103,19 +210,102 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
         });
     };
 
-    const renderMessage = (message: ChatMessage) => {
-        const isManager = message.type === 'manager';
-        const isDeveloper = message.type === 'developer';
-        const isSystem = message.type === 'system';
+    const renderFileUpdate = (message: ChatMessage) => {
+        const isNewFile = message.details?.file_type === 'New';
+        const isModifiedFile = message.details?.file_type === 'Modified';
+        
+        if (!isNewFile && !isModifiedFile) return null;
 
         return (
             <div key={message.id} className="flex justify-start mb-3">
+                <div className={`max-w-[85%] rounded-lg px-4 py-3 shadow-sm border-2 ${
+                    isNewFile 
+                        ? 'bg-emerald-50 border-emerald-300' 
+                        : 'bg-amber-50 border-amber-300'
+                }`}>
+                    {/* File Update Header */}
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-lg ${
+                                isNewFile ? 'text-emerald-600' : 'text-amber-600'
+                            }`}>
+                                {isNewFile ? '📄' : '✏️'}
+                            </span>
+                            <div>
+                                <span className={`font-semibold text-sm ${
+                                    isNewFile ? 'text-emerald-800' : 'text-amber-800'
+                                }`}>
+                                    {isNewFile ? 'New File Created' : 'File Modified'}
+                                </span>
+                                <div className="text-xs text-gray-600">
+                                    {message.agent} • {message.llm}
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`text-xs font-bold px-2 py-1 rounded ${
+                            isNewFile ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                            {message.details?.file_type}
+                        </div>
+                    </div>
+
+                    {/* File Details */}
+                    <div className="bg-white rounded-lg p-3 mb-3 border border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className={`font-medium text-sm ${
+                                isNewFile ? 'text-emerald-800' : 'text-amber-800'
+                            }`}>
+                                📁 {message.details?.file_name}
+                            </span>
+                            {message.details?.file_size && (
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                    {message.details.file_size}
+                                </span>
+                            )}
+                        </div>
+                        
+                        {/* File Type Badge */}
+                        <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                isNewFile 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : 'bg-amber-100 text-amber-800'
+                            }`}>
+                                {isNewFile ? '🆕 New' : '📝 Modified'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Timestamp */}
+                    <div className="text-xs text-gray-500">
+                        {formatTimestamp(message.timestamp)}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderMessage = (message: ChatMessage) => {
+        // Check if this is a file update message first
+        if (message.details?.file_type) {
+            return renderFileUpdate(message);
+        }
+
+        const isManager = message.type === 'manager';
+        const isDeveloper = message.type === 'developer';
+        const isSystem = message.type === 'system';
+        const isUser = message.type === 'user';
+
+        return (
+            <div key={message.id} className={`flex mb-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-lg px-4 py-3 shadow-sm ${
                     isManager 
                         ? 'bg-blue-50 border border-blue-200' 
                         : isDeveloper
                         ? 'bg-green-50 border border-green-200'
-                        : 'bg-gray-50 border border-gray-200'
+                        : isSystem
+                        ? 'bg-gray-50 border border-gray-200'
+                        : 'bg-purple-50 border border-purple-200'
                 }`}>
                     {/* Message Header */}
                     <div className="flex items-center justify-between mb-2">
@@ -129,20 +319,26 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                             {isSystem && (
                                 <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
                             )}
+                            {isUser && (
+                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            )}
                             <span className={`font-semibold text-sm ${
                                 isManager ? 'text-blue-800' : 
                                 isDeveloper ? 'text-green-800' : 
-                                'text-gray-800'
+                                isSystem ? 'text-gray-800' :
+                                'text-purple-800'
                             }`}>
                                 {isManager ? 'Manager' : 
                                  isDeveloper ? `Developer (${message.agent || 'Claude Code'})` : 
-                                 'System'}
+                                 isSystem ? 'System' :
+                                 'You'}
                             </span>
                             {message.llm && (
                                 <span className={`text-xs px-2 py-1 rounded ${
                                     isManager ? 'bg-blue-100 text-blue-600' :
                                     isDeveloper ? 'bg-green-100 text-green-600' :
-                                    'bg-gray-100 text-gray-600'
+                                    isSystem ? 'bg-gray-100 text-gray-600' :
+                                    'bg-purple-100 text-purple-600'
                                 }`}>
                                     {message.llm}
                                 </span>
@@ -161,7 +357,8 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                     <div className={`text-sm mb-2 ${
                         isManager ? 'text-blue-800' : 
                         isDeveloper ? 'text-green-800' : 
-                        'text-gray-800'
+                        isSystem ? 'text-gray-800' :
+                        'text-purple-800'
                     }`}>
                         {message.content}
                     </div>
@@ -311,14 +508,19 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                     <span className="text-lg">💬</span>
                     <h3 className="font-semibold text-gray-800">VishCoder Chat</h3>
                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                        {messages.length} messages
+                        {throttledMessages.length} messages
                     </span>
+                    {messageBufferRef.current.length > 0 && (
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                            +{messageBufferRef.current.length} pending
+                        </span>
+                    )}
                 </div>
             </div>
 
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {messages.length === 0 ? (
+                {throttledMessages.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                         <div className="mb-2">🚀 Ready to start building</div>
                         <div className="text-sm text-gray-400">
@@ -368,4 +570,5 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
     );
 };
 
-export default VishCoderChat;
+// Memoize the component to prevent unnecessary re-renders
+export default React.memo(VishCoderChat);

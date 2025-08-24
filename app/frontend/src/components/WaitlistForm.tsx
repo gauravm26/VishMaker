@@ -45,7 +45,7 @@ const WaitlistForm: React.FC<WaitlistFormProps> = ({
     setMessage(null);
 
     try {
-      const response = await apiClient<{ status: string; message: string }>('/waitlist/', {
+      const response = await apiClient<{ status: string; message: string }>('/api/waitlist', {
         method: 'POST',
         body: { email: email.trim() }
       });

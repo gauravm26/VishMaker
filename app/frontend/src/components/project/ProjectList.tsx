@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Project } from '../../types/project';
 import apiClient from '../../utils/apiClient';
+import Modal from '../shared/Modal';
 
 interface ProjectListProps {
     onProjectSelect: (projectId: number, projectName?: string) => void;
@@ -20,6 +21,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
     const [loading, setLoading] = useState<boolean>(true);
     const [listError, setListError] = useState<string | null>(null);
     const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+    const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -38,23 +41,33 @@ const ProjectList: React.FC<ProjectListProps> = ({
         fetchProjects();
     }, [refreshTrigger]);
 
-    const handleDeleteProject = async (projectId: number, e: React.MouseEvent) => {
+    const handleDeleteClick = (project: Project, e: React.MouseEvent) => {
         e.stopPropagation();
-        
-        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-            return;
-        }
+        setProjectToDelete(project);
+        setShowDeleteConfirm(true);
+    };
 
-        setDeletingProjectId(projectId);
+    const handleDeleteConfirm = async () => {
+        if (!projectToDelete) return;
+        
+        setShowDeleteConfirm(false);
+        setDeletingProjectId(projectToDelete.id);
+        
         try {
-            await apiClient(`/projects/${projectId}`, { method: 'DELETE' });
+            await apiClient(`/projects/${projectToDelete.id}`, { method: 'DELETE' });
             triggerRefresh();
         } catch (err: any) {
             console.error('Failed to delete project:', err);
             alert('Failed to delete project. Please try again.');
         } finally {
             setDeletingProjectId(null);
+            setProjectToDelete(null);
         }
+    };
+
+    const handleDeleteCancel = () => {
+        setShowDeleteConfirm(false);
+        setProjectToDelete(null);
     };
 
     if (loading) {
@@ -147,7 +160,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
                                     {/* Delete Button */}
                                     <button
-                                        onClick={(e) => handleDeleteProject(project.id, e)}
+                                        onClick={(e) => handleDeleteClick(project, e)}
                                         disabled={isDeleting}
                                         className={`
                                             p-2 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100
@@ -178,6 +191,47 @@ const ProjectList: React.FC<ProjectListProps> = ({
                         );
                     })}
                 </div>
+            )}
+
+            {showDeleteConfirm && projectToDelete && (
+                <Modal
+                    isOpen={showDeleteConfirm}
+                    onClose={handleDeleteCancel}
+                    title="Confirm Deletion"
+                    size="sm"
+                >
+                    <div className="text-center">
+                        <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-red-500/20 to-red-600/20 rounded-full flex items-center justify-center border border-red-400/30">
+                            <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                        </div>
+                        
+                        <h3 className="text-lg font-semibold text-white mb-3">
+                            Delete Project
+                        </h3>
+                        
+                        <p className="text-gray-300 text-sm leading-relaxed mb-6">
+                            Are you sure you want to delete <span className="text-white font-medium">"{projectToDelete.name}"</span>? 
+                            This action cannot be undone.
+                        </p>
+                        
+                        <div className="flex gap-3 justify-center">
+                            <button
+                                onClick={handleDeleteCancel}
+                                className="px-6 py-2 rounded-lg border border-white/20 text-white hover:bg-white/10 transition-all duration-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteConfirm}
+                                className="px-6 py-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-lg"
+                            >
+                                Delete Project
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

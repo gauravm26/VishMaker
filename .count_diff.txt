@@ -1,4 +1,4 @@
-# File Difference Report - Sun Aug 24 04:16:53 CDT 2025
+# File Difference Report - Sun Aug 24 18:38:40 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -16,6 +16,12 @@ app/.DS_Store
 ## app/backend
 ### Missing Remotely:
 app/backend/.DS_Store
+
+## app/backend/lambdas/waitlist/code
+### Missing Locally:
+app/backend/lambdas/waitlist/code/routes.py
+app/backend/lambdas/waitlist/code/schemas.py
+app/backend/lambdas/waitlist/code/services.py
 
 ## app/frontend
 ### Missing Locally:
@@ -48,48 +54,6 @@ app/frontend/src/vite-env.d.ts
 app/frontend/src/components/Settings.tsx
 app/frontend/src/components/WaitlistForm.tsx
 
-## app/frontend/src/components/canvas
-### Missing Remotely:
-app/frontend/src/components/canvas/BuildSummaryModal.tsx
-app/frontend/src/components/canvas/CanvasViewer.tsx
-app/frontend/src/components/canvas/InfrastructureCanvasViewer.tsx
-app/frontend/src/components/canvas/InfrastructureNode.tsx
-app/frontend/src/components/canvas/ParsedResourceNode.tsx
-app/frontend/src/components/canvas/TableNode.tsx
-app/frontend/src/components/canvas/VishCoderChat.tsx
-app/frontend/src/components/canvas/VishCoderChatDemo.tsx
-app/frontend/src/components/canvas/VishCoderChatIntegration.tsx
-app/frontend/src/components/canvas/VishCoderChatTest.tsx
-
-### Missing Locally:
-app/frontend/src/components/canvas/BuildSummaryModal.tsx
-app/frontend/src/components/canvas/CanvasViewer.tsx
-app/frontend/src/components/canvas/InfrastructureCanvasViewer.tsx
-app/frontend/src/components/canvas/InfrastructureNode.tsx
-app/frontend/src/components/canvas/ParsedResourceNode.tsx
-app/frontend/src/components/canvas/TableNode.tsx
-
-## app/frontend/src/utils
-### Missing Locally:
-app/frontend/src/utils/apiClient.ts
-app/frontend/src/utils/comm.ts
-app/frontend/src/utils/githubService.ts
-app/frontend/src/utils/llmService.ts
-app/frontend/src/utils/terraformParser.ts
-app/frontend/src/utils/validation.ts
-
-## docs
-### Missing Locally:
-docs/.gitkeep
-docs/auth.md
-docs/canvas_editor.md
-docs/documents_tab.md
-docs/features.md
-docs/github_integration.md
-docs/project_management.md
-docs/requirement_generation.md
-docs/terraform_architecture.md
-
 ## iac
 ### Missing Locally:
 iac/import_existing_resources.sh
@@ -107,4 +71,16 @@ iac/terraform.tfvars.example
 iac/tfplan
 iac/variables.tf
 
-Total file differences: 17
+## scripts
+### Missing Remotely:
+scripts/.count_diff.txt
+scripts/deploy.sh
+scripts/lambda_zip.sh
+scripts/test_waitlist_api.py
+
+### Missing Locally:
+scripts/.count_diff.txt
+scripts/deploy.sh
+scripts/lambda_zip.sh
+
+Total file differences: 13

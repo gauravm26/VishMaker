@@ -12,15 +12,16 @@ print_usage() {
     echo "Usage: $0 [LAMBDA_NAME]"
     echo ""
     echo "Arguments:"
-    echo "  LAMBDA_NAME    Build specific lambda (auth, llm, projects, requirements, all, or default)"
+    echo "  LAMBDA_NAME    Build specific lambda (auth, llm, projects, requirements, waitlist, all, or default)"
     echo ""
     echo "Examples:"
     echo "  $0              # Build all available lambdas"
-    echo "  $0 default      # Build default lambdas (auth, llm, projects, requirements)"
+    echo "  $0 default      # Build default lambdas (auth, llm, projects, requirements, waitlist)"
     echo "  $0 auth         # Build only auth lambda"
     echo "  $0 llm          # Build only llm lambda"
     echo "  $0 projects     # Build only projects lambda"
     echo "  $0 requirements # Build only requirements lambda"
+    echo "  $0 waitlist     # Build only waitlist lambda"
     echo "  $0 all          # Build all lambdas"
     echo ""
 }
@@ -29,12 +30,12 @@ print_usage() {
 LAMBDA_TO_BUILD="${1:-all}"
 
 # Define available lambdas
-AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements")
-DEFAULT_LAMBDAS=("auth" "llm" "projects" "requirements")  # Default lambdas to build
+AVAILABLE_LAMBDAS=("auth" "llm" "projects" "requirements" "waitlist")
+DEFAULT_LAMBDAS=("auth" "llm" "projects" "requirements" "waitlist")  # Default lambdas to build
 
 # Validate lambda selection
 case $LAMBDA_TO_BUILD in
-    auth|llm|projects|requirements|all|default)
+    auth|llm|projects|requirements|waitlist|all|default)
         # Valid selection
         ;;
     *)
@@ -162,6 +163,11 @@ build_lambda_package() {
             # Copy DynamoDB package for requirements lambda
             cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
             ;;
+        "waitlist")
+            echo -e "${YELLOW}📋 Waitlist lambda needs DynamoDB module${NC}"
+            # Copy DynamoDB package for waitlist lambda
+            cp -r "$BACKEND_ROOT/dynamodb" "$LAMBDA_BUILD_DIR/lambda_package/"
+            ;;
         *)
             echo -e "${YELLOW}📋 Copying all dependencies for unknown lambda type...${NC}"
             cp -r "$PROJECT_ROOT/features" "$LAMBDA_BUILD_DIR/lambda_package/"
@@ -259,7 +265,7 @@ build_lambda_package() {
 
 # Build Lambda packages based on selection
 case $LAMBDA_TO_BUILD in
-    auth|llm|projects|requirements)
+    auth|llm|projects|requirements|waitlist)
         build_lambda_package "$LAMBDA_TO_BUILD"
         ;;
     default)
