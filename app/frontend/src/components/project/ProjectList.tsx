@@ -23,6 +23,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
     const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+    const [isAlive, setIsAlive] = useState<boolean>(true);
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -31,8 +32,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
             try {
                 const data = await apiClient<Project[]>('/projects', { method: 'GET' });
                 setProjects(data);
+                setIsAlive(true);
             } catch (err: any) {
                 setListError(err.message || 'Failed to fetch projects');
+                setIsAlive(false);
                 console.error(err);
             } finally {
                 setLoading(false);
@@ -90,9 +93,37 @@ const ProjectList: React.FC<ProjectListProps> = ({
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-white">
-                    Projects
-                </h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-lg sm:text-xl font-semibold text-white">
+                        Projects
+                    </h2>
+                    
+                    {/* Alive Status Indicator */}
+                    <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-300 ${
+                            isAlive 
+                                ? 'bg-green-500/20 border-green-400/30 text-green-300' 
+                                : 'bg-red-500/20 border-red-400/30 text-red-300'
+                        }`}>
+                            <div className={`w-2 h-2 rounded-full animate-pulse ${
+                                isAlive ? 'bg-green-400' : 'bg-red-400'
+                            }`}></div>
+                            <span>{isAlive ? 'Alive' : 'Offline'}</span>
+                        </div>
+                        
+                        {/* Heartbeat Icon */}
+                        <div className={`p-1.5 rounded-full transition-all duration-300 ${
+                            isAlive 
+                                ? 'bg-green-500/10 text-green-400' 
+                                : 'bg-red-500/10 text-red-400'
+                        }`}>
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                
                 <span className="text-xs sm:text-sm text-gray-300 bg-white/10 px-3 py-1 rounded-full border border-white/20">
                     {projects.length}
                 </span>

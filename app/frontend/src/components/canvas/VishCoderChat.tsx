@@ -10,10 +10,10 @@ export interface ChatMessage {
     progress?: number;
     isGrouped?: boolean;
     groupId?: string;
-    details?: {
+    details?: string | {
         file_type?: 'New' | 'Modified';
         file_name?: string;
-        file_size?: string;
+        file_size?: string | number;
     };
 }
 
@@ -210,11 +210,45 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
         });
     };
 
+    const formatFileSize = (fileSize: string | number | undefined): string => {
+        if (fileSize === undefined || fileSize === null) return '';
+        
+        if (typeof fileSize === 'number') {
+            // Convert bytes to human readable format
+            if (fileSize < 1024) return `${fileSize} bytes`;
+            if (fileSize < 1024 * 1024) return `${(fileSize / 1024).toFixed(1)} KB`;
+            if (fileSize < 1024 * 1024 * 1024) return `${(fileSize / (1024 * 1024)).toFixed(1)} MB`;
+            return `${(fileSize / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+        }
+        
+        // If it's already a string, return as is
+        return fileSize;
+    };
+
     const renderFileUpdate = (message: ChatMessage) => {
-        const isNewFile = message.details?.file_type === 'New';
-        const isModifiedFile = message.details?.file_type === 'Modified';
+        // Safety check: ensure message and details exist
+        if (!message || !message.details) {
+            console.warn('VishCoderChat: Invalid message or missing details for file update', message);
+            return null;
+        }
+
+        // Check if details is a string (not a file update object)
+        if (typeof message.details === 'string') {
+            console.warn('VishCoderChat: Details is a string, not a file update object', message.details);
+            return null;
+        }
+
+        // Now we know details is an object, check if it has file update properties
+        const isNewFile = message.details.file_type === 'New';
+        const isModifiedFile = message.details.file_type === 'Modified';
         
         if (!isNewFile && !isModifiedFile) return null;
+
+        // Safely extract file details with fallbacks
+        const fileName = message.details.file_name || 'Unknown file';
+        const fileSize = formatFileSize(message.details.file_size);
+        const agent = message.agent || 'Unknown agent';
+        const llm = message.llm || 'Unknown LLM';
 
         return (
             <div key={message.id} className="flex justify-start mb-3">
@@ -238,7 +272,7 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                                     {isNewFile ? 'New File Created' : 'File Modified'}
                                 </span>
                                 <div className="text-xs text-gray-600">
-                                    {message.agent} • {message.llm}
+                                    {agent} • {llm}
                                 </div>
                             </div>
                         </div>
@@ -255,11 +289,11 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                             <span className={`font-medium text-sm ${
                                 isNewFile ? 'text-emerald-800' : 'text-amber-800'
                             }`}>
-                                📁 {message.details?.file_name}
+                                📁 {fileName}
                             </span>
-                            {message.details?.file_size && (
+                            {fileSize && (
                                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                                    {message.details.file_size}
+                                    {fileSize}
                                 </span>
                             )}
                         </div>
@@ -286,8 +320,14 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
     };
 
     const renderMessage = (message: ChatMessage) => {
+        // Safety check: ensure message exists
+        if (!message) {
+            console.warn('VishCoderChat: Invalid message object', message);
+            return null;
+        }
+
         // Check if this is a file update message first
-        if (message.details?.file_type) {
+        if (message.details && typeof message.details === 'object' && message.details.file_type) {
             return renderFileUpdate(message);
         }
 
@@ -530,11 +570,15 @@ const VishCoderChat: React.FC<VishCoderChatProps> = ({
                 ) : (
                     <>
                         {/* Regular Messages */}
-                        {groupedMessages.regular.map(renderMessage)}
+                        {groupedMessages.regular
+                            .filter(message => message && message.id) // Filter out invalid messages
+                            .map(renderMessage)
+                            .filter(Boolean) // Filter out null renders
+                        }
                         
                         {/* Grouped Updates */}
                         {Object.entries(groupedMessages.groups).map(([groupId, groupMessages]) =>
-                            renderGroupedUpdates(groupId, groupMessages)
+                            renderGroupedUpdates(groupId, groupMessages.filter(message => message && message.id))
                         )}
                     </>
                 )}

@@ -2190,23 +2190,36 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const details = statusDetails.details || 'No details provided';
                             const progress = statusDetails.progress || null;
                             
+                            // Convert details to string if it's an object
+                            let detailsString = details;
+                            if (typeof details === 'object' && details !== null) {
+                                if (details.file_name && details.file_type) {
+                                    detailsString = `${details.file_type} file: ${details.file_name}`;
+                                    if (details.file_size) {
+                                        detailsString += ` (${details.file_size} bytes)`;
+                                    }
+                                } else {
+                                    detailsString = JSON.stringify(details);
+                                }
+                            }
+                            
                             // Check for PR information in the status details
                             const prUrl = statusDetails.pr_url;
                             const prNumber = statusDetails.pr_number;
                             
                             // If PR information is available, update the build summary data
                             if (prUrl && prNumber) {
-                                handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                                handlePRInformation(prUrl, prNumber, agent, llm, detailsString, progress);
                             }
                             
                             // Check if this is the first "Manager" message - show it as a regular message
-                            const isManagerInitial = agent === 'Manager' && details.includes('Thanks for sending the request');
+                            const isManagerInitial = agent === 'Manager' && detailsString.includes('Thanks for sending the request');
                             
                             // Add status message to chat
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: isManagerInitial ? 'assistant' as const : 'status' as const,
-                                content: isManagerInitial ? `${agent}(${llm}) : ${details}` : details,
+                                content: isManagerInitial ? `${agent}(${llm}) : ${detailsString}` : detailsString,
                                 agent: isManagerInitial ? undefined : agent,
                                 llm: isManagerInitial ? undefined : llm,
                                 progress: progress,
@@ -2216,7 +2229,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             setChatMessages(prev => [...prev, statusUpdateMessage]);
                             
                             // Also log to terminal
-                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${details}`);
+                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${detailsString}`);
                         }
                     }
                 }
@@ -2250,20 +2263,33 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const details = statusDetails.details || 'No details provided';
                             const progress = statusDetails.progress || null;
                             
+                            // Convert details to string if it's an object
+                            let detailsString = details;
+                            if (typeof details === 'object' && details !== null) {
+                                if (details.file_name && details.file_type) {
+                                    detailsString = `${details.file_type} file: ${details.file_name}`;
+                                    if (details.file_size) {
+                                        detailsString += ` (${details.file_size} bytes)`;
+                                    }
+                                } else {
+                                    detailsString = JSON.stringify(details);
+                                }
+                            }
+                            
                             // Check for PR information in the status details
                             const prUrl = statusDetails.pr_url;
                             const prNumber = statusDetails.pr_number;
                             
                             // If PR information is available, update the build summary data
                             if (prUrl && prNumber) {
-                                handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                                handlePRInformation(prUrl, prNumber, agent, llm, detailsString, progress);
                             }
                             
                             // Add status message to chat as a log entry
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: 'status' as const,
-                                content: details,
+                                content: detailsString,
                                 agent: agent,
                                 llm: llm,
                                 progress: progress,
@@ -2273,8 +2299,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             setChatMessages(prev => [...prev, statusUpdateMessage]);
                             
                             // Update agent status and log to terminal
-                            setAgentStatus(`${agent}(${llm}) : ${details}`);
-                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${details}`);
+                            setAgentStatus(`${agent}(${llm}) : ${detailsString}`);
+                            addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${detailsString}`);
                         } else {
                             // Fallback to regular message handling
                             const message = parsedResponse.body.messages.message || 'Status updated';
@@ -2309,13 +2335,26 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     let details = statusDetails.details || 'No details provided';
                     const progress = statusDetails.progress || null;
                     
+                    // Convert details to string if it's an object
+                    let detailsString = details;
+                    if (typeof details === 'object' && details !== null) {
+                        if (details.file_name && details.file_type) {
+                            detailsString = `${details.file_type} file: ${details.file_name}`;
+                            if (details.file_size) {
+                                detailsString += ` (${details.file_size} bytes)`;
+                            }
+                        } else {
+                            detailsString = JSON.stringify(details);
+                        }
+                    }
+                    
                     // Check for PR information in the status details
                     const prUrl = statusDetails.pr_url;
                     const prNumber = statusDetails.pr_number;
                     
                     // If PR information is available, update the build summary data
                     if (prUrl && prNumber) {
-                        handlePRInformation(prUrl, prNumber, agent, llm, details, progress);
+                        handlePRInformation(prUrl, prNumber, agent, llm, detailsString, progress);
                     }
                     
                     // Only add to chat if it's not already handled by specific message types
@@ -2323,7 +2362,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         const generalStatusMessage = {
                             id: `general-status-${Date.now()}`,
                             type: 'status' as const,
-                            content: details,
+                            content: detailsString,
                             agent: agent,
                             llm: llm,
                             progress: progress,
@@ -2334,7 +2373,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     }
                     
                     // Always log to terminal for debugging
-                    addTerminalLog(`📊 General Status Update: ${agent}(${llm}) : ${details}`);
+                    addTerminalLog(`📊 General Status Update: ${agent}(${llm}) : ${detailsString}`);
                 }
 
                 // Handle regular AI agent messages (legacy support)
