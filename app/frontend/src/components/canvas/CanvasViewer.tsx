@@ -1933,7 +1933,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
         
         // Create standardized payload for AI chat using commManager
         const messagePayload = createMessagePayload(userMessage);
-        const aiChatPayload = commManager.createQuestionPayload(userMessage);
+        const aiChatPayload = commManager.createVishmakerPayload('question_to_ai', 'User', messagePayload);
         
         // Send via WebSocket
         agentSocket.send(JSON.stringify(aiChatPayload));
@@ -2122,12 +2122,28 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 let content = '';
 
                 // Parse and validate the response using commManager
+                // Note: Heartbeat messages are automatically filtered out to prevent "Unknown Agent" errors
                 const parsedResponse = commManager.parseResponse(data);
                 if (!parsedResponse) {
                     console.error('Invalid response format from VishCoder:', data);
                     addTerminalLog('❌ Received invalid response format from VishCoder');
                     return;
                 }
+
+                // Ignore heartbeat messages - they don't contain meaningful information for the user
+                if (parsedResponse.type === 'heartbeat' as any) {
+                    console.log('Received heartbeat from VishCoder - ignoring');
+                    addTerminalLog('💓 Heartbeat received from VishCoder (ignored)');
+                    return;
+                }
+
+                // Log all non-heartbeat messages for debugging
+                console.log('Processing message from VishCoder:', {
+                    type: parsedResponse.type,
+                    actor: parsedResponse.actor,
+                    hasStatusDetails: !!parsedResponse.body.statusDetails,
+                    statusDetailsKeys: parsedResponse.body.statusDetails ? Object.keys(parsedResponse.body.statusDetails) : []
+                });
 
                 // Handle standardized messages from VishCoder using parsed response
                 if (parsedResponse.type === 'build_feature') {
@@ -2217,7 +2233,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             // Check if this is the first "Manager" message - show it as a regular message
                             const isManagerInitial = agent === 'Manager' && detailsString.includes('Thanks for sending the request');
                             
-                            // Add status message to chat
+                            // Add status message to chat (but skip heartbeat-related content)
+                            if (detailsString.toLowerCase().includes('heartbeat') || detailsString.toLowerCase().includes('main websocket connection')) {
+                                console.log('Skipping heartbeat-related status message:', detailsString);
+                                return;
+                            }
+                            
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: isManagerInitial ? 'assistant' as const : 'status' as const,
@@ -2268,10 +2289,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             // Convert details to string if it's an object
                             let detailsString: string;
                             if (typeof details === 'object' && details !== null) {
-                                if (details.file_name && details.file_type) {
-                                    detailsString = `${details.file_type} file: ${details.file_name}`;
-                                    if (details.file_size) {
-                                        detailsString += ` (${details.file_size} bytes)`;
+                                const detailsObj = details as Record<string, any>;
+                                if (detailsObj.file_name && detailsObj.file_type) {
+                                    detailsString = `${detailsObj.file_type} file: ${detailsObj.file_name}`;
+                                    if (detailsObj.file_size) {
+                                        detailsString += ` (${detailsObj.file_size} bytes)`;
                                     }
                                 } else {
                                     detailsString = JSON.stringify(details);
@@ -2289,7 +2311,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 handlePRInformation(prUrl, prNumber, agent, llm, detailsString, progress);
                             }
                             
-                            // Add status message to chat as a log entry
+                            // Add status message to chat as a log entry (but skip heartbeat-related content)
+                            if (detailsString.toLowerCase().includes('heartbeat') || detailsString.toLowerCase().includes('main websocket connection')) {
+                                console.log('Skipping heartbeat-related status message:', detailsString);
+                                return;
+                            }
+                            
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: 'status' as const,
@@ -2332,7 +2359,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 }
                 
                 // General handler for status_details in any message from VishCoder
-                if (parsedResponse.actor === 'Coder' && parsedResponse.body.statusDetails) {
+                // Skip heartbeat messages as they don't have meaningful status details
+                if (parsedResponse.actor === 'Coder' && parsedResponse.body.statusDetails && parsedResponse.type !== ('heartbeat' as any)) {
                     const statusDetails = parsedResponse.body.statusDetails;
                     const agent = statusDetails.agent || 'Unknown Agent';
                     const llm = statusDetails.LLM || 'Unknown LLM';
@@ -2342,10 +2370,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     // Convert details to string if it's an object
                     let detailsString: string;
                     if (typeof details === 'object' && details !== null) {
-                        if (details.file_name && details.file_type) {
-                            detailsString = `${details.file_type} file: ${details.file_name}`;
-                            if (details.file_size) {
-                                detailsString += ` (${details.file_size} bytes)`;
+                        // Check if it looks like a file update object
+                        const detailsObj = details as Record<string, any>;
+                        if (detailsObj.file_name && detailsObj.file_type) {
+                            detailsString = `${detailsObj.file_type} file: ${detailsObj.file_name}`;
+                            if (detailsObj.file_size) {
+                                detailsString += ` (${detailsObj.file_size} bytes)`;
                             }
                         } else {
                             detailsString = JSON.stringify(details);
@@ -2365,6 +2395,12 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     
                     // Only add to chat if it's not already handled by specific message types
                     if (parsedResponse.type !== 'build_feature' && parsedResponse.type !== 'status_update') {
+                        // Skip heartbeat-related content
+                        if (detailsString.toLowerCase().includes('heartbeat') || detailsString.toLowerCase().includes('main websocket connection')) {
+                            console.log('Skipping heartbeat-related general status message:', detailsString);
+                            return;
+                        }
+                        
                         const generalStatusMessage = {
                             id: `general-status-${Date.now()}`,
                             type: 'status' as const,
@@ -2634,6 +2670,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             return null;
         }
     };
+
+    
 
     // Handle inline editing
     const startEditing = (fieldName: string, currentValue: string) => {
@@ -3220,7 +3258,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                                 contractData.requirements || {},
                                                 contractData.statusDetails || {}
                                             );
-                                            const vishCoderPayload = commManager.createBuildFeaturePayload(contractPayload);
+                                            const vishCoderPayload = commManager.createVishmakerPayload('build_feature', 'User', contractPayload);
                                             
                                             // Origin message ID is automatically managed by commManager
                                             
