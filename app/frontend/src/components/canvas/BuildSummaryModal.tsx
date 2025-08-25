@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../shared/Modal';
 import GitHubService from '../../utils/githubService';
+import { commManager, createDeployPayload } from '../../utils/comm';
 import type { GitHubPullRequest, GitHubPRStatus, GitHubPRReview } from '../../utils/githubService';
 
 interface BuildSummaryData {
@@ -27,6 +28,18 @@ interface BuildSummaryModalProps {
     startEditing: (field: string, value: string) => void;
     saveEdit: () => void;
     cancelEdit: () => void;
+    // Add new prop for VishCoder PR response
+    vishCoderPRResponse?: {
+        pr_url: string;
+        pr_number: number;
+        status: string;
+        agent: string;
+        llm: string;
+        details: string;
+        progress: number;
+    } | null;
+    // Add WebSocket connection for deployment
+    agentSocket?: WebSocket | null;
 }
 
 // New interface for PR status information
@@ -49,6 +62,14 @@ interface PRStatusInfo {
     } | null;
 }
 
+// New interface for deployment status
+interface DeploymentStatus {
+    isDeploying: boolean;
+    status: 'idle' | 'initiating' | 'deploying' | 'success' | 'failed';
+    message: string;
+    error?: string;
+}
+
 const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
     isOpen,
     onClose,
@@ -58,7 +79,9 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
     editValue,
     startEditing,
     saveEdit,
-    cancelEdit
+    cancelEdit,
+    vishCoderPRResponse,
+    agentSocket
 }) => {
     // New state for PR status checking
     const [prStatusInfo, setPrStatusInfo] = useState<PRStatusInfo>({
@@ -66,7 +89,13 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
         error: null,
         prInfo: null
     });
-    const [isDeploying, setIsDeploying] = useState(false);
+    
+    // New state for deployment
+    const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus>({
+        isDeploying: false,
+        status: 'idle',
+        message: ''
+    });
 
     // Function to check PR status
     const checkPRStatus = async (prUrl: string) => {
@@ -81,6 +110,36 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                 error: null,
                 prInfo
             });
+            
+            // Automatically update build summary status based on GitHub PR state
+            if (prInfo && buildSummaryData) {
+                let newStatus = buildSummaryData.status;
+                
+                if (prInfo.pr.state === 'closed') {
+                    if (prInfo.pr.merged_at) {
+                        newStatus = 'Merged';
+                        console.log('🔄 PR status updated to: Merged');
+                    } else {
+                        newStatus = 'Build Complete'; // PR was closed without merging
+                        console.log('🔄 PR status updated to: Build Complete (closed without merge)');
+                    }
+                } else if (prInfo.pr.state === 'open') {
+                    // Check if PR has approvals
+                    if (prInfo.approvalInfo.approved) {
+                        newStatus = 'PR Approved'; // PR is approved and ready for deployment
+                        console.log('🔄 PR status updated to: PR Approved');
+                    } else {
+                        newStatus = 'PR'; // PR is open, waiting for review
+                        console.log('🔄 PR status updated to: PR (waiting for review)');
+                    }
+                }
+                
+                // Update status if it changed
+                if (newStatus !== buildSummaryData.status) {
+                    setBuildSummaryData(prev => prev ? { ...prev, status: newStatus } : null);
+                    console.log(`✅ Build summary status updated from "${buildSummaryData.status}" to "${newStatus}"`);
+                }
+            }
         } catch (error) {
             setPrStatusInfo({
                 isLoading: false,
@@ -92,24 +151,121 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
 
     // Function to handle deployment
     const handleDeploy = async () => {
-        setIsDeploying(true);
+        if (!agentSocket || agentSocket.readyState !== WebSocket.OPEN) {
+            setDeploymentStatus({
+                isDeploying: false,
+                status: 'failed',
+                message: 'WebSocket connection not available',
+                error: 'No active connection to VishCoder'
+            });
+            return;
+        }
+
+        setDeploymentStatus({
+            isDeploying: true,
+            status: 'initiating',
+            message: 'Initiating deployment...'
+        });
+
         try {
-            // Simulate deployment process
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Update status to deployed
-            if (buildSummaryData) {
-                setBuildSummaryData(prev => prev ? { ...prev, status: 'Deployed Dev' } : null);
+            // Set session thread for deployment
+            if (buildSummaryData?.lowLevelRequirementId) {
+                commManager.setSessionThread(buildSummaryData.lowLevelRequirementId);
             }
-            
-            // Show success message or handle deployment completion
-            console.log('Deployment completed successfully');
+
+            // Create deployment payload with AWS settings
+            // Note: These values should come from user configuration or settings
+            // In production, these would be loaded from:
+            // 1. User's AWS account settings in the app
+            // 2. Cross-account role ARN configured by the user
+            // 3. Target AWS region for deployment
+            const deployPayload = createDeployPayload(
+                'arn:aws:iam::123456789012:role/VishCoder-TerraformExecutionRole', // Cross-account role ARN
+                '123456789012', // Target AWS Account ID
+                'us-east-1' // Target AWS Region
+            );
+
+            // Create standardized payload for deployment
+            const vishCoderPayload = commManager.createVishmakerPayload('deploy_feature', 'System', deployPayload);
+
+            // Send deployment request via WebSocket
+            agentSocket.send(JSON.stringify(vishCoderPayload));
+
+            setDeploymentStatus({
+                isDeploying: true,
+                status: 'deploying',
+                message: 'Deployment request sent to VishCoder. Waiting for response...'
+            });
+
+            console.log('🚀 Deployment request sent to VishCoder:', vishCoderPayload);
+
         } catch (error) {
             console.error('Deployment failed:', error);
-        } finally {
-            setIsDeploying(false);
+            setDeploymentStatus({
+                isDeploying: false,
+                status: 'failed',
+                message: 'Failed to initiate deployment',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
         }
     };
+
+    // Function to handle deployment response from VishCoder
+    const handleDeploymentResponse = useCallback((response: any) => {
+        console.log('📥 Received deployment response:', response);
+        
+        if (response.type === 'deploy_feature') {
+            if (response.status === 'Success' || response.status === 'Completed') {
+                // Deployment successful
+                setDeploymentStatus({
+                    isDeploying: false,
+                    status: 'success',
+                    message: 'Deployment completed successfully!'
+                });
+                
+                // Update build summary status
+                if (buildSummaryData) {
+                    setBuildSummaryData(prev => prev ? { ...prev, status: 'Deployed Dev' } : null);
+                }
+                
+                console.log('✅ Deployment completed successfully');
+            } else if (response.status === 'Failed' || response.status === 'Error') {
+                // Deployment failed
+                setDeploymentStatus({
+                    isDeploying: false,
+                    status: 'failed',
+                    message: 'Deployment failed',
+                    error: response.body?.statusDetails?.details || 'Unknown deployment error'
+                });
+                
+                console.error('❌ Deployment failed:', response.body?.statusDetails?.details);
+            } else if (response.status === 'InProgress') {
+                // Deployment in progress
+                setDeploymentStatus({
+                    isDeploying: true,
+                    status: 'deploying',
+                    message: response.body?.statusDetails?.details || 'Deployment in progress...'
+                });
+            }
+        }
+    }, [buildSummaryData, setBuildSummaryData]);
+
+    // Listen for deployment responses from VishCoder
+    useEffect(() => {
+        if (!agentSocket) return;
+
+        const handleMessage = (event: MessageEvent) => {
+            try {
+                const response = JSON.parse(event.data);
+                handleDeploymentResponse(response);
+            } catch (error) {
+                console.error('Failed to parse deployment response:', error);
+            }
+        };
+
+        agentSocket.addEventListener('message', handleMessage);
+        return () => agentSocket.removeEventListener('message', handleMessage);
+    }, [agentSocket, handleDeploymentResponse]);
 
     // Check PR status when PR link changes
     useEffect(() => {
@@ -125,6 +281,50 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
         }
     };
 
+    // Function to handle VishCoder PR response
+    const handleVishCoderPRResponse = useCallback((response: NonNullable<typeof vishCoderPRResponse>) => {
+        if (!response?.pr_url) return;
+        
+        console.log('🚀 Processing VishCoder PR response:', response);
+        
+        // Update build summary data with PR information
+        if (buildSummaryData) {
+            setBuildSummaryData(prev => prev ? {
+                ...prev,
+                prLink: response.pr_url,
+                status: 'PR' // Set to 'PR' - the actual status will be determined by GitHub PR checking
+            } : null);
+        } else {
+            // Create new build summary data if it doesn't exist
+            const newBuildSummaryData = {
+                lowLevelRequirementId: `req_${Date.now()}_${Math.floor(Math.random() * 1000000)}`,
+                status: 'PR', // Initial status is 'PR' - will be updated based on actual GitHub PR state
+                branchLink: '', // Will be populated when branch info is available
+                prLink: response.pr_url,
+                documentLinks: [],
+                keyMetrics: 'Response time < 200ms, 99.9% uptime, Error rate < 0.1%',
+                dashboardLinks: [],
+                alerts: '',
+                logs: '',
+                productManager: '',
+                devManager: ''
+            };
+            setBuildSummaryData(newBuildSummaryData);
+        }
+        
+        // Automatically check PR status to get the real GitHub PR state
+        checkPRStatus(response.pr_url);
+        
+        console.log('✅ PR information updated from VishCoder response - status set to "PR" for manual review');
+    }, [buildSummaryData, setBuildSummaryData, checkPRStatus]);
+
+    // Effect to handle VishCoder PR response when it changes
+    useEffect(() => {
+        if (vishCoderPRResponse) {
+            handleVishCoderPRResponse(vishCoderPRResponse);
+        }
+    }, [vishCoderPRResponse, handleVishCoderPRResponse]);
+
     if (!buildSummaryData) return null;
 
     return (
@@ -135,6 +335,49 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
             size="xl"
         >
             <div className="space-y-6">
+                {/* VishCoder Response Notification */}
+                {vishCoderPRResponse && (
+                    <div className="bg-gradient-to-r from-purple-500/20 to-green-500/20 border border-purple-400/30 rounded-xl p-4">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="text-purple-400 font-medium">VishCoder Response Received</h4>
+                                <p className="text-purple-300/80 text-sm mb-2">
+                                    Pull Request #{vishCoderPRResponse.pr_number} has been created successfully by {vishCoderPRResponse.agent} using {vishCoderPRResponse.llm}.
+                                </p>
+                                <div className="flex items-center space-x-4 text-xs">
+                                    <span className="text-purple-300/80">
+                                        VishCoder Status: <span className="text-green-400">{vishCoderPRResponse.status}</span>
+                                    </span>
+                                    <span className="text-purple-300/80">
+                                        Progress: <span className="text-blue-400">{vishCoderPRResponse.progress}%</span>
+                                    </span>
+                                    <span className="text-purple-300/80">
+                                        Details: <span className="text-yellow-400">{vishCoderPRResponse.details}</span>
+                                    </span>
+                                </div>
+                                <p className="text-purple-300/60 text-xs mt-2 italic">
+                                    Note: The actual PR status will be updated based on GitHub PR state (open, approved, merged, etc.)
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    if (vishCoderPRResponse.pr_url) {
+                                        openExternalLink(vishCoderPRResponse.pr_url);
+                                    }
+                                }}
+                                className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 rounded-lg text-purple-300 hover:text-purple-200 transition-all duration-200 text-sm"
+                            >
+                                View PR
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* PR Auto-population Notification */}
                 {buildSummaryData?.prLink && buildSummaryData.prLink.includes('github.com') && (
                     <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 border border-green-400/30 rounded-xl p-4">
@@ -170,19 +413,58 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                             Status
                         </label>
                         <div className="relative">
-                            <select
-                                value={buildSummaryData.status}
-                                onChange={(e) => setBuildSummaryData(prev => prev ? {...prev, status: e.target.value} : null)}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
-                            >
-                                <option value="Build In Progress" className="bg-gray-800">Build In Progress</option>
-                                <option value="Build Complete" className="bg-gray-800">Build Complete</option>
-                                <option value="PR" className="bg-gray-800">PR</option>
-                                <option value="Merged" className="bg-gray-800">Merged</option>
-                                <option value="Deployed Dev" className="bg-gray-800">Deployed Dev</option>
-                                <option value="Deployed Test" className="bg-gray-800">Deployed Test</option>
-                                <option value="Deployed Prod" className="bg-gray-800">Deployed Prod</option>
-                            </select>
+                            <div className="flex items-center space-x-2">
+                                <select
+                                    value={buildSummaryData.status}
+                                    onChange={(e) => setBuildSummaryData(prev => prev ? {...prev, status: e.target.value} : null)}
+                                    className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 transition-all duration-300 backdrop-blur-sm"
+                                >
+                                    <option value="Build In Progress" className="bg-gray-800">Build In Progress</option>
+                                    <option value="Build Complete" className="bg-gray-800">Build Complete</option>
+                                    <option value="PR" className="bg-gray-800">PR</option>
+                                    <option value="PR Approved" className="bg-gray-800">PR Approved</option>
+                                    <option value="Merged" className="bg-gray-800">Merged</option>
+                                    <option value="Deploy Changes" className="bg-gray-800">Deploy Changes</option>
+                                    <option value="Deployed Dev" className="bg-gray-800">Deployed Dev</option>
+                                    <option value="Deployed Test" className="bg-gray-800">Deployed Test</option>
+                                    <option value="Deployed Prod" className="bg-gray-800">Deployed Prod</option>
+                                </select>
+                                {buildSummaryData?.prLink && (
+                                    <button
+                                        onClick={() => checkPRStatus(buildSummaryData.prLink)}
+                                        disabled={prStatusInfo.isLoading}
+                                        className="px-3 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-400/30 rounded-xl text-blue-300 hover:text-blue-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Refresh PR status from GitHub"
+                                    >
+                                        {prStatusInfo.isLoading ? (
+                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                            {buildSummaryData?.prLink && (
+                                <div className="mt-2 text-xs text-white/60">
+                                    {prStatusInfo.isLoading ? (
+                                        <span className="text-blue-400">🔄 Checking PR status...</span>
+                                    ) : prStatusInfo.error ? (
+                                        <span className="text-red-400">❌ {prStatusInfo.error}</span>
+                                    ) : prStatusInfo.prInfo ? (
+                                        <span className="text-green-400">
+                                            ✅ PR Status: {prStatusInfo.prInfo.pr.state} 
+                                            {prStatusInfo.prInfo.pr.merged_at && ' (merged)'}
+                                            {prStatusInfo.prInfo.approvalInfo.approved && ' ✓ Approved'}
+                                        </span>
+                                    ) : (
+                                        <span className="text-yellow-400">⚠️ Click refresh to check PR status</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -404,10 +686,10 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                                 {prStatusInfo.prInfo.approvalInfo.approved && (
                                                     <button
                                                         onClick={handleDeploy}
-                                                        disabled={isDeploying}
+                                                        disabled={deploymentStatus.isDeploying}
                                                         className="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-green-600/50 disabled:to-green-700/50 text-white rounded-lg transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none disabled:scale-100"
                                                     >
-                                                        {isDeploying ? (
+                                                        {deploymentStatus.isDeploying ? (
                                                             <>
                                                                 <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -427,6 +709,72 @@ const BuildSummaryModal: React.FC<BuildSummaryModalProps> = ({
                                             </div>
                                         </div>
                                     ) : null}
+                                </div>
+                            )}
+
+                            {/* Deployment Status Display */}
+                            {deploymentStatus.status !== 'idle' && (
+                                <div className="mt-3">
+                                    <div className={`bg-white/5 border rounded-lg p-3 ${
+                                        deploymentStatus.status === 'success' 
+                                            ? 'border-green-400/30' 
+                                            : deploymentStatus.status === 'failed'
+                                            ? 'border-red-400/30'
+                                            : 'border-blue-400/30'
+                                    }`}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center space-x-2">
+                                                {deploymentStatus.status === 'success' ? (
+                                                    <div className="w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center">
+                                                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </div>
+                                                ) : deploymentStatus.status === 'failed' ? (
+                                                    <div className="w-6 h-6 bg-red-500/20 rounded-full flex items-center justify-center">
+                                                        <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-6 h-6 bg-blue-500/20 rounded-full flex items-center justify-center">
+                                                        <svg className="w-4 h-4 text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className={`text-sm font-medium ${
+                                                        deploymentStatus.status === 'success' 
+                                                            ? 'text-green-400' 
+                                                            : deploymentStatus.status === 'failed'
+                                                            ? 'text-red-400'
+                                                            : 'text-blue-400'
+                                                    }`}>
+                                                        {deploymentStatus.status === 'success' 
+                                                            ? 'Deployment Successful' 
+                                                            : deploymentStatus.status === 'failed'
+                                                            ? 'Deployment Failed'
+                                                            : 'Deployment In Progress'
+                                                        }
+                                                    </div>
+                                                    <div className="text-xs text-white/70">
+                                                        {deploymentStatus.message}
+                                                    </div>
+                                                    {deploymentStatus.error && (
+                                                        <div className="text-xs text-red-400 mt-1">
+                                                            Error: {deploymentStatus.error}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {deploymentStatus.status === 'success' && (
+                                                <div className="text-xs text-green-400">
+                                                    Status updated to: Deployed Dev
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

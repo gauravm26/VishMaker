@@ -1521,26 +1521,25 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
             if (parentHlr) {
                 const hlrUiid = parentHlr.uiid || parentHlr.id;
                 console.log('HLR full data:', parentHlr);
-                console.log('HLR parent_uiid from data:', parentHlr.parent_uiid);
+                console.log('HLR parent_uiid from data:', parentHlr.originalData.parent_uiid);
                 
                 requirements.high_level_requirements = {
                     uiid: hlrUiid,
                     name: parentHlr.name,
                     description: parentHlr.desc || '',
-                    parent_uiid: parentHlr.parent_uiid || null
+                    parent_uiid: parentHlr.originalData.parent_uiid || null
                 };
                 console.log(`Step 3 - Added HLR: ${hlrUiid} - ${parentHlr.name}`);
-                console.log('HLR parent_uiid:', parentHlr.parent_uiid);
-                console.log('HLR parent_uiid type:', typeof parentHlr.parent_uiid);
+                console.log('HLR parent_uiid:', parentHlr.originalData.parent_uiid);
             } else {
                 console.log('❌ No parent HLR found for LLR:', llrUiid);
             }
             
             // Step 4: Find User Flow where HLR.parent_uiid == User_Flow.uiid
             let parentFlow: any = null;
-            if (parentHlr && parentHlr.parent_uiid) {
+            if (parentHlr && parentHlr.originalData.parent_uiid) {
                 // First try to find in the userFlows state (from API)
-                parentFlow = userFlows.find(flow => flow.uiid === parentHlr.parent_uiid);
+                parentFlow = userFlows.find(flow => flow.uiid === parentHlr.originalData.parent_uiid);
                 
                 if (parentFlow) {
                     console.log(`✅ Found parent User Flow in userFlows: ${parentFlow.uiid} - ${parentFlow.name}`);
@@ -2233,16 +2232,46 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             // Check if this is the first "Manager" message - show it as a regular message
                             const isManagerInitial = agent === 'Manager' && detailsString.includes('Thanks for sending the request');
                             
+                            // Check if Manager is indicating build is complete
+                            const isBuildComplete = agent === 'Manager' && (
+                                detailsString.toLowerCase().includes('build complete') ||
+                                detailsString.toLowerCase().includes('build is complete') ||
+                                detailsString.toLowerCase().includes('build completed') ||
+                                detailsString.toLowerCase().includes('build finished') ||
+                                detailsString.toLowerCase().includes('build done')
+                            );
+                            
+                            // Backup logic: Check if progress reaches 100% (regardless of agent or message)
+                            const isProgressComplete = progress !== null && progress >= 100;
+                            
+                            // Show BUILD SUMMARY if either condition is met
+                            const shouldShowBuildSummary = isBuildComplete || isProgressComplete;
+                            
                             // Add status message to chat (but skip heartbeat-related content)
                             if (detailsString.toLowerCase().includes('heartbeat') || detailsString.toLowerCase().includes('main websocket connection')) {
                                 console.log('Skipping heartbeat-related status message:', detailsString);
                                 return;
                             }
                             
+                            let messageContent = detailsString;
+                            
+                            // If build is complete, add BUILD SUMMARY link
+                            if (shouldShowBuildSummary) {
+                                const reason = isBuildComplete ? 'Manager indicated build complete' : 'Progress reached 100%';
+                                messageContent = `${detailsString}\n\n🔗 **BUILD SUMMARY** - [Click here to view build details](#build-summary)\n\n*Triggered by: ${reason}*`;
+                                console.log(`🚀 Build complete detected - adding BUILD SUMMARY link (${reason})`);
+                                
+                                // Automatically open build summary modal after a short delay
+                                setTimeout(() => {
+                                    setIsBuildSummaryModalOpen(true);
+                                    addTerminalLog('📋 Automatically opening BUILD SUMMARY modal');
+                                }, 2000); // 2 second delay to let user see the message first
+                            }
+                            
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: isManagerInitial ? 'assistant' as const : 'status' as const,
-                                content: isManagerInitial ? `${agent}(${llm}) : ${detailsString}` : detailsString,
+                                content: isManagerInitial ? `${agent}(${llm}) : ${messageContent}` : messageContent,
                                 agent: isManagerInitial ? undefined : agent,
                                 llm: isManagerInitial ? undefined : llm,
                                 progress: progress,
@@ -2311,16 +2340,46 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 handlePRInformation(prUrl, prNumber, agent, llm, detailsString, progress);
                             }
                             
+                            // Check if Manager is indicating build is complete
+                            const isBuildComplete = agent === 'Manager' && (
+                                detailsString.toLowerCase().includes('build complete') ||
+                                detailsString.toLowerCase().includes('build is complete') ||
+                                detailsString.toLowerCase().includes('build completed') ||
+                                detailsString.toLowerCase().includes('build finished') ||
+                                detailsString.toLowerCase().includes('build done')
+                            );
+                            
+                            // Backup logic: Check if progress reaches 100% (regardless of agent or message)
+                            const isProgressComplete = progress !== null && progress >= 100;
+                            
+                            // Show BUILD SUMMARY if either condition is met
+                            const shouldShowBuildSummary = isBuildComplete || isProgressComplete;
+                            
                             // Add status message to chat as a log entry (but skip heartbeat-related content)
                             if (detailsString.toLowerCase().includes('heartbeat') || detailsString.toLowerCase().includes('main websocket connection')) {
                                 console.log('Skipping heartbeat-related status message:', detailsString);
                                 return;
                             }
                             
+                            let messageContent = detailsString;
+                            
+                            // If build is complete, add BUILD SUMMARY link
+                            if (shouldShowBuildSummary) {
+                                const reason = isBuildComplete ? 'Manager indicated build complete' : 'Progress reached 100%';
+                                messageContent = `${detailsString}\n\n🔗 **BUILD SUMMARY** - [Click here to view build details](#build-summary)\n\n*Triggered by: ${reason}*`;
+                                console.log(`🚀 Build complete detected in status_update - adding BUILD SUMMARY link (${reason})`);
+                                
+                                // Automatically open build summary modal after a short delay
+                                setTimeout(() => {
+                                    setIsBuildSummaryModalOpen(true);
+                                    addTerminalLog('📋 Automatically opening BUILD SUMMARY modal from status update');
+                                }, 2000); // 2 second delay to let user see the message first
+                            }
+                            
                             const statusUpdateMessage = {
                                 id: `status-update-${Date.now()}`,
                                 type: 'status' as const,
-                                content: detailsString,
+                                content: messageContent,
                                 agent: agent,
                                 llm: llm,
                                 progress: progress,
@@ -2416,6 +2475,25 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     
                     // Always log to terminal for debugging
                     addTerminalLog(`📊 General Status Update: ${agent}(${llm}) : ${detailsString}`);
+                }
+
+                // General progress monitoring - catch any progress that reaches 100% from any message type
+                if (parsedResponse.body?.statusDetails?.progress !== null && parsedResponse.body.statusDetails.progress !== undefined && parsedResponse.body.statusDetails.progress >= 100) {
+                    const progress = parsedResponse.body.statusDetails.progress;
+                    const agent = parsedResponse.body.statusDetails.agent || 'Unknown Agent';
+                    const llm = parsedResponse.body.statusDetails.LLM || 'Unknown LLM';
+                    
+                    // Only trigger if we haven't already shown the build summary for this progress update
+                    if (!buildSummaryData?.prLink || buildSummaryData.status !== 'Merged') {
+                        console.log(`🚀 Progress reached 100% from ${agent}(${llm}) - triggering BUILD SUMMARY`);
+                        addTerminalLog(`🚀 Progress reached 100% - automatically opening BUILD SUMMARY modal`);
+                        
+                        // Automatically open build summary modal after a short delay
+                        setTimeout(() => {
+                            setIsBuildSummaryModalOpen(true);
+                            addTerminalLog('📋 Automatically opening BUILD SUMMARY modal from progress monitoring');
+                        }, 1000); // 1 second delay for progress-based triggers
+                    }
                 }
 
                 // Handle regular AI agent messages (legacy support)
@@ -3468,6 +3546,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 startEditing={startEditing}
                 saveEdit={saveEdit}
                 cancelEdit={cancelEdit}
+                agentSocket={agentSocket}
             />
         </div>
     );

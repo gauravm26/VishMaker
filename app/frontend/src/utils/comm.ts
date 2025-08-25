@@ -1,7 +1,7 @@
 // Type definitions for better type safety
 export const ACTORS = ["System", "User", "Coder"] as const;
-export const MESSAGE_TYPES = ["question_to_ai", "build_feature", "status_update", "clarification_needed_from_user", "heartbeat"] as const;
-export const STATUSES = ["Initiated", "InProgress", "Completed", "Failed", "Error", "Alive"] as const;
+export const MESSAGE_TYPES = ["question_to_ai", "build_feature", "deploy_feature", "status_update", "clarification_needed_from_user", "heartbeat"] as const;
+export const STATUSES = ["Initiated", "InProgress", "Completed", "Failed", "Error", "Alive", "Success"] as const;
 
 // Internal types (not exported since they're only used internally)
 type VishMakerActor = typeof ACTORS[0] | typeof ACTORS[1];
@@ -47,6 +47,19 @@ export interface ContractPayload {
     settings: Record<string, any>;
     requirements: Record<string, any>;
     statusDetails: Record<string, any>;
+}
+
+export interface DeployPayload {
+    /** Payload for deployment requests */
+    contract: {
+        settings: {
+            aws: {
+                crossAccountRoleArn: string;
+                accountId: string;
+                region: string;
+            };
+        };
+    };
 }
 
 export interface VishCoderPayload {
@@ -98,7 +111,7 @@ export class CommunicationManager {
     createVishmakerPayload(
         messageType: MessageType,
         actor: VishMakerActor,
-        payloadData: MessagePayload | ContractPayload,
+        payloadData: MessagePayload | ContractPayload | DeployPayload,
         respondingToMessageId?: string,
         respondingToActor?: Actor
     ): VishCoderPayload {
@@ -144,6 +157,15 @@ export class CommunicationManager {
                 messages: {},
                 statusDetails: {}
             };
+        } else if (messageType === "deploy_feature") {
+            if (!this.isDeployPayload(payloadData)) {
+                throw new Error("deploy_feature requires DeployPayload");
+            }
+            body = {
+                contract: payloadData,
+                messages: {},
+                statusDetails: {}
+            };
         } else {
             if (!this.isMessagePayload(payloadData)) {
                 throw new Error(`${messageType} requires MessagePayload`);
@@ -159,6 +181,8 @@ export class CommunicationManager {
         let status: Status;
         if (messageType === "build_feature" || messageType === "question_to_ai") {
             status = "Initiated"; // Initial requests from VishMaker
+        } else if (messageType === "deploy_feature") {
+            status = "Initiated"; // Deployment requests from VishMaker
         } else if (messageType === "clarification_needed_from_user") {
             if (respondingToMessageId) {
                 status = "InProgress"; // User responding to clarification request
@@ -251,6 +275,10 @@ export class CommunicationManager {
     // Type guards
     private isContractPayload(data: any): data is ContractPayload {
         return data && typeof data === "object" && "metadata" in data && "settings" in data && "requirements" in data;
+    }
+
+    private isDeployPayload(data: any): data is DeployPayload {
+        return data && typeof data === "object" && "contract" in data && "settings" in data && "aws" in data.contract && "crossAccountRoleArn" in data.contract.settings.aws;
     }
     
     private isMessagePayload(data: any): data is MessagePayload {
@@ -352,6 +380,28 @@ export function createMessagePayload(
     };
     
     console.log(`💬 Created MessagePayload:`, JSON.stringify(payload, null, 2));
+    return payload;
+}
+
+export function createDeployPayload(
+    crossAccountRoleArn: string,
+    accountId: string,
+    region: string
+): DeployPayload {
+    /** Create a deployment payload with AWS settings */
+    const payload = {
+        contract: {
+            settings: {
+                aws: {
+                    crossAccountRoleArn,
+                    accountId,
+                    region
+                }
+            }
+        }
+    };
+    
+    console.log(`🚀 Created DeployPayload:`, JSON.stringify(payload, null, 2));
     return payload;
 }
 
