@@ -2191,7 +2191,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const progress = statusDetails.progress || null;
                             
                             // Convert details to string if it's an object
-                            let detailsString = details;
+                            let detailsString: string;
                             if (typeof details === 'object' && details !== null) {
                                 if (details.file_name && details.file_type) {
                                     detailsString = `${details.file_type} file: ${details.file_name}`;
@@ -2201,6 +2201,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 } else {
                                     detailsString = JSON.stringify(details);
                                 }
+                            } else {
+                                detailsString = String(details);
                             }
                             
                             // Check for PR information in the status details
@@ -2255,7 +2257,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 // Handle status updates
                 if (parsedResponse.type === 'status_update') {
                     if (parsedResponse.actor === 'Coder') {
-                        // Check if status_details is available in the body
+                        // Check if statusDetails is available in the body
                         if (parsedResponse.body.statusDetails) {
                             const statusDetails = parsedResponse.body.statusDetails;
                             const agent = statusDetails.agent || 'Unknown Agent';
@@ -2264,7 +2266,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             const progress = statusDetails.progress || null;
                             
                             // Convert details to string if it's an object
-                            let detailsString = details;
+                            let detailsString: string;
                             if (typeof details === 'object' && details !== null) {
                                 if (details.file_name && details.file_type) {
                                     detailsString = `${details.file_type} file: ${details.file_name}`;
@@ -2274,9 +2276,11 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                                 } else {
                                     detailsString = JSON.stringify(details);
                                 }
+                            } else {
+                                detailsString = String(details);
                             }
                             
-                            // Check for PR information in the status details
+                            // Check for PR information in the status details - use optional chaining
                             const prUrl = statusDetails.pr_url;
                             const prNumber = statusDetails.pr_number;
                             
@@ -2303,7 +2307,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                             addTerminalLog(`📊 Status Update: ${agent}(${llm}) : ${detailsString}`);
                         } else {
                             // Fallback to regular message handling
-                            const message = parsedResponse.body.messages.message || 'Status updated';
+                            const message = parsedResponse.body.messages?.message || 'Status updated';
                             addTerminalLog(`📊 Status Update: ${message}`);
                             setAgentStatus(message);
                         }
@@ -2336,7 +2340,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                     const progress = statusDetails.progress || null;
                     
                     // Convert details to string if it's an object
-                    let detailsString = details;
+                    let detailsString: string;
                     if (typeof details === 'object' && details !== null) {
                         if (details.file_name && details.file_type) {
                             detailsString = `${details.file_type} file: ${details.file_name}`;
@@ -2346,6 +2350,8 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                         } else {
                             detailsString = JSON.stringify(details);
                         }
+                    } else {
+                        detailsString = String(details);
                     }
                     
                     // Check for PR information in the status details
@@ -2606,7 +2612,7 @@ const CanvasViewer: React.FC<CanvasViewerProps> = ({
                 metadata: {
                     initiatedBy: "user",
                     dateTime: new Date().toISOString(),
-                    feature_Number: "0.0.1"
+                    feature_Number: requirementsObject.low_level_requirements.uiid || "0.0.1"
                 },
                 settings: parsedSettings,
                 requirements: {

@@ -1,4 +1,4 @@
-# File Difference Report - Sun Aug 24 20:34:06 CDT 2025
+# File Difference Report - Sun Aug 24 21:38:50 CDT 2025
 # Stage: BEFORE COMMIT
 
 ## Root Directory
@@ -48,6 +48,19 @@ app/frontend/src/vite-env.d.ts
 app/frontend/src/components/Settings.tsx
 app/frontend/src/components/WaitlistForm.tsx
 
+## app/frontend/src/components/canvas
+### Missing Locally:
+app/frontend/src/components/canvas/BuildSummaryModal.tsx
+app/frontend/src/components/canvas/CanvasViewer.tsx
+app/frontend/src/components/canvas/InfrastructureCanvasViewer.tsx
+app/frontend/src/components/canvas/InfrastructureNode.tsx
+app/frontend/src/components/canvas/ParsedResourceNode.tsx
+app/frontend/src/components/canvas/TableNode.tsx
+app/frontend/src/components/canvas/VishCoderChat.tsx
+app/frontend/src/components/canvas/VishCoderChatDemo.tsx
+app/frontend/src/components/canvas/VishCoderChatIntegration.tsx
+app/frontend/src/components/canvas/VishCoderChatTest.tsx
+
 ## iac
 ### Missing Locally:
 iac/import_existing_resources.sh
@@ -65,4 +78,4 @@ iac/terraform.tfvars.example
 iac/tfplan
 iac/variables.tf
 
-Total file differences: 10
+Total file differences: 13
